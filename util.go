@@ -45,37 +45,6 @@ func equalNodes[T ast.Node](a, b []T) bool {
 	return true
 }
 
-func isScalarType(a, b ast.SchemaType) bool {
-	switch a := a.(type) {
-	case *ast.ArraySchemaType:
-		b, ok := b.(*ast.ArraySchemaType)
-		if !ok {
-			return false
-		}
-		return isScalarType(a.Item, b.Item)
-	case *ast.ScalarSchemaType:
-		b, ok := b.(*ast.ScalarSchemaType)
-		if !ok {
-			return false
-		}
-		return a.Name == b.Name
-	case *ast.SizedSchemaType:
-		b, ok := b.(*ast.SizedSchemaType)
-		if !ok {
-			return false
-		}
-		return a.Name == b.Name
-	case *ast.NamedType:
-		b, ok := b.(*ast.NamedType)
-		if !ok {
-			return false
-		}
-		return a.SQL() == b.SQL()
-	default:
-		panic(fmt.Sprintf("unexpected column type: %s", a.SQL()))
-	}
-}
-
 func columnTypeOf(a ast.SchemaType) columnType {
 	switch a := a.(type) {
 	case *ast.ArraySchemaType:

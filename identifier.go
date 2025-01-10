@@ -27,7 +27,6 @@ var _ = []struct{}{
 	isComparable(propertyGraphID{}),
 }
 
-// go:inline
 func isComparable[C comparable](_ C) struct{} { return struct{}{} }
 
 type tableID [2]string
