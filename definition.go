@@ -11,21 +11,12 @@ type definition interface {
 	isDefinition()
 	add() ast.DDL
 	drop() ast.DDL
+	dependsOn() []identifier
+	onDependencyChange(me, dependency migrationState) migrationState
 }
 
 var _ = []definition{
 	&createTable{},
-	&column{},
-	&createIndex{},
-	&createSearchIndex{},
-}
-
-type migrationReceiver interface {
-	id() identifier
-	onDependencyChange(me, dependency migrationState) migrationState
-}
-
-var _ = []migrationReceiver{
 	&column{},
 	&createIndex{},
 	&createSearchIndex{},
@@ -57,6 +48,14 @@ func (c *createTable) drop() ast.DDL {
 	return &ast.DropTable{
 		Name: c.node.Name,
 	}
+}
+
+func (c *createTable) dependsOn() []identifier {
+	return nil
+}
+
+func (c *createTable) onDependencyChange(me, dependency migrationState) migrationState {
+	return me
 }
 
 func (c *createTable) columns() map[columnID]*ast.ColumnDef {
@@ -119,7 +118,7 @@ func (c *column) onDependencyChange(me, dependency migrationState) migrationStat
 			return me
 		}
 	default:
-		panic(fmt.Sprintf("unexpected dependency type on column: %T", dep))
+		panic(fmt.Sprintf("unexpected dependOn type on column: %T", dep))
 	}
 }
 
@@ -166,7 +165,7 @@ func (c *createIndex) onDependencyChange(me, dependency migrationState) migratio
 			return me
 		}
 	default:
-		panic(fmt.Sprintf("unexpected dependency type on index: %T", dependency.def))
+		panic(fmt.Sprintf("unexpected dependOn type on index: %T", dependency.def))
 	}
 }
 
@@ -221,7 +220,7 @@ func (c *createSearchIndex) onDependencyChange(me, dependency migrationState) mi
 			return me
 		}
 	default:
-		panic(fmt.Sprintf("unexpected dependency type on search index: %T", dependency.def))
+		panic(fmt.Sprintf("unexpected dependOn type on search index: %T", dependency.def))
 	}
 }
 

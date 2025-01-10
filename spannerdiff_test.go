@@ -16,6 +16,27 @@ func TestDiff(t *testing.T) {
 		wantDDLs  string
 		wantError bool
 	}{
+		"add table": {
+			``,
+			`CREATE TABLE T1 (
+			  C_I1 INT64 NOT NULL,
+			  C_S1 STRING(MAX)
+			) PRIMARY KEY(C_I1)`,
+			`CREATE TABLE T1 (
+			  C_I1 INT64 NOT NULL,
+			  C_S1 STRING(MAX)
+			) PRIMARY KEY(C_I1);`,
+			false,
+		},
+		"drop table": {
+			`CREATE TABLE T1 (
+			  C_I1 INT64 NOT NULL,
+			  C_S1 STRING(MAX)
+			) PRIMARY KEY(C_I1)`,
+			``,
+			`DROP TABLE T1;`,
+			false,
+		},
 		"add column": {
 			`CREATE TABLE T1 (
 			  C_I1 INT64 NOT NULL,
@@ -127,7 +148,6 @@ func TestDiff(t *testing.T) {
 }
 
 func equalDDLs(t *testing.T, a, b string) {
-	//
 	ddlsA, err := memefish.ParseDDLs("a", a)
 	if err != nil {
 		t.Fatalf("failed to parse ddl a: %v", err)
@@ -145,6 +165,6 @@ func equalDDLs(t *testing.T, a, b string) {
 		linesB = append(linesB, ddl.SQL())
 	}
 	if diff := cmp.Diff(linesA, linesB); diff != "" {
-		t.Errorf("diff (-got +want):\n%s", diff)
+		t.Errorf("diff (+got -want):\n%s", diff)
 	}
 }

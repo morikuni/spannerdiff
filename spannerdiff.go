@@ -153,7 +153,7 @@ type migration struct {
 	baseDefs   *definitions
 	targetDefs *definitions
 	states     map[identifier]migrationState
-	dependency map[identifier][]migrationReceiver
+	dependOn   map[identifier][]definition
 }
 
 func newMigration(base, target *definitions) *migration {
@@ -161,7 +161,7 @@ func newMigration(base, target *definitions) *migration {
 		base,
 		target,
 		make(map[identifier]migrationState),
-		make(map[identifier][]migrationReceiver),
+		make(map[identifier][]definition),
 	}
 
 	for _, def := range base.tables {
@@ -182,21 +182,12 @@ func newMigration(base, target *definitions) *migration {
 	}
 	for _, def := range target.columns {
 		m.initializeState(def)
-		for _, id := range def.dependsOn() {
-			m.dependency[id] = append(m.dependency[id], def)
-		}
 	}
 	for _, def := range target.indexes {
 		m.initializeState(def)
-		for _, id := range def.dependsOn() {
-			m.dependency[id] = append(m.dependency[id], def)
-		}
 	}
 	for _, def := range target.searchIndexes {
 		m.initializeState(def)
-		for _, id := range def.dependsOn() {
-			m.dependency[id] = append(m.dependency[id], def)
-		}
 	}
 
 	return m
@@ -204,12 +195,15 @@ func newMigration(base, target *definitions) *migration {
 
 func (m *migration) initializeState(def definition) {
 	m.states[def.id()] = newMigrationState(def.id(), def, migrationKindUndefined)
+	for _, id := range def.dependsOn() {
+		m.dependOn[id] = append(m.dependOn[id], def)
+	}
 }
 
 func (m *migration) updateState(s migrationState) {
 	m.states[s.id] = s
-	for _, receiver := range m.dependency[s.id] {
-		receiver.onDependencyChange(m.states[receiver.id()], s)
+	for _, receiver := range m.dependOn[s.id] {
+		m.updateState(receiver.onDependencyChange(m.states[receiver.id()], s))
 	}
 }
 
