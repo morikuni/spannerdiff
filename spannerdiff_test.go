@@ -471,6 +471,33 @@ func TestDiff(t *testing.T) {
 			ALTER TABLE T1 DROP SYNONYM T2;`,
 			false,
 		},
+		"recreate index by recreate table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			) PRIMARY KEY (T1_I1);
+			CREATE INDEX IDX1 ON T1(T1_I1);
+			CREATE SEARCH INDEX IDX2 ON T1(T1_S1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			) PRIMARY KEY (T1_S1);
+			CREATE INDEX IDX1 ON T1(T1_I1);
+			CREATE SEARCH INDEX IDX2 ON T1(T1_S1);`,
+			`
+			DROP INDEX IDX1;
+			DROP SEARCH INDEX IDX2;
+			DROP TABLE T1;
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			) PRIMARY KEY (T1_S1);
+			CREATE INDEX IDX1 ON T1(T1_I1);
+			CREATE SEARCH INDEX IDX2 ON T1(T1_S1);`,
+			false,
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			r, err := Diff(strings.NewReader(tt.base), strings.NewReader(tt.target), DiffOption{
