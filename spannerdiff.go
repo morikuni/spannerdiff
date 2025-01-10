@@ -2,12 +2,13 @@ package spannerdiff
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
-	"sort"
 
 	"github.com/cloudspannerecosystem/memefish"
 	"github.com/cloudspannerecosystem/memefish/ast"
+	"v.io/x/lib/toposort"
 )
 
 type DiffOption struct {
@@ -244,19 +245,16 @@ func diffDefinitions(base, target *definitions) ([]ast.DDL, error) {
 	m.alters(base, target)
 	m.adds(base, target)
 
-	// TODO: Sort statements in the order of dependencies.
-	// たぶんdropは最初にやればいいけどdrop内では入れ替えが必要
-	// - generated columnと参照元のカラムを消す時にはgenerated columnから消す
-	// - 依存関係が多いものから削除するイメージ。依存0は最後
-	// alterとaddは依存関係によって入れ替えが必要そう
-	// - alterしたときに新しいカラムを参照しているケース
-	// - addしたときにalterしたカラムを参照しているケース
-	// - 依存関係が少ないものから処理するイメージ。依存0は最初
-
 	var operations []operation
 	for _, state := range m.states {
 		operations = append(operations, state.operations()...)
 	}
+
+	operations, err := sortOperations(operations)
+	if err != nil {
+		return nil, err
+	}
+
 	ddls := make([]ast.DDL, 0, len(operations))
 	for _, op := range operations {
 		ddls = append(ddls, op.ddl)
@@ -673,3 +671,67 @@ const (
 	operationKindAlter operationKind = "alter"
 	operationKindDrop  operationKind = "drop"
 )
+
+func sortOperations(ops []operation) ([]operation, error) {
+	var addAlterOps, dropOps []operation
+	for _, op := range ops {
+		switch op.kind {
+		case operationKindDrop:
+			dropOps = append(dropOps, op)
+		case operationKindAdd, operationKindAlter:
+			addAlterOps = append(addAlterOps, op)
+		default:
+			panic(fmt.Sprintf("unexpected operation kind: %s", op.kind))
+		}
+	}
+
+	sortedAddAlter, err := topologicalSort(addAlterOps)
+	if err != nil {
+		return nil, err
+	}
+	sortedDrop, err := topologicalSort(dropOps)
+	if err != nil {
+		return nil, err
+	}
+	reverse(sortedDrop)
+
+	return append(sortedDrop, sortedAddAlter...), nil
+}
+
+func topologicalSort(ops []operation) ([]operation, error) {
+	s := &toposort.Sorter{}
+
+	nodeMap := make(map[identifier]*operation, len(ops))
+	for i := range ops {
+		nodeMap[ops[i].id] = &ops[i]
+		s.AddNode(&ops[i])
+	}
+
+	for i := range ops {
+		opPtr := &ops[i]
+		for _, dep := range opPtr.dependsOn {
+			if depPtr, ok := nodeMap[dep]; ok {
+				s.AddEdge(opPtr, depPtr)
+			}
+		}
+	}
+
+	sorted, cycles := s.Sort()
+	if len(cycles) > 0 {
+		return nil, errors.New("dependency cycle detected")
+	}
+
+	result := make([]operation, 0, len(sorted))
+	for _, v := range sorted {
+		if opPtr, ok := v.(*operation); ok {
+			result = append(result, *opPtr)
+		}
+	}
+	return result, nil
+}
+
+func reverse(ops []operation) {
+	for i, j := 0, len(ops)-1; i < j; i, j = i+1, j-1 {
+		ops[i], ops[j] = ops[j], ops[i]
+	}
+}

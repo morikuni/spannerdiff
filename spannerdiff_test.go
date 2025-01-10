@@ -487,8 +487,8 @@ func TestDiff(t *testing.T) {
 			CREATE INDEX IDX1 ON T1(T1_I1);
 			CREATE SEARCH INDEX IDX2 ON T1(T1_S1);`,
 			`
-			DROP INDEX IDX1;
 			DROP SEARCH INDEX IDX2;
+			DROP INDEX IDX1;
 			DROP TABLE T1;
 			CREATE TABLE T1 (
 			  T1_I1 INT64 NOT NULL,
@@ -510,7 +510,6 @@ func TestDiff(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to read diff: %v", err)
 			}
-
 			equalDDLs(t, tt.wantDDLs, string(bs))
 		})
 	}
