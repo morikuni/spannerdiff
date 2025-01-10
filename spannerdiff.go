@@ -408,11 +408,25 @@ func (m *migration) alterTable(base, target *createTable) {
 				dropped[name] = tc
 			}
 		}
+		dropAndCreated := make(map[string]*ast.TableConstraint, len(baseConstraints))
+		for name, baseTC := range baseConstraints {
+			if targetTC, ok := targetConstraints[name]; ok {
+				if !equalNode(baseTC, targetTC) {
+					dropAndCreated[name] = targetTC
+				}
+			}
+		}
 		for _, tc := range added {
 			ddls = append(ddls, &ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.AddTableConstraint{TableConstraint: tc}})
 		}
 		for name := range dropped {
 			ddls = append(ddls, &ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.DropConstraint{Name: &ast.Ident{Name: name}}})
+		}
+		for _, tc := range dropAndCreated {
+			ddls = append(ddls,
+				&ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.DropConstraint{Name: &ast.Ident{Name: tc.Name.Name}}},
+				&ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.AddTableConstraint{TableConstraint: tc}},
+			)
 		}
 	}
 

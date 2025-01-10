@@ -283,9 +283,11 @@ func TestDiff(t *testing.T) {
 			CREATE TABLE T2 (
 			  T2_I1 INT64 NOT NULL,
 			  T2_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T2_S1) REFERENCES T1 (T1_S1),
 			) PRIMARY KEY(T2_I1)`,
 			`
-			ALTER TABLE T2 DROP CONSTRAINT FK1;`,
+			ALTER TABLE T2 DROP CONSTRAINT FK1;
+			ALTER TABLE T2 ADD CONSTRAINT FK1 FOREIGN KEY (T2_S1) REFERENCES T1(T1_S1);`,
 			false,
 		},
 		"add check constraint": {
@@ -316,6 +318,24 @@ func TestDiff(t *testing.T) {
 			  T1_S1 STRING(MAX)
 			) PRIMARY KEY(T1_I1)`,
 			`ALTER TABLE T1 DROP CONSTRAINT CHK1;`,
+			false,
+		},
+		"recreate check constraint": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT CHK1 CHECK (T1_I1 > 0)
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT CHK1 CHECK (T1_I1 > 1)
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT CHK1;
+			ALTER TABLE T1 ADD CONSTRAINT CHK1 CHECK (T1_I1 > 1);`,
 			false,
 		},
 	} {
