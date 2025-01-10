@@ -15,7 +15,7 @@ jobs:
     - uses: actions/setup-go@v5
 
     - name: golangci-lint on main
-      if: github.ref == 'refs/heads/main'
+      if: ${{ github.ref_name == 'main' && github.event_name == 'push' }}
       uses: reviewdog/action-golangci-lint@v2
       with:
         reporter: github-check
@@ -23,7 +23,7 @@ jobs:
         fail_on_error: true
 
     - name: golangci-lint on PR
-      if: github.ref != 'refs/heads/main'
+      if: ${{ github.ref_name != 'main' || github.event_name != 'push' }}
       uses: reviewdog/action-golangci-lint@v2
       with:
         reporter: github-pr-review
