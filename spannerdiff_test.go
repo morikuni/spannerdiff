@@ -18,18 +18,21 @@ func TestDiff(t *testing.T) {
 	}{
 		"add table": {
 			``,
-			`CREATE TABLE T1 (
+			`
+			CREATE TABLE T1 (
 			  C_I1 INT64 NOT NULL,
 			  C_S1 STRING(MAX)
 			) PRIMARY KEY(C_I1)`,
-			`CREATE TABLE T1 (
+			`
+			CREATE TABLE T1 (
 			  C_I1 INT64 NOT NULL,
 			  C_S1 STRING(MAX)
 			) PRIMARY KEY(C_I1);`,
 			false,
 		},
 		"drop table": {
-			`CREATE TABLE T1 (
+			`
+			CREATE TABLE T1 (
 			  C_I1 INT64 NOT NULL,
 			  C_S1 STRING(MAX)
 			) PRIMARY KEY(C_I1)`,
@@ -37,12 +40,33 @@ func TestDiff(t *testing.T) {
 			`DROP TABLE T1;`,
 			false,
 		},
-		"add column": {
-			`CREATE TABLE T1 (
+		"recreate table": {
+			`
+			CREATE TABLE T1 (
 			  C_I1 INT64 NOT NULL,
 			  C_S1 STRING(MAX)
 			) PRIMARY KEY(C_I1)`,
-			`CREATE TABLE T1 (
+			`
+			CREATE TABLE T1 (
+			  C_I1 INT64 NOT NULL,
+			  C_S1 STRING(MAX)
+			) PRIMARY KEY(C_I1, C_S1)`,
+			`
+			DROP TABLE T1;
+			CREATE TABLE T1 (
+			  C_I1 INT64 NOT NULL,
+			  C_S1 STRING(MAX)
+			) PRIMARY KEY(C_I1, C_S1);`,
+			false,
+		},
+		"add column": {
+			`
+			CREATE TABLE T1 (
+			  C_I1 INT64 NOT NULL,
+			  C_S1 STRING(MAX)
+			) PRIMARY KEY(C_I1)`,
+			`
+			CREATE TABLE T1 (
 			  C_I1 INT64 NOT NULL,
 			  C_S1 STRING(MAX),
 			  C_S2 STRING(MAX)
@@ -51,12 +75,14 @@ func TestDiff(t *testing.T) {
 			false,
 		},
 		"drop column": {
-			`CREATE TABLE T1 (
+			`
+			CREATE TABLE T1 (
 			  C_I1 INT64 NOT NULL,
 			  C_S1 STRING(MAX),
 			  C_S2 STRING(MAX)
 			) PRIMARY KEY(C_I1)`,
-			`CREATE TABLE T1 (
+			`
+			CREATE TABLE T1 (
 			  C_I1 INT64 NOT NULL,
 			  C_S1 STRING(MAX)
 			) PRIMARY KEY(C_I1)`,
@@ -64,12 +90,14 @@ func TestDiff(t *testing.T) {
 			false,
 		},
 		"modify column": {
-			`CREATE TABLE T1 (
+			`
+			CREATE TABLE T1 (
 			  C_I1 INT64 NOT NULL,
 			  C_S1 STRING(MAX),
 			  C_S2 STRING(MAX)
 			) PRIMARY KEY(C_I1)`,
-			`CREATE TABLE T1 (
+			`
+			CREATE TABLE T1 (
 			  C_I1 INT64 NOT NULL,
 			  C_S1 STRING(MAX),
 			  C_S2 STRING(100)
@@ -78,11 +106,13 @@ func TestDiff(t *testing.T) {
 			false,
 		},
 		"add index": {
-			`CREATE TABLE T1 (
+			`
+			CREATE TABLE T1 (
 			  C_I1 INT64 NOT NULL,
 			  C_S1 STRING(MAX)
 			) PRIMARY KEY(C_I1)`,
-			`CREATE TABLE T1 (
+			`
+			CREATE TABLE T1 (
 			  C_I1 INT64 NOT NULL,
 			  C_S1 STRING(MAX)
 			) PRIMARY KEY(C_I1);
@@ -91,12 +121,14 @@ func TestDiff(t *testing.T) {
 			false,
 		},
 		"drop index": {
-			`CREATE TABLE T1 (
+			`
+			CREATE TABLE T1 (
 			  C_I1 INT64 NOT NULL,
 			  C_S1 STRING(MAX)
 			) PRIMARY KEY(C_I1);
 			CREATE INDEX idx_T1_C_S1 ON T1(C_S1)`,
-			`CREATE TABLE T1 (
+			`
+			CREATE TABLE T1 (
 			  C_I1 INT64 NOT NULL,
 			  C_S1 STRING(MAX)
 			) PRIMARY KEY(C_I1)`,
@@ -104,11 +136,13 @@ func TestDiff(t *testing.T) {
 			false,
 		},
 		"add search index": {
-			`CREATE TABLE T1 (
+			`
+			CREATE TABLE T1 (
 			  C_I1 INT64 NOT NULL,
 			  C_S1 STRING(MAX)
 			) PRIMARY KEY(C_I1)`,
-			`CREATE TABLE T1 (
+			`
+			CREATE TABLE T1 (
 			  C_I1 INT64 NOT NULL,
 			  C_S1 STRING(MAX)
 			) PRIMARY KEY(C_I1);
@@ -117,12 +151,14 @@ func TestDiff(t *testing.T) {
 			false,
 		},
 		"drop search index": {
-			`CREATE TABLE T1 (
+			`
+			CREATE TABLE T1 (
 			  C_I1 INT64 NOT NULL,
 			  C_S1 STRING(MAX)
 			) PRIMARY KEY(C_I1);
 			CREATE SEARCH INDEX idx_T1_C_S1 ON T1(C_S1)`,
-			`CREATE TABLE T1 (
+			`
+			CREATE TABLE T1 (
 			  C_I1 INT64 NOT NULL,
 			  C_S1 STRING(MAX)
 			) PRIMARY KEY(C_I1)`,
