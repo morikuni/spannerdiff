@@ -19,7 +19,7 @@ jobs:
       uses: reviewdog/action-golangci-lint@v2
       with:
         reporter: github-check
-        filter_mode: diff_context
+        filter_mode: nofilter
         fail_level: error
 
     - name: golangci-lint on PR
