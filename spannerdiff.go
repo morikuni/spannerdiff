@@ -343,11 +343,11 @@ func (m *migration) alterTable(base, target *createTable) {
 		return
 	}
 
-	baseCopy := base.node
-	targetCopy := target.node
+	baseCopy := *base.node
+	targetCopy := *target.node
 	baseCopy.Columns = nil
 	targetCopy.Columns = nil
-	if equalNode(baseCopy, targetCopy) {
+	if equalNode(&baseCopy, &targetCopy) {
 		// If only the columns are different, the migration is done by altering the columns.
 		return
 	}
@@ -531,19 +531,24 @@ func (m *migration) alterIndex(base, target *createIndex) {
 		return
 	}
 
-	baseCopy := base.node
-	targetCopy := target.node
+	baseCopy := *base.node
+	targetCopy := *target.node
 	baseCopy.Storing = nil
 	targetCopy.Storing = nil
 
-	if equalNode(baseCopy, targetCopy) {
-		baseStoring := make(map[columnID]*ast.Ident, len(base.node.Storing.Columns))
-		targetStoring := make(map[columnID]*ast.Ident, len(target.node.Storing.Columns))
-		for _, col := range base.node.Storing.Columns {
-			baseStoring[newColumnID(base.tableID(), col)] = col
+	if equalNode(&baseCopy, &targetCopy) {
+		var baseStoring, targetStoring map[columnID]*ast.Ident
+		if base.node.Storing != nil {
+			baseStoring = make(map[columnID]*ast.Ident, len(base.node.Storing.Columns))
+			for _, col := range base.node.Storing.Columns {
+				baseStoring[newColumnID(base.tableID(), col)] = col
+			}
 		}
-		for _, col := range target.node.Storing.Columns {
-			targetStoring[newColumnID(target.tableID(), col)] = col
+		if target.node.Storing != nil {
+			targetStoring = make(map[columnID]*ast.Ident, len(target.node.Storing.Columns))
+			for _, col := range target.node.Storing.Columns {
+				targetStoring[newColumnID(target.tableID(), col)] = col
+			}
 		}
 		added := make(map[columnID]*ast.Ident, len(targetStoring))
 		dropped := make(map[columnID]*ast.Ident, len(baseStoring))
@@ -579,18 +584,24 @@ func (m *migration) alterSearchIndex(base, target *createSearchIndex) {
 		return
 	}
 
-	baseCopy := base.node
-	targetCopy := target.node
+	baseCopy := *base.node
+	targetCopy := *target.node
 	baseCopy.Storing = nil
 	targetCopy.Storing = nil
-	if equalNode(baseCopy, targetCopy) {
-		baseStoring := make(map[columnID]*ast.Ident, len(base.node.Storing.Columns))
-		targetStoring := make(map[columnID]*ast.Ident, len(target.node.Storing.Columns))
-		for _, col := range base.node.Storing.Columns {
-			baseStoring[newColumnID(base.tableID(), col)] = col
+
+	if equalNode(&baseCopy, &targetCopy) {
+		var baseStoring, targetStoring map[columnID]*ast.Ident
+		if base.node.Storing != nil {
+			baseStoring = make(map[columnID]*ast.Ident, len(base.node.Storing.Columns))
+			for _, col := range base.node.Storing.Columns {
+				baseStoring[newColumnID(base.tableID(), col)] = col
+			}
 		}
-		for _, col := range target.node.Storing.Columns {
-			targetStoring[newColumnID(target.tableID(), col)] = col
+		if target.node.Storing != nil {
+			targetStoring = make(map[columnID]*ast.Ident, len(target.node.Storing.Columns))
+			for _, col := range target.node.Storing.Columns {
+				targetStoring[newColumnID(target.tableID(), col)] = col
+			}
 		}
 		added := make(map[columnID]*ast.Ident, len(targetStoring))
 		dropped := make(map[columnID]*ast.Ident, len(baseStoring))

@@ -157,6 +157,38 @@ func TestDiff(t *testing.T) {
 			CREATE INDEX IDX1 ON T1(T1_I1, T1_S1);`,
 			false,
 		},
+		"add index storing": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1);
+			CREATE INDEX IDX1 ON T1(T1_S1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1);
+			CREATE INDEX IDX1 ON T1(T1_S1) STORING (T1_I1);`,
+			`ALTER INDEX IDX1 ADD STORED COLUMN T1_I1;`,
+			false,
+		},
+		"drop index storing": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1);
+			CREATE INDEX IDX1 ON T1(T1_S1) STORING (T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1);
+			CREATE INDEX IDX1 ON T1(T1_S1);`,
+			`ALTER INDEX IDX1 DROP STORED COLUMN T1_I1;`,
+			false,
+		},
 		"add search index": {
 			`
 			CREATE TABLE T1 (
@@ -203,6 +235,38 @@ func TestDiff(t *testing.T) {
 			`
 			DROP SEARCH INDEX IDX1;
 			CREATE SEARCH INDEX IDX1 ON T1(T1_I1, T1_S1);`,
+			false,
+		},
+		"add search index storing": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1);
+			CREATE SEARCH INDEX IDX1 ON T1(T1_S1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1);
+			CREATE SEARCH INDEX IDX1 ON T1(T1_S1) STORING (T1_I1);`,
+			`ALTER SEARCH INDEX IDX1 ADD STORED COLUMN T1_I1;`,
+			false,
+		},
+		"drop search index storing": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1);
+			CREATE SEARCH INDEX IDX1 ON T1(T1_S1) STORING (T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1);
+			CREATE SEARCH INDEX IDX1 ON T1(T1_S1);`,
+			`ALTER SEARCH INDEX IDX1 DROP STORED COLUMN T1_I1;`,
 			false,
 		},
 		"add foreign key": {
