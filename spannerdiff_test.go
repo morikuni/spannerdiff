@@ -338,6 +338,49 @@ func TestDiff(t *testing.T) {
 			ALTER TABLE T1 ADD CONSTRAINT CHK1 CHECK (T1_I1 > 1);`,
 			false,
 		},
+		"add row deletion policy": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_TS1 TIMESTAMP NOT NULL,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_TS1 TIMESTAMP NOT NULL,
+			) PRIMARY KEY(T1_I1), ROW DELETION POLICY (OLDER_THAN(T1_TS1, INTERVAL 1 DAY));`,
+			`ALTER TABLE T1 ADD ROW DELETION POLICY (OLDER_THAN(T1_TS1, INTERVAL 1 DAY));`,
+			false,
+		},
+		"drop row deletion policy": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_TS1 TIMESTAMP NOT NULL,
+			) PRIMARY KEY(T1_I1), ROW DELETION POLICY (OLDER_THAN(T1_TS1, INTERVAL 1 DAY));`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_TS1 TIMESTAMP NOT NULL,
+			) PRIMARY KEY(T1_I1)`,
+			`ALTER TABLE T1 DROP ROW DELETION POLICY;`,
+			false,
+		},
+		"replace row deletion policy": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_TS1 TIMESTAMP NOT NULL,
+			) PRIMARY KEY(T1_I1), ROW DELETION POLICY (OLDER_THAN(T1_TS1, INTERVAL 1 DAY));`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_TS1 TIMESTAMP NOT NULL,
+			) PRIMARY KEY(T1_I1), ROW DELETION POLICY (OLDER_THAN(T1_TS1, INTERVAL 2 DAY));`,
+			`
+			ALTER TABLE T1 REPLACE ROW DELETION POLICY (OLDER_THAN(T1_TS1, INTERVAL 2 DAY));`,
+			false,
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			r, err := Diff(strings.NewReader(tt.base), strings.NewReader(tt.target), DiffOption{
