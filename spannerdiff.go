@@ -2,9 +2,11 @@ package spannerdiff
 
 import (
 	"bytes"
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 
 	"github.com/cloudspannerecosystem/memefish"
 	"github.com/cloudspannerecosystem/memefish/ast"
@@ -709,6 +711,14 @@ const (
 )
 
 func sortOperations(ops []operation) ([]operation, error) {
+	// sort operations before topological sort to fix the sorted result.
+	slices.SortFunc(ops, func(i, j operation) int {
+		return cmp.Or(
+			cmp.Compare(i.id.ID(), j.id.ID()),
+			cmp.Compare(i.kind, j.kind),
+		)
+	})
+
 	var addAlterOps, dropOps []operation
 	for _, op := range ops {
 		switch op.kind {
