@@ -16,6 +16,7 @@ var _ = []identifier{
 	columnID{},
 	indexID{},
 	searchIndexID{},
+	propertyGraphID{},
 }
 
 var _ = []struct{}{
@@ -23,6 +24,7 @@ var _ = []struct{}{
 	isComparable(columnID{}),
 	isComparable(indexID{}),
 	isComparable(searchIndexID{}),
+	isComparable(propertyGraphID{}),
 }
 
 // go:inline
@@ -30,7 +32,7 @@ func isComparable[C comparable](_ C) struct{} { return struct{}{} }
 
 type tableID [2]string
 
-func newTableID(path *ast.Path) tableID {
+func newTableIDFromPath(path *ast.Path) tableID {
 	switch len(path.Idents) {
 	case 1:
 		return tableID{"", path.Idents[0].Name}
@@ -39,6 +41,9 @@ func newTableID(path *ast.Path) tableID {
 	default:
 		panic(fmt.Sprintf("unexpected table name: %s", path.SQL()))
 	}
+}
+func newTableIDFromIdent(ident *ast.Ident) tableID {
+	return newTableIDFromPath(&ast.Path{Idents: []*ast.Ident{ident}})
 }
 
 func (t tableID) ID() string {
@@ -88,4 +93,16 @@ func newSearchIndexID(ident *ast.Ident) searchIndexID {
 
 func (i searchIndexID) ID() string {
 	return fmt.Sprintf("SearchIndexID(%s)", i.name)
+}
+
+type propertyGraphID struct {
+	name string
+}
+
+func newPropertyGraphID(ident *ast.Ident) propertyGraphID {
+	return propertyGraphID{ident.Name}
+}
+
+func (i propertyGraphID) ID() string {
+	return fmt.Sprintf("PropertyGraphID(%s)", i.name)
 }

@@ -70,10 +70,11 @@ func Diff(baseSQL, targetSQL io.Reader, option DiffOption) (io.Reader, error) {
 }
 
 type definitions struct {
-	tables        map[tableID]*createTable
-	columns       map[columnID]*column
-	indexes       map[indexID]*createIndex
-	searchIndexes map[searchIndexID]*createSearchIndex
+	tables         map[tableID]*createTable
+	columns        map[columnID]*column
+	indexes        map[indexID]*createIndex
+	searchIndexes  map[searchIndexID]*createSearchIndex
+	propertyGraphs map[propertyGraphID]*createPropertyGraph
 }
 
 func newDefinitions(ddls []ast.DDL, errorOnUnsupported bool) (*definitions, error) {
@@ -82,6 +83,7 @@ func newDefinitions(ddls []ast.DDL, errorOnUnsupported bool) (*definitions, erro
 		make(map[columnID]*column),
 		make(map[indexID]*createIndex),
 		make(map[searchIndexID]*createSearchIndex),
+		make(map[propertyGraphID]*createPropertyGraph),
 	}
 
 	for _, ddl := range ddls {
@@ -96,6 +98,8 @@ func newDefinitions(ddls []ast.DDL, errorOnUnsupported bool) (*definitions, erro
 			d.indexes[newIndexID(ddl.Name)] = newCreateIndex(ddl)
 		case *ast.CreateSearchIndex:
 			d.searchIndexes[newSearchIndexID(ddl.Name)] = newCreateSearchIndex(ddl)
+		case *ast.CreatePropertyGraph:
+			d.propertyGraphs[newPropertyGraphID(ddl.Name)] = newCreatePropertyGraph(ddl)
 		default:
 			if errorOnUnsupported {
 				return nil, fmt.Errorf("unsupported DDL: %s", ddl.SQL())
@@ -202,6 +206,9 @@ func newMigration(base, target *definitions) *migration {
 	for _, def := range base.searchIndexes {
 		m.initializeState(def)
 	}
+	for _, def := range base.propertyGraphs {
+		m.initializeState(def)
+	}
 
 	for _, def := range target.tables {
 		m.initializeState(def)
@@ -213,6 +220,9 @@ func newMigration(base, target *definitions) *migration {
 		m.initializeState(def)
 	}
 	for _, def := range target.searchIndexes {
+		m.initializeState(def)
+	}
+	for _, def := range target.propertyGraphs {
 		m.initializeState(def)
 	}
 
@@ -285,6 +295,11 @@ func (m *migration) drops(baseDefs, targetDefs *definitions) {
 			}
 		}
 	}
+	for propertyGraphID, def := range baseDefs.propertyGraphs {
+		if _, ok := targetDefs.propertyGraphs[propertyGraphID]; !ok {
+			m.updateState(newMigrationState(propertyGraphID, def, migrationKindDrop))
+		}
+	}
 }
 
 func (m *migration) adds(base, target *definitions) {
@@ -308,6 +323,11 @@ func (m *migration) adds(base, target *definitions) {
 	for searchIndexID, def := range target.searchIndexes {
 		if _, ok := base.searchIndexes[searchIndexID]; !ok {
 			m.updateState(newMigrationState(searchIndexID, def, migrationKindAdd))
+		}
+	}
+	for propertyGraphID, def := range target.propertyGraphs {
+		if _, ok := base.propertyGraphs[propertyGraphID]; !ok {
+			m.updateState(newMigrationState(propertyGraphID, def, migrationKindAdd))
 		}
 	}
 }
@@ -352,6 +372,16 @@ func (m *migration) alters(base, target *definitions) {
 			continue
 		}
 		m.alterSearchIndex(baseSearchIndex, targetSearchIndex)
+	}
+	for propertyGraphID, targetPropertyGraph := range target.propertyGraphs {
+		basePropertyGraph, ok := base.propertyGraphs[propertyGraphID]
+		if !ok {
+			continue
+		}
+		if equalNode(basePropertyGraph.node, targetPropertyGraph.node) {
+			continue
+		}
+		m.alterPropertyGraph(basePropertyGraph, targetPropertyGraph)
 	}
 }
 
@@ -651,6 +681,12 @@ func (m *migration) alterSearchIndex(base, target *createSearchIndex) {
 		return
 	}
 	m.updateState(newMigrationState(target.searchIndexID(), target, migrationKindDropAndAdd))
+}
+
+func (m *migration) alterPropertyGraph(base, target *createPropertyGraph) {
+	targetCopy := *target.node
+	targetCopy.OrReplace = true
+	m.updateState(newMigrationState(target.propertyGraphID(), target, migrationKindAlter, &targetCopy))
 }
 
 type operation struct {

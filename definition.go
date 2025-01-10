@@ -8,7 +8,6 @@ import (
 
 type definition interface {
 	id() identifier
-	isDefinition()
 	add() ast.DDL
 	drop() ast.DDL
 	dependsOn() []identifier
@@ -20,6 +19,7 @@ var _ = []definition{
 	&column{},
 	&createIndex{},
 	&createSearchIndex{},
+	&createPropertyGraph{},
 }
 
 type createTable struct {
@@ -35,10 +35,8 @@ func (c *createTable) id() identifier {
 }
 
 func (c *createTable) tableID() tableID {
-	return newTableID(c.node.Name)
+	return newTableIDFromPath(c.node.Name)
 }
-
-func (c *createTable) isDefinition() {}
 
 func (c *createTable) add() ast.DDL {
 	return c.node
@@ -61,7 +59,7 @@ func (c *createTable) onDependencyChange(me, dependency migrationState) migratio
 func (c *createTable) columns() map[columnID]*ast.ColumnDef {
 	m := make(map[columnID]*ast.ColumnDef)
 	for _, col := range c.node.Columns {
-		m[newColumnID(newTableID(c.node.Name), col.Name)] = col
+		m[newColumnID(newTableIDFromPath(c.node.Name), col.Name)] = col
 	}
 	return m
 }
@@ -82,8 +80,6 @@ func (c *column) id() identifier {
 func (c *column) columnID() columnID {
 	return newColumnID(c.table.tableID(), c.node.Name)
 }
-
-func (c *column) isDefinition() {}
 
 func (c *column) add() ast.DDL {
 	return &ast.AlterTable{
@@ -138,17 +134,27 @@ func (c *createIndex) indexID() indexID {
 	return newIndexID(c.node.Name)
 }
 func (c *createIndex) tableID() tableID {
-	return newTableID(c.node.TableName)
+	return newTableIDFromPath(c.node.TableName)
+}
+
+func (c *createIndex) add() ast.DDL {
+	return c.node
+}
+
+func (c *createIndex) drop() ast.DDL {
+	return &ast.DropIndex{
+		Name: c.node.Name,
+	}
 }
 
 func (c *createIndex) dependsOn() []identifier {
 	var ids []identifier
 	for _, col := range c.node.Keys {
-		ids = append(ids, newColumnID(newTableID(c.node.TableName), col.Name))
+		ids = append(ids, newColumnID(newTableIDFromPath(c.node.TableName), col.Name))
 	}
 	if c.node.Storing != nil {
 		for _, col := range c.node.Storing.Columns {
-			ids = append(ids, newColumnID(newTableID(c.node.TableName), col))
+			ids = append(ids, newColumnID(newTableIDFromPath(c.node.TableName), col))
 		}
 	}
 	ids = append(ids, c.tableID())
@@ -169,18 +175,6 @@ func (c *createIndex) onDependencyChange(me, dependency migrationState) migratio
 	}
 }
 
-func (c *createIndex) isDefinition() {}
-
-func (c *createIndex) add() ast.DDL {
-	return c.node
-}
-
-func (c *createIndex) drop() ast.DDL {
-	return &ast.DropIndex{
-		Name: c.node.Name,
-	}
-}
-
 type createSearchIndex struct {
 	node *ast.CreateSearchIndex
 }
@@ -198,13 +192,23 @@ func (c *createSearchIndex) searchIndexID() searchIndexID {
 }
 
 func (c *createSearchIndex) tableID() tableID {
-	return newTableID(&ast.Path{Idents: []*ast.Ident{c.node.TableName}})
+	return newTableIDFromIdent(c.node.TableName)
+}
+
+func (c *createSearchIndex) add() ast.DDL {
+	return c.node
+}
+
+func (c *createSearchIndex) drop() ast.DDL {
+	return &ast.DropSearchIndex{
+		Name: c.node.Name,
+	}
 }
 
 func (c *createSearchIndex) dependsOn() []identifier {
 	var ids []identifier
 	for _, col := range c.node.TokenListPart {
-		ids = append(ids, newColumnID(newTableID(&ast.Path{Idents: []*ast.Ident{c.node.TableName}}), col))
+		ids = append(ids, newColumnID(newTableIDFromIdent(c.node.TableName), col))
 	}
 	ids = append(ids, c.tableID())
 	return ids
@@ -224,14 +228,101 @@ func (c *createSearchIndex) onDependencyChange(me, dependency migrationState) mi
 	}
 }
 
-func (c *createSearchIndex) isDefinition() {}
+type createPropertyGraph struct {
+	node *ast.CreatePropertyGraph
+}
 
-func (c *createSearchIndex) add() ast.DDL {
+func newCreatePropertyGraph(cpg *ast.CreatePropertyGraph) *createPropertyGraph {
+	return &createPropertyGraph{cpg}
+}
+
+func (c *createPropertyGraph) id() identifier {
+	return newPropertyGraphID(c.node.Name)
+}
+
+func (c *createPropertyGraph) propertyGraphID() propertyGraphID {
+	return newPropertyGraphID(c.node.Name)
+}
+
+func (c *createPropertyGraph) add() ast.DDL {
 	return c.node
 }
 
-func (c *createSearchIndex) drop() ast.DDL {
-	return &ast.DropSearchIndex{
+func (c *createPropertyGraph) drop() ast.DDL {
+	return &ast.DropPropertyGraph{
 		Name: c.node.Name,
+	}
+}
+
+func (c *createPropertyGraph) dependsOn() []identifier {
+	var ids []identifier
+	for _, elem := range c.node.Content.NodeTables.Tables.Elements {
+		tableID := newTableIDFromIdent(elem.Name)
+		ids = append(ids, tableID)
+		if elem.Keys != nil {
+			switch keys := elem.Keys.(type) {
+			case *ast.PropertyGraphNodeElementKey:
+				for _, key := range keys.Key.Keys.ColumnNameList {
+					ids = append(ids, newColumnID(tableID, key))
+				}
+			case *ast.PropertyGraphEdgeElementKeys:
+				if keys.Element != nil {
+					for _, key := range keys.Element.Keys.ColumnNameList {
+						ids = append(ids, newColumnID(tableID, key))
+					}
+				}
+				for _, key := range keys.Source.Keys.ColumnNameList {
+					ids = append(ids, newColumnID(tableID, key))
+				}
+				for _, key := range keys.Source.ReferenceColumns.ColumnNameList {
+					ids = append(ids, newColumnID(newTableIDFromIdent(keys.Source.ElementReference), key))
+				}
+			default:
+				panic(fmt.Sprintf("unexpected property graph type: %T", keys))
+			}
+		}
+	}
+	if c.node.Content.EdgeTables != nil {
+		for _, elem := range c.node.Content.EdgeTables.Tables.Elements {
+			tableID := newTableIDFromIdent(elem.Name)
+			ids = append(ids, tableID)
+			if elem.Keys != nil {
+				switch keys := elem.Keys.(type) {
+				case *ast.PropertyGraphNodeElementKey:
+					for _, key := range keys.Key.Keys.ColumnNameList {
+						ids = append(ids, newColumnID(tableID, key))
+					}
+				case *ast.PropertyGraphEdgeElementKeys:
+					if keys.Element != nil {
+						for _, key := range keys.Element.Keys.ColumnNameList {
+							ids = append(ids, newColumnID(tableID, key))
+						}
+					}
+					for _, key := range keys.Source.Keys.ColumnNameList {
+						ids = append(ids, newColumnID(tableID, key))
+					}
+					for _, key := range keys.Source.ReferenceColumns.ColumnNameList {
+						ids = append(ids, newColumnID(newTableIDFromIdent(keys.Source.ElementReference), key))
+					}
+				default:
+					panic(fmt.Sprintf("unexpected property graph type: %T", keys))
+				}
+			}
+		}
+	}
+	return ids
+}
+
+func (c *createPropertyGraph) onDependencyChange(me, dependency migrationState) migrationState {
+	switch dependency.def.(type) {
+	case *column, *createTable:
+		switch dependency.kind {
+		case migrationKindDropAndAdd:
+			return newMigrationState(newPropertyGraphID(c.node.Name), c, migrationKindDropAndAdd)
+		default:
+			return me
+		}
+	default:
+		panic(fmt.Sprintf("unexpected dependOn type on property graph: %T", dependency.def))
 	}
 }

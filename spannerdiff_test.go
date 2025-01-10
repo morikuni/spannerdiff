@@ -16,6 +16,12 @@ func TestDiff(t *testing.T) {
 		wantDDLs  string
 		wantError bool
 	}{
+		"unsupported ddl": {
+			``,
+			`CREATE SCHEMA SCH1`,
+			``,
+			true,
+		},
 		"add table": {
 			``,
 			`
@@ -498,11 +504,67 @@ func TestDiff(t *testing.T) {
 			CREATE SEARCH INDEX IDX2 ON T1(T1_S1);`,
 			false,
 		},
-		"unsupported ddl": {
-			``,
-			`CREATE SCHEMA SCH1`,
-			``,
-			true,
+		"add property graph": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY (T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY (T2_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY (T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY (T2_I1);
+			CREATE PROPERTY GRAPH G1 NODE TABLES (T1, T2);
+			`,
+			`
+			CREATE PROPERTY GRAPH G1 NODE TABLES (T1, T2);`,
+			false,
+		},
+		"drop property graph": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY (T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY (T2_I1);
+			CREATE PROPERTY GRAPH G1 NODE TABLES (T1, T2);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY (T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY (T2_I1);`,
+			`
+			DROP PROPERTY GRAPH G1;`,
+			false,
+		},
+		"recreate property graph": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY (T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY (T2_I1);
+			CREATE PROPERTY GRAPH G1 NODE TABLES (T1, T2);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY (T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY (T2_I1);
+			CREATE PROPERTY GRAPH G1 NODE TABLES (T1);`,
+			`
+			CREATE OR REPLACE PROPERTY GRAPH G1 NODE TABLES (T1);`,
+			false,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
