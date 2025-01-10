@@ -21,12 +21,10 @@ func TestDiff(t *testing.T) {
 			`
 			CREATE TABLE T1 (
 			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX)
 			) PRIMARY KEY(T1_I1)`,
 			`
 			CREATE TABLE T1 (
 			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX)
 			) PRIMARY KEY(T1_I1);`,
 			false,
 		},
@@ -34,7 +32,6 @@ func TestDiff(t *testing.T) {
 			`
 			CREATE TABLE T1 (
 			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX)
 			) PRIMARY KEY(T1_I1)`,
 			``,
 			`DROP TABLE T1;`,
@@ -44,18 +41,15 @@ func TestDiff(t *testing.T) {
 			`
 			CREATE TABLE T1 (
 			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX)
 			) PRIMARY KEY(T1_I1)`,
 			`
 			CREATE TABLE T1 (
 			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX)
 			) PRIMARY KEY(T1_I1, T1_S1)`,
 			`
 			DROP TABLE T1;
 			CREATE TABLE T1 (
 			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX)
 			) PRIMARY KEY(T1_I1, T1_S1);`,
 			false,
 		},
@@ -63,15 +57,13 @@ func TestDiff(t *testing.T) {
 			`
 			CREATE TABLE T1 (
 			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX)
 			) PRIMARY KEY(T1_I1)`,
 			`
 			CREATE TABLE T1 (
 			  T1_I1 INT64 NOT NULL,
 			  T1_S1 STRING(MAX),
-			  T1_S2 STRING(MAX)
 			) PRIMARY KEY(T1_I1)`,
-			`ALTER TABLE T1 ADD COLUMN T1_S2 STRING(MAX);`,
+			`ALTER TABLE T1 ADD COLUMN T1_S1 STRING(MAX);`,
 			false,
 		},
 		"drop column": {
@@ -79,14 +71,12 @@ func TestDiff(t *testing.T) {
 			CREATE TABLE T1 (
 			  T1_I1 INT64 NOT NULL,
 			  T1_S1 STRING(MAX),
-			  T1_S2 STRING(MAX)
 			) PRIMARY KEY(T1_I1)`,
 			`
 			CREATE TABLE T1 (
 			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX)
 			) PRIMARY KEY(T1_I1)`,
-			`ALTER TABLE T1 DROP COLUMN T1_S2;`,
+			`ALTER TABLE T1 DROP COLUMN T1_S1;`,
 			false,
 		},
 		"modify column": {
@@ -233,11 +223,11 @@ func TestDiff(t *testing.T) {
 			CREATE TABLE T2 (
 			  T2_I1 INT64 NOT NULL,
 			  T2_S1 STRING(MAX),
-			  CONSTRAINT FK1 FOREIGN KEY (T2_I1) REFERENCES T1 (T1_I1),
+			  CONSTRAINT FK1 FOREIGN KEY (T2_S1) REFERENCES T1 (T1_S1),
 			) PRIMARY KEY(T2_I1);
 			`,
 			`
-			ALTER TABLE T2 ADD CONSTRAINT FK1 FOREIGN KEY (T2_I1) REFERENCES T1(T1_I1);`,
+			ALTER TABLE T2 ADD CONSTRAINT FK1 FOREIGN KEY (T2_S1) REFERENCES T1(T1_S1);`,
 			false,
 		},
 		"drop foreign key": {
@@ -249,7 +239,7 @@ func TestDiff(t *testing.T) {
 			CREATE TABLE T2 (
 			  T2_I1 INT64 NOT NULL,
 			  T2_S1 STRING(MAX),
-			  CONSTRAINT FK1 FOREIGN KEY (T2_I1) REFERENCES T1 (T1_I1),
+			  CONSTRAINT FK1 FOREIGN KEY (T2_S1) REFERENCES T1 (T1_S1),
 			) PRIMARY KEY(T2_I1)`,
 			`
 			CREATE TABLE T1 (
@@ -294,12 +284,10 @@ func TestDiff(t *testing.T) {
 			`
 			CREATE TABLE T1 (
 			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX)
 			) PRIMARY KEY(T1_I1)`,
 			`
 			CREATE TABLE T1 (
 			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX),
 			  CONSTRAINT CHK1 CHECK (T1_I1 > 0)
 			) PRIMARY KEY(T1_I1)`,
 			`ALTER TABLE T1 ADD CONSTRAINT CHK1 CHECK (T1_I1 > 0);`,
@@ -309,13 +297,11 @@ func TestDiff(t *testing.T) {
 			`
 			CREATE TABLE T1 (
 			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX),
 			  CONSTRAINT CHK1 CHECK (T1_I1 > 0)
 			) PRIMARY KEY(T1_I1)`,
 			`
 			CREATE TABLE T1 (
 			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX)
 			) PRIMARY KEY(T1_I1)`,
 			`ALTER TABLE T1 DROP CONSTRAINT CHK1;`,
 			false,
@@ -324,13 +310,11 @@ func TestDiff(t *testing.T) {
 			`
 			CREATE TABLE T1 (
 			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX),
 			  CONSTRAINT CHK1 CHECK (T1_I1 > 0)
 			) PRIMARY KEY(T1_I1)`,
 			`
 			CREATE TABLE T1 (
 			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX),
 			  CONSTRAINT CHK1 CHECK (T1_I1 > 1)
 			) PRIMARY KEY(T1_I1)`,
 			`
@@ -379,6 +363,48 @@ func TestDiff(t *testing.T) {
 			) PRIMARY KEY(T1_I1), ROW DELETION POLICY (OLDER_THAN(T1_TS1, INTERVAL 2 DAY));`,
 			`
 			ALTER TABLE T1 REPLACE ROW DELETION POLICY (OLDER_THAN(T1_TS1, INTERVAL 2 DAY));`,
+			false,
+		},
+		"add synonym": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY (T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  SYNONYM(T2)
+			) PRIMARY KEY (T1_I1)`,
+			`ALTER TABLE T1 ADD SYNONYM T2;`,
+			false,
+		},
+		"drop synonym": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  SYNONYM(T2)
+			) PRIMARY KEY (T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY (T1_I1)`,
+			`ALTER TABLE T1 DROP SYNONYM T2;`,
+			false,
+		},
+		"recreate synonym": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  SYNONYM(T2)
+			) PRIMARY KEY (T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  SYNONYM(T3)
+			) PRIMARY KEY (T1_I1)`,
+			`
+			ALTER TABLE T1 ADD SYNONYM T3;
+			ALTER TABLE T1 DROP SYNONYM T2;`,
 			false,
 		},
 	} {
