@@ -48,7 +48,11 @@ func Diff(baseSQL, targetSQL io.Reader, option DiffOption) (io.Reader, error) {
 
 	var buf bytes.Buffer
 	for i, stmt := range stmts {
-		_, err = fmt.Fprintln(&buf, stmt.SQL())
+		_, err = fmt.Fprint(&buf, stmt.SQL())
+		if err != nil {
+			return nil, fmt.Errorf("failed to write diff SQL: %w", err)
+		}
+		_, err = fmt.Fprintln(&buf, ";")
 		if err != nil {
 			return nil, fmt.Errorf("failed to write diff SQL: %w", err)
 		}
