@@ -20,22 +20,22 @@ func TestDiff(t *testing.T) {
 			``,
 			`
 			CREATE TABLE T1 (
-			  C_I1 INT64 NOT NULL,
-			  C_S1 STRING(MAX)
-			) PRIMARY KEY(C_I1)`,
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1)`,
 			`
 			CREATE TABLE T1 (
-			  C_I1 INT64 NOT NULL,
-			  C_S1 STRING(MAX)
-			) PRIMARY KEY(C_I1);`,
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1);`,
 			false,
 		},
 		"drop table": {
 			`
 			CREATE TABLE T1 (
-			  C_I1 INT64 NOT NULL,
-			  C_S1 STRING(MAX)
-			) PRIMARY KEY(C_I1)`,
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1)`,
 			``,
 			`DROP TABLE T1;`,
 			false,
@@ -43,126 +43,140 @@ func TestDiff(t *testing.T) {
 		"recreate table": {
 			`
 			CREATE TABLE T1 (
-			  C_I1 INT64 NOT NULL,
-			  C_S1 STRING(MAX)
-			) PRIMARY KEY(C_I1)`,
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1)`,
 			`
 			CREATE TABLE T1 (
-			  C_I1 INT64 NOT NULL,
-			  C_S1 STRING(MAX)
-			) PRIMARY KEY(C_I1, C_S1)`,
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1, T1_S1)`,
 			`
 			DROP TABLE T1;
 			CREATE TABLE T1 (
-			  C_I1 INT64 NOT NULL,
-			  C_S1 STRING(MAX)
-			) PRIMARY KEY(C_I1, C_S1);`,
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1, T1_S1);`,
 			false,
 		},
 		"add column": {
 			`
 			CREATE TABLE T1 (
-			  C_I1 INT64 NOT NULL,
-			  C_S1 STRING(MAX)
-			) PRIMARY KEY(C_I1)`,
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1)`,
 			`
 			CREATE TABLE T1 (
-			  C_I1 INT64 NOT NULL,
-			  C_S1 STRING(MAX),
-			  C_S2 STRING(MAX)
-			) PRIMARY KEY(C_I1)`,
-			`ALTER TABLE T1 ADD COLUMN C_S2 STRING(MAX);`,
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  T1_S2 STRING(MAX)
+			) PRIMARY KEY(T1_I1)`,
+			`ALTER TABLE T1 ADD COLUMN T1_S2 STRING(MAX);`,
 			false,
 		},
 		"drop column": {
 			`
 			CREATE TABLE T1 (
-			  C_I1 INT64 NOT NULL,
-			  C_S1 STRING(MAX),
-			  C_S2 STRING(MAX)
-			) PRIMARY KEY(C_I1)`,
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  T1_S2 STRING(MAX)
+			) PRIMARY KEY(T1_I1)`,
 			`
 			CREATE TABLE T1 (
-			  C_I1 INT64 NOT NULL,
-			  C_S1 STRING(MAX)
-			) PRIMARY KEY(C_I1)`,
-			`ALTER TABLE T1 DROP COLUMN C_S2;`,
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1)`,
+			`ALTER TABLE T1 DROP COLUMN T1_S2;`,
 			false,
 		},
 		"modify column": {
 			`
 			CREATE TABLE T1 (
-			  C_I1 INT64 NOT NULL,
-			  C_S1 STRING(MAX),
-			  C_S2 STRING(MAX)
-			) PRIMARY KEY(C_I1)`,
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			) PRIMARY KEY(T1_I1)`,
 			`
 			CREATE TABLE T1 (
-			  C_I1 INT64 NOT NULL,
-			  C_S1 STRING(MAX),
-			  C_S2 STRING(100)
-			) PRIMARY KEY(C_I1)`,
-			`ALTER TABLE T1 ALTER COLUMN C_S2 STRING(100);`,
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(100),
+			) PRIMARY KEY(T1_I1)`,
+			`ALTER TABLE T1 ALTER COLUMN T1_S1 STRING(100);`,
+			false,
+		},
+		"recreate column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 INT64,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 DROP COLUMN T1_S1;
+			ALTER TABLE T1 ADD COLUMN T1_S1 INT64;`,
 			false,
 		},
 		"add index": {
 			`
 			CREATE TABLE T1 (
-			  C_I1 INT64 NOT NULL,
-			  C_S1 STRING(MAX)
-			) PRIMARY KEY(C_I1)`,
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1)`,
 			`
 			CREATE TABLE T1 (
-			  C_I1 INT64 NOT NULL,
-			  C_S1 STRING(MAX)
-			) PRIMARY KEY(C_I1);
-			CREATE INDEX idx_T1_C_S1 ON T1(C_S1)`,
-			`CREATE INDEX idx_T1_C_S1 ON T1(C_S1);`,
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1);
+			CREATE INDEX idx_T1_T1_S1 ON T1(T1_S1)`,
+			`CREATE INDEX idx_T1_T1_S1 ON T1(T1_S1);`,
 			false,
 		},
 		"drop index": {
 			`
 			CREATE TABLE T1 (
-			  C_I1 INT64 NOT NULL,
-			  C_S1 STRING(MAX)
-			) PRIMARY KEY(C_I1);
-			CREATE INDEX idx_T1_C_S1 ON T1(C_S1)`,
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1);
+			CREATE INDEX idx_T1_T1_S1 ON T1(T1_S1)`,
 			`
 			CREATE TABLE T1 (
-			  C_I1 INT64 NOT NULL,
-			  C_S1 STRING(MAX)
-			) PRIMARY KEY(C_I1)`,
-			`DROP INDEX idx_T1_C_S1;`,
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1)`,
+			`DROP INDEX idx_T1_T1_S1;`,
 			false,
 		},
 		"add search index": {
 			`
 			CREATE TABLE T1 (
-			  C_I1 INT64 NOT NULL,
-			  C_S1 STRING(MAX)
-			) PRIMARY KEY(C_I1)`,
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1)`,
 			`
 			CREATE TABLE T1 (
-			  C_I1 INT64 NOT NULL,
-			  C_S1 STRING(MAX)
-			) PRIMARY KEY(C_I1);
-			CREATE SEARCH INDEX idx_T1_C_S1 ON T1(C_S1)`,
-			`CREATE SEARCH INDEX idx_T1_C_S1 ON T1(C_S1);`,
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1);
+			CREATE SEARCH INDEX idx_T1_T1_S1 ON T1(T1_S1)`,
+			`CREATE SEARCH INDEX idx_T1_T1_S1 ON T1(T1_S1);`,
 			false,
 		},
 		"drop search index": {
 			`
 			CREATE TABLE T1 (
-			  C_I1 INT64 NOT NULL,
-			  C_S1 STRING(MAX)
-			) PRIMARY KEY(C_I1);
-			CREATE SEARCH INDEX idx_T1_C_S1 ON T1(C_S1)`,
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1);
+			CREATE SEARCH INDEX idx_T1_T1_S1 ON T1(T1_S1)`,
 			`
 			CREATE TABLE T1 (
-			  C_I1 INT64 NOT NULL,
-			  C_S1 STRING(MAX)
-			) PRIMARY KEY(C_I1)`,
-			`DROP SEARCH INDEX idx_T1_C_S1;`,
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1)`,
+			`DROP SEARCH INDEX idx_T1_T1_S1;`,
 			false,
 		},
 	} {
