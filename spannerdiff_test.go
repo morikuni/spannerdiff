@@ -498,11 +498,26 @@ func TestDiff(t *testing.T) {
 			CREATE SEARCH INDEX IDX2 ON T1(T1_S1);`,
 			false,
 		},
+		"unsupported ddl": {
+			``,
+			`CREATE SCHEMA SCH1`,
+			``,
+			true,
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			r, err := Diff(strings.NewReader(tt.base), strings.NewReader(tt.target), DiffOption{
 				ErrorOnUnsupportedDDL: true,
 			})
+			if tt.wantError {
+				if err == nil {
+					t.Fatalf("want error, got nil")
+				}
+				return
+			} else if err != nil {
+				t.Fatalf("want no error, got %v", err)
+			}
+
 			if (err != nil) != tt.wantError {
 				t.Fatalf("want error %v, got %v", tt.wantError, err)
 			}
