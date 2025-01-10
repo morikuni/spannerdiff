@@ -710,10 +710,6 @@ const (
 	operationKindDrop  operationKind = "drop"
 )
 
-func testlint() int {
-	return 1
-}
-
 func sortOperations(ops []operation) ([]operation, error) {
 	// sort operations before topological sort to fix the sorted result.
 	slices.SortFunc(ops, func(i, j operation) int {
