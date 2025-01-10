@@ -20,7 +20,7 @@ jobs:
       with:
         reporter: github-check
         filter_mode: diff_context
-        fail_on_error: true
+        fail_level: error
 
     - name: golangci-lint on PR
       if: ${{ github.ref_name != 'main' || github.event_name != 'push' }}
@@ -28,6 +28,6 @@ jobs:
       with:
         reporter: github-pr-review
         filter_mode: diff_context
-        fail_on_error: true
+        fail_level: error
 
     - run: make test
