@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"sort"
 
 	"github.com/cloudspannerecosystem/memefish"
 	"github.com/cloudspannerecosystem/memefish/ast"
@@ -149,6 +150,30 @@ func (ms migrationState) DDLs() []ast.DDL {
 	}
 }
 
+func (ms migrationState) operations() []operation {
+	switch ms.kind {
+	case migrationKindAdd:
+		return []operation{newOperation(ms, operationKindAdd, ms.def.add())}
+	case migrationKindAlter:
+		ops := make([]operation, 0, len(ms.alterDDLs))
+		for _, ddl := range ms.alterDDLs {
+			ops = append(ops, newOperation(ms, operationKindAlter, ddl))
+		}
+		return ops
+	case migrationKindDrop:
+		return []operation{newOperation(ms, operationKindDrop, ms.def.drop())}
+	case migrationKindDropAndAdd:
+		return []operation{
+			newOperation(ms, operationKindDrop, ms.def.drop()),
+			newOperation(ms, operationKindAdd, ms.def.add()),
+		}
+	case migrationKindNone, migrationKindUndefined:
+		return nil
+	default:
+		panic(fmt.Sprintf("unexpected migration kind: %s", ms.kind))
+	}
+}
+
 type migration struct {
 	baseDefs   *definitions
 	targetDefs *definitions
@@ -211,7 +236,7 @@ func (m *migration) kind(id identifier) migrationKind {
 	return m.states[id].kind
 }
 
-func diffDefinitions(base, target *definitions) ([]ast.Statement, error) {
+func diffDefinitions(base, target *definitions) ([]ast.DDL, error) {
 	m := newMigration(base, target)
 
 	// Supported schema update: https://cloud.google.com/spanner/docs/schema-updates?t#supported-updates
@@ -228,13 +253,15 @@ func diffDefinitions(base, target *definitions) ([]ast.Statement, error) {
 	// - addしたときにalterしたカラムを参照しているケース
 	// - 依存関係が少ないものから処理するイメージ。依存0は最初
 
-	var stmts []ast.Statement
+	var operations []operation
 	for _, state := range m.states {
-		for _, ddl := range state.DDLs() {
-			stmts = append(stmts, ddl)
-		}
+		operations = append(operations, state.operations()...)
 	}
-	return stmts, nil
+	ddls := make([]ast.DDL, 0, len(operations))
+	for _, op := range operations {
+		ddls = append(ddls, op.ddl)
+	}
+	return ddls, nil
 }
 
 func (m *migration) drops(baseDefs, targetDefs *definitions) {
@@ -628,20 +655,21 @@ func (m *migration) alterSearchIndex(base, target *createSearchIndex) {
 	m.updateState(newMigrationState(target.searchIndexID(), target, migrationKindDropAndAdd))
 }
 
-type statement struct {
+type operation struct {
 	id        identifier
-	stmt      ast.Statement
-	dependsOn []columnID
+	kind      operationKind
+	ddl       ast.DDL
+	dependsOn []identifier
 }
 
-func newDDLStatement(id identifier, ddl ast.DDL, dependsOn ...columnID) statement {
-	return statement{id, ddl, dependsOn}
+func newOperation(s migrationState, kind operationKind, ddl ast.DDL) operation {
+	return operation{s.id, kind, ddl, s.def.dependsOn()}
 }
 
-type ddlKind string
+type operationKind string
 
 const (
-	ddlKindAdd   ddlKind = "add"
-	ddlKindAlter ddlKind = "alter"
-	ddlKindDrop  ddlKind = "drop"
+	operationKindAdd   operationKind = "add"
+	operationKindAlter operationKind = "alter"
+	operationKindDrop  operationKind = "drop"
 )
