@@ -1,7 +1,6 @@
 package spannerdiff
 
 import (
-	"bytes"
 	"cmp"
 	"errors"
 	"fmt"
@@ -17,58 +16,57 @@ type DiffOption struct {
 	ErrorOnUnsupportedDDL bool
 }
 
-func Diff(baseSQL, targetSQL io.Reader, option DiffOption) (io.Reader, error) {
+func Diff(baseSQL, targetSQL io.Reader, output io.Writer, option DiffOption) error {
 	base, err := io.ReadAll(baseSQL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read base SQL: %w", err)
+		return fmt.Errorf("failed to read base SQL: %w", err)
 	}
 	target, err := io.ReadAll(targetSQL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read target SQL: %w", err)
+		return fmt.Errorf("failed to read target SQL: %w", err)
 	}
 
 	baseDDLs, err := memefish.ParseDDLs("base", string(base))
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse base SQL: %w", err)
+		return fmt.Errorf("failed to parse base SQL: %w", err)
 	}
 	targetDDLs, err := memefish.ParseDDLs("target", string(target))
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse target SQL: %w", err)
+		return fmt.Errorf("failed to parse target SQL: %w", err)
 	}
 
 	baseDefs, err := newDefinitions(baseDDLs, option.ErrorOnUnsupportedDDL)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	targetDefs, err := newDefinitions(targetDDLs, option.ErrorOnUnsupportedDDL)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	stmts, err := diffDefinitions(baseDefs, targetDefs)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	var buf bytes.Buffer
 	for i, stmt := range stmts {
-		_, err = fmt.Fprint(&buf, stmt.SQL())
+		_, err = fmt.Fprint(output, stmt.SQL())
 		if err != nil {
-			return nil, fmt.Errorf("failed to write diff SQL: %w", err)
+			return fmt.Errorf("failed to write migration DDL: %w", err)
 		}
-		_, err = fmt.Fprintln(&buf, ";")
+		_, err = fmt.Fprintln(output, ";")
 		if err != nil {
-			return nil, fmt.Errorf("failed to write diff SQL: %w", err)
+			return fmt.Errorf("failed to write migration DDL: %w", err)
 		}
 		if i < len(stmts)-1 {
-			_, err = fmt.Fprintln(&buf)
+			_, err = fmt.Fprintln(output)
 			if err != nil {
-				return nil, fmt.Errorf("failed to write diff SQL: %w", err)
+				return fmt.Errorf("failed to write migration DDL: %w", err)
 			}
 		}
 	}
 
-	return &buf, nil
+	return nil
 }
 
 type definitions struct {

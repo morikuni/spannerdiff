@@ -1,7 +1,7 @@
 package spannerdiff
 
 import (
-	"io"
+	"bytes"
 	"strings"
 	"testing"
 
@@ -568,7 +568,8 @@ func TestDiff(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			r, err := Diff(strings.NewReader(tt.base), strings.NewReader(tt.target), DiffOption{
+			var buf bytes.Buffer
+			err := Diff(strings.NewReader(tt.base), strings.NewReader(tt.target), &buf, DiffOption{
 				ErrorOnUnsupportedDDL: true,
 			})
 			if tt.wantError {
@@ -583,11 +584,7 @@ func TestDiff(t *testing.T) {
 			if (err != nil) != tt.wantError {
 				t.Fatalf("want error %v, got %v", tt.wantError, err)
 			}
-			bs, err := io.ReadAll(r)
-			if err != nil {
-				t.Fatalf("failed to read diff: %v", err)
-			}
-			equalDDLs(t, tt.wantDDLs, string(bs))
+			equalDDLs(t, tt.wantDDLs, buf.String())
 		})
 	}
 }
