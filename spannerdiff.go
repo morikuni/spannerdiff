@@ -356,11 +356,11 @@ func (m *migration) alterTable(base, target *createTable) {
 	if !equalNode(base.node.RowDeletionPolicy, target.node.RowDeletionPolicy) {
 		switch {
 		case base.node.RowDeletionPolicy == nil && target.node.RowDeletionPolicy != nil:
-			ddls = append(ddls, &ast.AlterTable{TableAlteration: &ast.AddRowDeletionPolicy{RowDeletionPolicy: target.node.RowDeletionPolicy.RowDeletionPolicy}})
+			ddls = append(ddls, &ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.AddRowDeletionPolicy{RowDeletionPolicy: target.node.RowDeletionPolicy.RowDeletionPolicy}})
 		case base.node.RowDeletionPolicy != nil && target.node.RowDeletionPolicy == nil:
-			ddls = append(ddls, &ast.AlterTable{TableAlteration: &ast.DropRowDeletionPolicy{}})
+			ddls = append(ddls, &ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.DropRowDeletionPolicy{}})
 		default:
-			ddls = append(ddls, &ast.AlterTable{TableAlteration: &ast.ReplaceRowDeletionPolicy{RowDeletionPolicy: target.node.RowDeletionPolicy.RowDeletionPolicy}})
+			ddls = append(ddls, &ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.ReplaceRowDeletionPolicy{RowDeletionPolicy: target.node.RowDeletionPolicy.RowDeletionPolicy}})
 		}
 	}
 	if !equalNodes(base.node.Synonyms, target.node.Synonyms) {
@@ -374,12 +374,12 @@ func (m *migration) alterTable(base, target *createTable) {
 		}
 		for syn := range targetSynonyms {
 			if _, ok := baseSynonyms[syn]; !ok {
-				ddls = append(ddls, &ast.AlterTable{TableAlteration: &ast.AddSynonym{Name: &ast.Ident{Name: syn}}})
+				ddls = append(ddls, &ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.AddSynonym{Name: &ast.Ident{Name: syn}}})
 			}
 		}
 		for syn := range baseSynonyms {
 			if _, ok := targetSynonyms[syn]; !ok {
-				ddls = append(ddls, &ast.AlterTable{TableAlteration: &ast.DropSynonym{Name: &ast.Ident{Name: syn}}})
+				ddls = append(ddls, &ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.DropSynonym{Name: &ast.Ident{Name: syn}}})
 			}
 		}
 	}
@@ -409,10 +409,10 @@ func (m *migration) alterTable(base, target *createTable) {
 			}
 		}
 		for _, tc := range added {
-			ddls = append(ddls, &ast.AlterTable{TableAlteration: &ast.AddTableConstraint{TableConstraint: tc}})
+			ddls = append(ddls, &ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.AddTableConstraint{TableConstraint: tc}})
 		}
 		for name := range dropped {
-			ddls = append(ddls, &ast.AlterTable{TableAlteration: &ast.DropConstraint{Name: &ast.Ident{Name: name}}})
+			ddls = append(ddls, &ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.DropConstraint{Name: &ast.Ident{Name: name}}})
 		}
 	}
 
@@ -551,7 +551,9 @@ func (m *migration) alterIndex(base, target *createIndex) {
 			ddls = append(ddls, &ast.AlterIndex{Name: target.node.Name, IndexAlteration: &ast.DropStoredColumn{Name: col}})
 		}
 		m.updateState(newMigrationState(target.indexID(), target, migrationKindAlter, ddls...))
+		return
 	}
+	m.updateState(newMigrationState(target.indexID(), target, migrationKindDropAndAdd))
 }
 
 func (m *migration) alterSearchIndex(base, target *createSearchIndex) {
@@ -596,7 +598,9 @@ func (m *migration) alterSearchIndex(base, target *createSearchIndex) {
 			ddls = append(ddls, &ast.AlterSearchIndex{Name: target.node.Name, IndexAlteration: &ast.DropStoredColumn{Name: col}})
 		}
 		m.updateState(newMigrationState(target.searchIndexID(), target, migrationKindAlter, ddls...))
+		return
 	}
+	m.updateState(newMigrationState(target.searchIndexID(), target, migrationKindDropAndAdd))
 }
 
 type statement struct {

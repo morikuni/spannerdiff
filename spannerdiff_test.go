@@ -130,8 +130,8 @@ func TestDiff(t *testing.T) {
 			  T1_I1 INT64 NOT NULL,
 			  T1_S1 STRING(MAX)
 			) PRIMARY KEY(T1_I1);
-			CREATE INDEX idx_T1_T1_S1 ON T1(T1_S1)`,
-			`CREATE INDEX idx_T1_T1_S1 ON T1(T1_S1);`,
+			CREATE INDEX IDX1 ON T1(T1_S1)`,
+			`CREATE INDEX IDX1 ON T1(T1_S1);`,
 			false,
 		},
 		"drop index": {
@@ -140,13 +140,31 @@ func TestDiff(t *testing.T) {
 			  T1_I1 INT64 NOT NULL,
 			  T1_S1 STRING(MAX)
 			) PRIMARY KEY(T1_I1);
-			CREATE INDEX idx_T1_T1_S1 ON T1(T1_S1)`,
+			CREATE INDEX IDX1 ON T1(T1_S1)`,
 			`
 			CREATE TABLE T1 (
 			  T1_I1 INT64 NOT NULL,
 			  T1_S1 STRING(MAX)
 			) PRIMARY KEY(T1_I1)`,
-			`DROP INDEX idx_T1_T1_S1;`,
+			`DROP INDEX IDX1;`,
+			false,
+		},
+		"recreate index": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1);
+			CREATE INDEX IDX1 ON T1(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1);
+			CREATE INDEX IDX1 ON T1(T1_I1, T1_S1)`,
+			`
+			DROP INDEX IDX1;
+			CREATE INDEX IDX1 ON T1(T1_I1, T1_S1);`,
 			false,
 		},
 		"add search index": {
@@ -160,8 +178,8 @@ func TestDiff(t *testing.T) {
 			  T1_I1 INT64 NOT NULL,
 			  T1_S1 STRING(MAX)
 			) PRIMARY KEY(T1_I1);
-			CREATE SEARCH INDEX idx_T1_T1_S1 ON T1(T1_S1)`,
-			`CREATE SEARCH INDEX idx_T1_T1_S1 ON T1(T1_S1);`,
+			CREATE SEARCH INDEX IDX1 ON T1(T1_S1)`,
+			`CREATE SEARCH INDEX IDX1 ON T1(T1_S1);`,
 			false,
 		},
 		"drop search index": {
@@ -170,13 +188,134 @@ func TestDiff(t *testing.T) {
 			  T1_I1 INT64 NOT NULL,
 			  T1_S1 STRING(MAX)
 			) PRIMARY KEY(T1_I1);
-			CREATE SEARCH INDEX idx_T1_T1_S1 ON T1(T1_S1)`,
+			CREATE SEARCH INDEX IDX1 ON T1(T1_S1)`,
 			`
 			CREATE TABLE T1 (
 			  T1_I1 INT64 NOT NULL,
 			  T1_S1 STRING(MAX)
 			) PRIMARY KEY(T1_I1)`,
-			`DROP SEARCH INDEX idx_T1_T1_S1;`,
+			`DROP SEARCH INDEX IDX1;`,
+			false,
+		},
+		"recreate search index": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1);
+			CREATE SEARCH INDEX IDX1 ON T1(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1);
+			CREATE SEARCH INDEX IDX1 ON T1(T1_I1, T1_S1)`,
+			`
+			DROP SEARCH INDEX IDX1;
+			CREATE SEARCH INDEX IDX1 ON T1(T1_I1, T1_S1);`,
+			false,
+		},
+		"add foreign key": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX)
+			) PRIMARY KEY(T2_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T2_I1) REFERENCES T1 (T1_I1),
+			) PRIMARY KEY(T2_I1);
+			`,
+			`
+			ALTER TABLE T2 ADD CONSTRAINT FK1 FOREIGN KEY (T2_I1) REFERENCES T1(T1_I1);`,
+			false,
+		},
+		"drop foreign key": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T2_I1) REFERENCES T1 (T1_I1),
+			) PRIMARY KEY(T2_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX)
+			) PRIMARY KEY(T2_I1)`,
+			`
+			ALTER TABLE T2 DROP CONSTRAINT FK1;`,
+			false,
+		},
+		"recreate foreign key": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T2_I1) REFERENCES T1 (T1_I1),
+			) PRIMARY KEY(T2_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX),
+			) PRIMARY KEY(T2_I1)`,
+			`
+			ALTER TABLE T2 DROP CONSTRAINT FK1;`,
+			false,
+		},
+		"add check constraint": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT CHK1 CHECK (T1_I1 > 0)
+			) PRIMARY KEY(T1_I1)`,
+			`ALTER TABLE T1 ADD CONSTRAINT CHK1 CHECK (T1_I1 > 0);`,
+			false,
+		},
+		"drop check constraint": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT CHK1 CHECK (T1_I1 > 0)
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1)`,
+			`ALTER TABLE T1 DROP CONSTRAINT CHK1;`,
 			false,
 		},
 	} {
