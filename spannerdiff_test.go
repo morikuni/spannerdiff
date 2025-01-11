@@ -130,7 +130,7 @@ func TestDiff(t *testing.T) {
 			`ALTER TABLE T1 DROP COLUMN T1_S1;`,
 			false,
 		},
-		"modify column": {
+		"alter column": {
 			`
 			CREATE TABLE T1 (
 			  T1_I1 INT64 NOT NULL,
