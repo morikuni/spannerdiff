@@ -70,22 +70,11 @@ func Diff(baseSQL, targetSQL io.Reader, output io.Writer, option DiffOption) err
 }
 
 type definitions struct {
-	tables         map[tableID]*createTable
-	columns        map[columnID]*column
-	indexes        map[indexID]*createIndex
-	searchIndexes  map[searchIndexID]*createSearchIndex
-	propertyGraphs map[propertyGraphID]*createPropertyGraph
-
 	all map[identifier]definition
 }
 
 func newDefinitions(ddls []ast.DDL, errorOnUnsupported bool) (*definitions, error) {
 	d := &definitions{
-		make(map[tableID]*createTable),
-		make(map[columnID]*column),
-		make(map[indexID]*createIndex),
-		make(map[searchIndexID]*createSearchIndex),
-		make(map[propertyGraphID]*createPropertyGraph),
 		make(map[identifier]definition),
 	}
 
@@ -93,21 +82,16 @@ func newDefinitions(ddls []ast.DDL, errorOnUnsupported bool) (*definitions, erro
 		switch ddl := ddl.(type) {
 		case *ast.CreateTable:
 			table := newCreateTable(ddl)
-			d.tables[table.tableID()] = table
 			d.all[table.tableID()] = table
 			for id, col := range table.columns() {
-				d.columns[id] = newColumn(table, col)
-				d.all[id] = d.columns[id]
+				d.all[id] = newColumn(table, col)
 			}
 		case *ast.CreateIndex:
-			d.indexes[newIndexID(ddl.Name)] = newCreateIndex(ddl)
-			d.all[newIndexID(ddl.Name)] = d.indexes[newIndexID(ddl.Name)]
+			d.all[newIndexID(ddl.Name)] = newCreateIndex(ddl)
 		case *ast.CreateSearchIndex:
-			d.searchIndexes[newSearchIndexID(ddl.Name)] = newCreateSearchIndex(ddl)
-			d.all[newSearchIndexID(ddl.Name)] = d.searchIndexes[newSearchIndexID(ddl.Name)]
+			d.all[newSearchIndexID(ddl.Name)] = newCreateSearchIndex(ddl)
 		case *ast.CreatePropertyGraph:
-			d.propertyGraphs[newPropertyGraphID(ddl.Name)] = newCreatePropertyGraph(ddl)
-			d.all[newPropertyGraphID(ddl.Name)] = d.propertyGraphs[newPropertyGraphID(ddl.Name)]
+			d.all[newPropertyGraphID(ddl.Name)] = newCreatePropertyGraph(ddl)
 		default:
 			if errorOnUnsupported {
 				return nil, fmt.Errorf("unsupported DDL: %s", ddl.SQL())
@@ -281,55 +265,28 @@ func (m *migration) adds(base, target *definitions) {
 }
 
 func (m *migration) alters(base, target *definitions) {
-	for tableID, targetTable := range target.tables {
-		baseTable, ok := base.tables[tableID]
+	for tableID, targetTable := range target.all {
+		baseTable, ok := base.all[tableID]
 		if !ok {
 			continue
 		}
-		if equalNode(baseTable.node, targetTable.node) {
+		if equalNode(baseTable.astNode(), targetTable.astNode()) {
 			continue
 		}
-		m.alterTable(baseTable, targetTable)
-	}
-	for columnID, targetColumn := range target.columns {
-		baseColumn, ok := base.columns[columnID]
-		if !ok {
-			continue
+		switch targetTable := targetTable.(type) {
+		case *createTable:
+			m.alterTable(baseTable.(*createTable), targetTable)
+		case *column:
+			m.alterColumn(baseTable.(*column), targetTable)
+		case *createIndex:
+			m.alterIndex(baseTable.(*createIndex), targetTable)
+		case *createSearchIndex:
+			m.alterSearchIndex(baseTable.(*createSearchIndex), targetTable)
+		case *createPropertyGraph:
+			m.alterPropertyGraph(baseTable.(*createPropertyGraph), targetTable)
+		default:
+			panic(fmt.Sprintf("unexpected definition: %T", targetTable))
 		}
-		if equalNode(baseColumn.node, targetColumn.node) {
-			continue
-		}
-		m.alterColumn(baseColumn, targetColumn)
-	}
-	for indexID, targetIndex := range target.indexes {
-		baseIndex, ok := base.indexes[indexID]
-		if !ok {
-			continue
-		}
-		if equalNode(baseIndex.node, targetIndex.node) {
-			continue
-		}
-		m.alterIndex(baseIndex, targetIndex)
-	}
-	for searchIndexID, targetSearchIndex := range target.searchIndexes {
-		baseSearchIndex, ok := base.searchIndexes[searchIndexID]
-		if !ok {
-			continue
-		}
-		if equalNode(baseSearchIndex.node, targetSearchIndex.node) {
-			continue
-		}
-		m.alterSearchIndex(baseSearchIndex, targetSearchIndex)
-	}
-	for propertyGraphID, targetPropertyGraph := range target.propertyGraphs {
-		basePropertyGraph, ok := base.propertyGraphs[propertyGraphID]
-		if !ok {
-			continue
-		}
-		if equalNode(basePropertyGraph.node, targetPropertyGraph.node) {
-			continue
-		}
-		m.alterPropertyGraph(basePropertyGraph, targetPropertyGraph)
 	}
 }
 

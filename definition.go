@@ -8,6 +8,7 @@ import (
 
 type definition interface {
 	id() identifier
+	astNode() ast.Node
 	add() ast.DDL
 	drop() ast.DDL
 	dependsOn() []identifier
@@ -36,6 +37,10 @@ func (c *createTable) id() identifier {
 
 func (c *createTable) tableID() tableID {
 	return newTableIDFromPath(c.node.Name)
+}
+
+func (c *createTable) astNode() ast.Node {
+	return c.node
 }
 
 func (c *createTable) add() ast.DDL {
@@ -78,6 +83,10 @@ func (c *column) id() identifier {
 
 func (c *column) columnID() columnID {
 	return newColumnID(c.table.tableID(), c.node.Name)
+}
+
+func (c *column) astNode() ast.Node {
+	return c.node
 }
 
 func (c *column) add() ast.DDL {
@@ -132,6 +141,10 @@ func (c *createIndex) indexID() indexID {
 }
 func (c *createIndex) tableID() tableID {
 	return newTableIDFromPath(c.node.TableName)
+}
+
+func (c *createIndex) astNode() ast.Node {
+	return c.node
 }
 
 func (c *createIndex) add() ast.DDL {
@@ -190,6 +203,10 @@ func (c *createSearchIndex) tableID() tableID {
 	return newTableIDFromIdent(c.node.TableName)
 }
 
+func (c *createSearchIndex) astNode() ast.Node {
+	return c.node
+}
+
 func (c *createSearchIndex) add() ast.DDL {
 	return c.node
 }
@@ -235,6 +252,10 @@ func (c *createPropertyGraph) id() identifier {
 
 func (c *createPropertyGraph) propertyGraphID() propertyGraphID {
 	return newPropertyGraphID(c.node.Name)
+}
+
+func (c *createPropertyGraph) astNode() ast.Node {
+	return c.node
 }
 
 func (c *createPropertyGraph) add() ast.DDL {
@@ -332,6 +353,10 @@ func (c *createView) id() identifier {
 
 func (c *createView) viewID() viewID {
 	return newViewID(c.node.Name)
+}
+
+func (c *createView) astNode() ast.Node {
+	return c.node
 }
 
 func (c *createView) add() ast.DDL {
