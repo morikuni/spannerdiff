@@ -50,16 +50,16 @@ func (s schemaID) String() string {
 }
 
 type tableID struct {
-	schema string
-	name   string
+	schemaID schemaID
+	name     string
 }
 
 func newTableIDFromPath(path *ast.Path) tableID {
 	switch len(path.Idents) {
 	case 1:
-		return tableID{"", path.Idents[0].Name}
+		return tableID{schemaID{}, path.Idents[0].Name}
 	case 2:
-		return tableID{path.Idents[0].Name, path.Idents[1].Name}
+		return tableID{newSchemaID(path.Idents[0]), path.Idents[1].Name}
 	default:
 		panic(fmt.Sprintf("unexpected table name: %s", path.SQL()))
 	}
@@ -69,10 +69,10 @@ func newTableIDFromIdent(ident *ast.Ident) tableID {
 }
 
 func (t tableID) ID() string {
-	if t.schema == "" {
+	if t.schemaID == (schemaID{}) {
 		return fmt.Sprintf("Table(%s)", t.name)
 	}
-	return fmt.Sprintf("Table(%s.%s)", t.schema, t.name)
+	return fmt.Sprintf("Table(%s.%s)", t.schemaID.name, t.name)
 }
 
 func (t tableID) String() string {
@@ -89,7 +89,7 @@ func newColumnID(tableID tableID, ident *ast.Ident) columnID {
 }
 
 func (c columnID) ID() string {
-	return fmt.Sprintf("Column(%s:%s)", c.tableID.ID(), c.name)
+	return fmt.Sprintf("%s:Column(%s)", c.tableID.ID(), c.name)
 }
 
 func (c columnID) String() string {
@@ -97,26 +97,26 @@ func (c columnID) String() string {
 }
 
 type indexID struct {
-	schema string
-	name   string
+	schemaID schemaID
+	name     string
 }
 
 func newIndexID(path *ast.Path) indexID {
 	switch len(path.Idents) {
 	case 1:
-		return indexID{"", path.Idents[0].Name}
+		return indexID{schemaID{}, path.Idents[0].Name}
 	case 2:
-		return indexID{path.Idents[0].Name, path.Idents[1].Name}
+		return indexID{newSchemaID(path.Idents[0]), path.Idents[1].Name}
 	default:
 		panic(fmt.Sprintf("unexpected index name: %s", path.SQL()))
 	}
 }
 
 func (i indexID) ID() string {
-	if i.schema == "" {
+	if i.schemaID == (schemaID{}) {
 		return fmt.Sprintf("Index(%s)", i.name)
 	}
-	return fmt.Sprintf("Index(%s.%s)", i.schema, i.name)
+	return fmt.Sprintf("Index(%s.%s)", i.schemaID.name, i.name)
 }
 
 func (i indexID) String() string {
