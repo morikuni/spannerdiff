@@ -879,7 +879,7 @@ func newSequence(cs *ast.CreateSequence) *sequence {
 }
 
 func (s *sequence) id() identifier {
-	return newSequenceID(s.node.Name)
+	return s.sequenceID()
 }
 
 func (s *sequence) sequenceID() sequenceID {
@@ -917,6 +917,9 @@ func (s *sequence) alter(tgt definition, m *migration) {
 }
 
 func (s *sequence) dependsOn() []identifier {
+	if schemaID, ok := s.schemaID().get(); ok {
+		return []identifier{schemaID}
+	}
 	return nil
 }
 
