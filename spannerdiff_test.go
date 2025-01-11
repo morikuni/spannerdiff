@@ -655,6 +655,29 @@ func TestDiff(t *testing.T) {
 			ALTER CHANGE STREAM S1 SET OPTIONS ( retention_period = '72h' );`,
 			false,
 		},
+		"add sequence": {
+			``,
+			`
+			CREATE SEQUENCE S1 OPTIONS (sequence_kind = 'bit_reversed_positive');`,
+			`CREATE SEQUENCE S1 OPTIONS (sequence_kind = 'bit_reversed_positive');`,
+			false,
+		},
+		"drop sequence": {
+			`
+			CREATE SEQUENCE S1 OPTIONS (sequence_kind = 'bit_reversed_positive');`,
+			``,
+			`DROP SEQUENCE S1;`,
+			false,
+		},
+		"alter sequence": {
+			`
+			CREATE SEQUENCE S1 OPTIONS (skip_range_min = 1000, skip_range_max = 2000);`,
+			`
+			CREATE SEQUENCE S1 OPTIONS (start_counter_with = 10);`,
+			`
+			ALTER SEQUENCE S1 SET OPTIONS (start_counter_with = 10);`,
+			false,
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			var buf bytes.Buffer
