@@ -20,6 +20,7 @@ var _ = []identifier{
 	propertyGraphID{},
 	viewID{},
 	changeStreamID{},
+	sequenceID{},
 }
 
 var _ = []struct{}{
@@ -31,6 +32,7 @@ var _ = []struct{}{
 	isComparable(propertyGraphID{}),
 	isComparable(viewID{}),
 	isComparable(changeStreamID{}),
+	isComparable(sequenceID{}),
 }
 
 func isComparable[C comparable](_ C) struct{} { return struct{}{} }
@@ -228,5 +230,32 @@ func (i changeStreamID) ID() string {
 }
 
 func (i changeStreamID) String() string {
+	return i.ID()
+}
+
+type sequenceID struct {
+	schemaID optional[schemaID]
+	name     string
+}
+
+func newSequenceID(ident *ast.Path) sequenceID {
+	switch len(ident.Idents) {
+	case 1:
+		return sequenceID{none[schemaID](), ident.Idents[0].Name}
+	case 2:
+		return sequenceID{some(newSchemaID(ident.Idents[0])), ident.Idents[1].Name}
+	default:
+		panic(fmt.Sprintf("unexpected sequence name: %s", ident.SQL()))
+	}
+}
+
+func (i sequenceID) ID() string {
+	if schemaID, ok := i.schemaID.get(); ok {
+		return fmt.Sprintf("Sequence(%s.%s)", schemaID.name, i.name)
+	}
+	return fmt.Sprintf("Sequence(%s)", i.name)
+}
+
+func (i sequenceID) String() string {
 	return i.ID()
 }

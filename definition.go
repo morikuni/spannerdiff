@@ -23,6 +23,8 @@ var _ = []definition{
 	&searchIndex{},
 	&propertyGraph{},
 	&view{},
+	&changeStream{},
+	&sequence{},
 }
 
 type definitions struct {
@@ -54,6 +56,8 @@ func newDefinitions(ddls []ast.DDL, errorOnUnsupported bool) (*definitions, erro
 			d.all[newViewID(ddl.Name)] = newView(ddl)
 		case *ast.CreateChangeStream:
 			d.all[newChangeStreamID(ddl.Name)] = newChangeStream(ddl)
+		case *ast.CreateSequence:
+			d.all[newSequenceID(ddl.Name)] = newSequence(ddl)
 		default:
 			if errorOnUnsupported {
 				return nil, fmt.Errorf("unsupported DDL: %s", ddl.SQL())
@@ -865,3 +869,55 @@ func (cs *changeStream) onDependencyChange(me, dependency migrationState, m *mig
 		panic(fmt.Sprintf("unexpected dependOn type on property graph: %T", dep))
 	}
 }
+
+type sequence struct {
+	node *ast.CreateSequence
+}
+
+func newSequence(cs *ast.CreateSequence) *sequence {
+	return &sequence{cs}
+}
+
+func (s *sequence) id() identifier {
+	return newSequenceID(s.node.Name)
+}
+
+func (s *sequence) sequenceID() sequenceID {
+	return newSequenceID(s.node.Name)
+}
+
+func (s *sequence) schemaID() optional[schemaID] {
+	return s.sequenceID().schemaID
+}
+
+func (s *sequence) astNode() ast.Node {
+	return s.node
+}
+
+func (s *sequence) add() ast.DDL {
+	return s.node
+}
+
+func (s *sequence) drop() ast.DDL {
+	return &ast.DropSequence{
+		Name: s.node.Name,
+	}
+}
+
+func (s *sequence) alter(tgt definition, m *migration) {
+	base := s
+	target := tgt.(*sequence)
+
+	if !equalNode(base.node.Options, target.node.Options) {
+		m.updateStateIfUndefined(newAlterState(base, target, &ast.AlterSequence{Name: target.node.Name, Options: target.node.Options}))
+		return
+	}
+
+	panic(fmt.Sprintf("unsupported sequence alternation on: %s", target.node.SQL()))
+}
+
+func (s *sequence) dependsOn() []identifier {
+	return nil
+}
+
+func (s *sequence) onDependencyChange(me, dependency migrationState, m *migration) {}
