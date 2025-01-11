@@ -19,6 +19,7 @@ var _ = []identifier{
 	searchIndexID{},
 	propertyGraphID{},
 	viewID{},
+	changeStreamID{},
 }
 
 var _ = []struct{}{
@@ -29,6 +30,7 @@ var _ = []struct{}{
 	isComparable(searchIndexID{}),
 	isComparable(propertyGraphID{}),
 	isComparable(viewID{}),
+	isComparable(changeStreamID{}),
 }
 
 func isComparable[C comparable](_ C) struct{} { return struct{}{} }
@@ -210,5 +212,21 @@ func (i viewID) ID() string {
 }
 
 func (i viewID) String() string {
+	return i.ID()
+}
+
+type changeStreamID struct {
+	name string
+}
+
+func newChangeStreamID(ident *ast.Ident) changeStreamID {
+	return changeStreamID{ident.Name}
+}
+
+func (i changeStreamID) ID() string {
+	return fmt.Sprintf("ChangeStream(%s)", i.name)
+}
+
+func (i changeStreamID) String() string {
 	return i.ID()
 }
