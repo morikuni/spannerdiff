@@ -21,6 +21,42 @@ var _ = []definition{
 	&index{},
 	&searchIndex{},
 	&propertyGraph{},
+	&view{},
+}
+
+type definitions struct {
+	all map[identifier]definition
+}
+
+func newDefinitions(ddls []ast.DDL, errorOnUnsupported bool) (*definitions, error) {
+	d := &definitions{
+		make(map[identifier]definition),
+	}
+
+	for _, ddl := range ddls {
+		switch ddl := ddl.(type) {
+		case *ast.CreateTable:
+			table := newTable(ddl)
+			d.all[table.tableID()] = table
+			for id, col := range table.columns() {
+				d.all[id] = newColumn(table, col)
+			}
+		case *ast.CreateIndex:
+			d.all[newIndexID(ddl.Name)] = newIndex(ddl)
+		case *ast.CreateSearchIndex:
+			d.all[newSearchIndexID(ddl.Name)] = newSearchIndex(ddl)
+		case *ast.CreatePropertyGraph:
+			d.all[newPropertyGraphID(ddl.Name)] = newPropertyGraph(ddl)
+		case *ast.CreateView:
+			d.all[newViewID(ddl.Name)] = newView(ddl)
+		default:
+			if errorOnUnsupported {
+				return nil, fmt.Errorf("unsupported DDL: %s", ddl.SQL())
+			}
+		}
+	}
+
+	return d, nil
 }
 
 type table struct {
@@ -339,40 +375,41 @@ func (c *propertyGraph) onDependencyChange(me, dependency migrationState, m *mig
 	}
 }
 
-type createView struct {
+type view struct {
 	node *ast.CreateView
 }
 
-func newView(cv *ast.CreateView) *createView {
-	return &createView{cv}
+func newView(cv *ast.CreateView) *view {
+	return &view{cv}
 }
 
-func (c *createView) id() identifier {
+func (c *view) id() identifier {
 	return newViewID(c.node.Name)
 }
 
-func (c *createView) viewID() viewID {
+func (c *view) viewID() viewID {
 	return newViewID(c.node.Name)
 }
 
-func (c *createView) astNode() ast.Node {
+func (c *view) astNode() ast.Node {
 	return c.node
 }
 
-func (c *createView) add() ast.DDL {
+func (c *view) add() ast.DDL {
 	return c.node
 }
 
-func (c *createView) drop() ast.DDL {
+func (c *view) drop() ast.DDL {
 	return &ast.DropView{
 		Name: c.node.Name,
 	}
 }
 
-func (c *createView) dependsOn() []identifier {
+func (c *view) dependsOn() []identifier {
+	// TODO: process query to find dependencies
 	return nil
 }
 
-func (c *createView) onDependencyChange(me, dependency migrationState, m *migration) {
+func (c *view) onDependencyChange(me, dependency migrationState, m *migration) {
 	return
 }

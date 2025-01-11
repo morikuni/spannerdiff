@@ -59,6 +59,33 @@ func TestDiff(t *testing.T) {
 			) PRIMARY KEY(T1_I1, T1_S1);`,
 			false,
 		},
+		"recreate dependencies by recreate table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			) PRIMARY KEY (T1_I1);
+			CREATE INDEX IDX1 ON T1(T1_I1);
+			CREATE SEARCH INDEX IDX2 ON T1(T1_S1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			) PRIMARY KEY (T1_S1);
+			CREATE INDEX IDX1 ON T1(T1_I1);
+			CREATE SEARCH INDEX IDX2 ON T1(T1_S1);`,
+			`
+			DROP SEARCH INDEX IDX2;
+			DROP INDEX IDX1;
+			DROP TABLE T1;
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			) PRIMARY KEY (T1_S1);
+			CREATE INDEX IDX1 ON T1(T1_I1);
+			CREATE SEARCH INDEX IDX2 ON T1(T1_S1);`,
+			false,
+		},
 		"add column": {
 			`
 			CREATE TABLE T1 (
@@ -477,33 +504,6 @@ func TestDiff(t *testing.T) {
 			ALTER TABLE T1 DROP SYNONYM T2;`,
 			false,
 		},
-		"recreate index by recreate table": {
-			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX),
-			) PRIMARY KEY (T1_I1);
-			CREATE INDEX IDX1 ON T1(T1_I1);
-			CREATE SEARCH INDEX IDX2 ON T1(T1_S1);`,
-			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX),
-			) PRIMARY KEY (T1_S1);
-			CREATE INDEX IDX1 ON T1(T1_I1);
-			CREATE SEARCH INDEX IDX2 ON T1(T1_S1);`,
-			`
-			DROP SEARCH INDEX IDX2;
-			DROP INDEX IDX1;
-			DROP TABLE T1;
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX),
-			) PRIMARY KEY (T1_S1);
-			CREATE INDEX IDX1 ON T1(T1_I1);
-			CREATE SEARCH INDEX IDX2 ON T1(T1_S1);`,
-			false,
-		},
 		"add property graph": {
 			`
 			CREATE TABLE T1 (
@@ -564,6 +564,47 @@ func TestDiff(t *testing.T) {
 			CREATE PROPERTY GRAPH G1 NODE TABLES (T1);`,
 			`
 			CREATE OR REPLACE PROPERTY GRAPH G1 NODE TABLES (T1);`,
+			false,
+		},
+		"create view": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY (T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY (T1_I1);
+			CREATE VIEW V1 SQL SECURITY DEFINER AS SELECT * FROM T1;`,
+			`CREATE VIEW V1 SQL SECURITY DEFINER AS SELECT * FROM T1;`,
+			false,
+		},
+		"drop view": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY (T1_I1);
+			CREATE VIEW V1 SQL SECURITY DEFINER AS SELECT * FROM T1;`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY (T1_I1);`,
+			`DROP VIEW V1;`,
+			false,
+		},
+		"recreate view": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY (T1_I1);
+			CREATE VIEW V1 SQL SECURITY DEFINER AS SELECT * FROM T1;`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY (T1_I1);
+			CREATE VIEW V1 SQL SECURITY DEFINER AS SELECT * FROM T1 WHERE T1_I1 > 0;`,
+			`
+			CREATE OR REPLACE VIEW V1 SQL SECURITY DEFINER AS SELECT * FROM T1 WHERE T1_I1 > 0;`,
 			false,
 		},
 	} {
