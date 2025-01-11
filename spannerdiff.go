@@ -198,35 +198,10 @@ func newMigration(base, target *definitions) *migration {
 		make(map[identifier][]definition),
 	}
 
-	for _, base := range base.tables {
+	for _, base := range base.all {
 		m.initializeState(base, target.all[base.id()])
 	}
-	for _, base := range base.columns {
-		m.initializeState(base, target.all[base.id()])
-	}
-	for _, base := range base.indexes {
-		m.initializeState(base, target.all[base.id()])
-	}
-	for _, base := range base.searchIndexes {
-		m.initializeState(base, target.all[base.id()])
-	}
-	for _, base := range base.propertyGraphs {
-		m.initializeState(base, target.all[base.id()])
-	}
-
-	for _, target := range target.tables {
-		m.initializeState(base.all[target.id()], target)
-	}
-	for _, target := range target.columns {
-		m.initializeState(base.all[target.id()], target)
-	}
-	for _, target := range target.indexes {
-		m.initializeState(base.all[target.id()], target)
-	}
-	for _, target := range target.searchIndexes {
-		m.initializeState(base.all[target.id()], target)
-	}
-	for _, target := range target.propertyGraphs {
+	for _, target := range target.all {
 		m.initializeState(base.all[target.id()], target)
 	}
 
@@ -246,10 +221,17 @@ func (m *migration) initializeState(base, target definition) {
 	}
 }
 
+func (m *migration) updateStateIfUndefined(s migrationState) {
+	if m.kind(s.id) != migrationKindUndefined {
+		return
+	}
+	m.updateState(s)
+}
+
 func (m *migration) updateState(s migrationState) {
 	m.states[s.id] = s
 	for _, receiver := range m.dependOn[s.id] {
-		m.updateState(receiver.onDependencyChange(m.states[receiver.id()], s))
+		receiver.onDependencyChange(m.states[receiver.id()], s, m)
 	}
 }
 
@@ -283,61 +265,17 @@ func diffDefinitions(base, target *definitions) ([]ast.DDL, error) {
 }
 
 func (m *migration) drops(baseDefs, targetDefs *definitions) {
-	for indexID, base := range baseDefs.indexes {
-		if _, ok := targetDefs.indexes[indexID]; !ok {
-			m.updateState(newMigrationState(indexID, base, nil, migrationKindDrop))
-		}
-	}
-	for searchIndexID, base := range baseDefs.searchIndexes {
-		if _, ok := targetDefs.searchIndexes[searchIndexID]; !ok {
-			m.updateState(newMigrationState(searchIndexID, base, nil, migrationKindDrop))
-		}
-	}
-	for tableID, base := range baseDefs.tables {
-		if _, ok := targetDefs.tables[tableID]; !ok {
-			m.updateState(newMigrationState(tableID, base, nil, migrationKindDrop))
-		}
-	}
-	for columnID, base := range baseDefs.columns {
-		if _, ok := targetDefs.columns[columnID]; !ok {
-			if m.kind(columnID) == migrationKindUndefined {
-				m.updateState(newMigrationState(columnID, base, nil, migrationKindDrop))
-			}
-		}
-	}
-	for propertyGraphID, base := range baseDefs.propertyGraphs {
-		if _, ok := targetDefs.propertyGraphs[propertyGraphID]; !ok {
-			m.updateState(newMigrationState(propertyGraphID, base, nil, migrationKindDrop))
+	for id, base := range baseDefs.all {
+		if target, ok := targetDefs.all[id]; !ok {
+			m.updateStateIfUndefined(newMigrationState(id, base, target, migrationKindDrop))
 		}
 	}
 }
 
 func (m *migration) adds(base, target *definitions) {
-	for tableID, target := range target.tables {
-		if _, ok := base.tables[tableID]; !ok {
-			m.updateState(newMigrationState(tableID, nil, target, migrationKindAdd))
-		}
-	}
-	for columnID, target := range target.columns {
-		if _, ok := base.columns[columnID]; !ok {
-			if m.kind(columnID) == migrationKindUndefined {
-				m.updateState(newMigrationState(columnID, nil, target, migrationKindAdd))
-			}
-		}
-	}
-	for indexID, target := range target.indexes {
-		if _, ok := base.indexes[indexID]; !ok {
-			m.updateState(newMigrationState(indexID, nil, target, migrationKindAdd))
-		}
-	}
-	for searchIndexID, target := range target.searchIndexes {
-		if _, ok := base.searchIndexes[searchIndexID]; !ok {
-			m.updateState(newMigrationState(searchIndexID, nil, target, migrationKindAdd))
-		}
-	}
-	for propertyGraphID, target := range target.propertyGraphs {
-		if _, ok := base.propertyGraphs[propertyGraphID]; !ok {
-			m.updateState(newMigrationState(propertyGraphID, nil, target, migrationKindAdd))
+	for id, target := range target.all {
+		if _, ok := base.all[id]; !ok {
+			m.updateStateIfUndefined(newMigrationState(id, nil, target, migrationKindAdd))
 		}
 	}
 }
@@ -404,7 +342,7 @@ func (m *migration) alterTable(base, target *createTable) {
 	// - Add, replace or remove a row deletion policy from an existing table.
 
 	if !equalNodes(base.node.PrimaryKeys, target.node.PrimaryKeys) {
-		m.updateState(newMigrationState(target.tableID(), base, target, migrationKindDropAndAdd))
+		m.updateStateIfUndefined(newMigrationState(target.tableID(), base, target, migrationKindDropAndAdd))
 		return
 	}
 
@@ -497,11 +435,11 @@ func (m *migration) alterTable(base, target *createTable) {
 
 	if len(ddls) == 0 {
 		// If there are no DDLs, the table was changed but could not alter. Therefore, drop and create.
-		m.updateState(newMigrationState(target.tableID(), base, target, migrationKindDropAndAdd))
+		m.updateStateIfUndefined(newMigrationState(target.tableID(), base, target, migrationKindDropAndAdd))
 		return
 	}
 
-	m.updateState(newMigrationState(target.tableID(), base, target, migrationKindAlter, ddls...))
+	m.updateStateIfUndefined(newMigrationState(target.tableID(), base, target, migrationKindAlter, ddls...))
 }
 
 func (m *migration) alterColumn(base, target *column) {
@@ -553,7 +491,7 @@ func (m *migration) alterColumn(base, target *column) {
 				ddls = append(ddls, &ast.AlterTable{Name: target.table.node.Name, TableAlteration: &ast.AlterColumn{Name: target.node.Name, Alteration: &ast.AlterColumnSetDefault{DefaultExpr: defaultExpr}}})
 			}
 		}
-		m.updateState(newMigrationState(target.columnID(), base, target, migrationKindAlter, ddls...))
+		m.updateStateIfUndefined(newMigrationState(target.columnID(), base, target, migrationKindAlter, ddls...))
 	} else {
 		switch tupleOf(columnTypeOf(base.node.Type), columnTypeOf(target.node.Type)) {
 		case tupleOf(scalar{ast.StringTypeName}, scalar{ast.BytesTypeName}),
@@ -566,13 +504,13 @@ func (m *migration) alterColumn(base, target *column) {
 			tupleOf(array{scalar{ast.BytesTypeName}}, array{scalar{ast.BytesTypeName}}),
 			tupleOf(array{protoOrEnum{}}, array{protoOrEnum{}}):
 			if target.node.DefaultSemantics == nil {
-				m.updateState(newMigrationState(target.columnID(), base, target, migrationKindAlter, &ast.AlterTable{Name: target.table.node.Name, TableAlteration: &ast.AlterColumn{Name: target.node.Name, Alteration: &ast.AlterColumnType{
+				m.updateStateIfUndefined(newMigrationState(target.columnID(), base, target, migrationKindAlter, &ast.AlterTable{Name: target.table.node.Name, TableAlteration: &ast.AlterColumn{Name: target.node.Name, Alteration: &ast.AlterColumnType{
 					Type:    target.node.Type,
 					NotNull: target.node.NotNull,
 				}}}))
 				return
 			} else if defaultExpr, ok := target.node.DefaultSemantics.(*ast.ColumnDefaultExpr); ok {
-				m.updateState(newMigrationState(target.columnID(), base, target, migrationKindAlter, &ast.AlterTable{Name: target.table.node.Name, TableAlteration: &ast.AlterColumn{Name: target.node.Name, Alteration: &ast.AlterColumnType{
+				m.updateStateIfUndefined(newMigrationState(target.columnID(), base, target, migrationKindAlter, &ast.AlterTable{Name: target.table.node.Name, TableAlteration: &ast.AlterColumn{Name: target.node.Name, Alteration: &ast.AlterColumnType{
 					Type:        target.node.Type,
 					NotNull:     target.node.NotNull,
 					DefaultExpr: defaultExpr,
@@ -580,10 +518,10 @@ func (m *migration) alterColumn(base, target *column) {
 				return
 			}
 		default:
-			m.updateState(newMigrationState(target.columnID(), base, target, migrationKindDropAndAdd))
+			m.updateStateIfUndefined(newMigrationState(target.columnID(), base, target, migrationKindDropAndAdd))
 			return
 		}
-		m.updateState(newMigrationState(target.columnID(), base, target, migrationKindDropAndAdd))
+		m.updateStateIfUndefined(newMigrationState(target.columnID(), base, target, migrationKindDropAndAdd))
 	}
 }
 
@@ -634,10 +572,10 @@ func (m *migration) alterIndex(base, target *createIndex) {
 		for _, col := range dropped {
 			ddls = append(ddls, &ast.AlterIndex{Name: target.node.Name, IndexAlteration: &ast.DropStoredColumn{Name: col}})
 		}
-		m.updateState(newMigrationState(target.indexID(), base, target, migrationKindAlter, ddls...))
+		m.updateStateIfUndefined(newMigrationState(target.indexID(), base, target, migrationKindAlter, ddls...))
 		return
 	}
-	m.updateState(newMigrationState(target.indexID(), base, target, migrationKindDropAndAdd))
+	m.updateStateIfUndefined(newMigrationState(target.indexID(), base, target, migrationKindDropAndAdd))
 }
 
 func (m *migration) alterSearchIndex(base, target *createSearchIndex) {
@@ -687,16 +625,16 @@ func (m *migration) alterSearchIndex(base, target *createSearchIndex) {
 		for _, col := range dropped {
 			ddls = append(ddls, &ast.AlterSearchIndex{Name: target.node.Name, IndexAlteration: &ast.DropStoredColumn{Name: col}})
 		}
-		m.updateState(newMigrationState(target.searchIndexID(), base, target, migrationKindAlter, ddls...))
+		m.updateStateIfUndefined(newMigrationState(target.searchIndexID(), base, target, migrationKindAlter, ddls...))
 		return
 	}
-	m.updateState(newMigrationState(target.searchIndexID(), base, target, migrationKindDropAndAdd))
+	m.updateStateIfUndefined(newMigrationState(target.searchIndexID(), base, target, migrationKindDropAndAdd))
 }
 
 func (m *migration) alterPropertyGraph(base, target *createPropertyGraph) {
 	targetCopy := *target.node
 	targetCopy.OrReplace = true
-	m.updateState(newMigrationState(target.propertyGraphID(), base, target, migrationKindAlter, &targetCopy))
+	m.updateStateIfUndefined(newMigrationState(target.propertyGraphID(), base, target, migrationKindAlter, &targetCopy))
 }
 
 type operation struct {
