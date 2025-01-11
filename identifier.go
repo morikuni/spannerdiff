@@ -12,6 +12,7 @@ type identifier interface {
 }
 
 var _ = []identifier{
+	schemaID{},
 	tableID{},
 	columnID{},
 	indexID{},
@@ -21,6 +22,7 @@ var _ = []identifier{
 }
 
 var _ = []struct{}{
+	isComparable(schemaID{}),
 	isComparable(tableID{}),
 	isComparable(columnID{}),
 	isComparable(indexID{}),
@@ -30,6 +32,22 @@ var _ = []struct{}{
 }
 
 func isComparable[C comparable](_ C) struct{} { return struct{}{} }
+
+type schemaID struct {
+	name string
+}
+
+func newSchemaID(ident *ast.Ident) schemaID {
+	return schemaID{ident.Name}
+}
+
+func (s schemaID) ID() string {
+	return fmt.Sprintf("Schema(%s)", s.name)
+}
+
+func (s schemaID) String() string {
+	return s.ID()
+}
 
 type tableID struct {
 	schema string
