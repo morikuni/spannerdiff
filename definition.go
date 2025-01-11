@@ -52,6 +52,8 @@ func newDefinitions(ddls []ast.DDL, errorOnUnsupported bool) (*definitions, erro
 			d.all[newPropertyGraphID(ddl.Name)] = newPropertyGraph(ddl)
 		case *ast.CreateView:
 			d.all[newViewID(ddl.Name)] = newView(ddl)
+		case *ast.CreateChangeStream:
+			d.all[newChangeStreamID(ddl.Name)] = newChangeStream(ddl)
 		default:
 			if errorOnUnsupported {
 				return nil, fmt.Errorf("unsupported DDL: %s", ddl.SQL())
@@ -775,3 +777,91 @@ func (v *view) dependsOn() []identifier {
 }
 
 func (v *view) onDependencyChange(me, dependency migrationState, m *migration) {}
+
+type changeStream struct {
+	node *ast.CreateChangeStream
+}
+
+func newChangeStream(ccs *ast.CreateChangeStream) *changeStream {
+	return &changeStream{ccs}
+}
+
+func (cs *changeStream) id() identifier {
+	return newChangeStreamID(cs.node.Name)
+}
+
+func (cs *changeStream) astNode() ast.Node {
+	return cs.node
+}
+
+func (cs *changeStream) add() ast.DDL {
+	return cs.node
+}
+
+func (cs *changeStream) drop() ast.DDL {
+	return &ast.DropChangeStream{
+		Name: cs.node.Name,
+	}
+}
+
+func (cs *changeStream) alter(tgt definition, m *migration) {
+	base := cs
+	target := tgt.(*changeStream)
+
+	var ddls []ast.DDL
+	if !equalNode(base.node.For, target.node.For) {
+		if target.node.For == nil {
+			ddls = append(ddls, &ast.AlterChangeStream{Name: base.node.Name, ChangeStreamAlteration: &ast.ChangeStreamDropForAll{}})
+		} else {
+			ddls = append(ddls, &ast.AlterChangeStream{Name: target.node.Name, ChangeStreamAlteration: &ast.ChangeStreamSetFor{For: target.node.For}})
+		}
+	}
+	if !equalNode(base.node.Options, target.node.Options) {
+		ddls = append(ddls, &ast.AlterChangeStream{Name: target.node.Name, ChangeStreamAlteration: &ast.ChangeStreamSetOptions{Options: target.node.Options}})
+	}
+	if len(ddls) == 0 {
+		return
+	}
+	m.updateStateIfUndefined(newAlterState(base, target, ddls...))
+}
+
+func (cs *changeStream) dependsOn() []identifier {
+	if cs.node.For == nil {
+		return nil
+	}
+	switch f := cs.node.For.(type) {
+	case *ast.ChangeStreamForAll:
+		return nil
+	case *ast.ChangeStreamForTables:
+		var ids []identifier
+		for _, table := range f.Tables {
+			ids = append(ids, newTableIDFromIdent(table.TableName))
+			for _, col := range table.Columns {
+				ids = append(ids, newColumnID(newTableIDFromIdent(table.TableName), col))
+			}
+		}
+		return ids
+	default:
+		panic(fmt.Sprintf("unexpected change stream for type: %T", cs.node.For))
+	}
+}
+
+func (cs *changeStream) onDependencyChange(me, dependency migrationState, m *migration) {
+	switch dep := dependency.definition().(type) {
+	case *column, *table:
+		switch dependency.kind {
+		case migrationKindDropAndAdd:
+			if _, ok := cs.node.For.(*ast.ChangeStreamForAll); ok {
+				return
+			}
+
+			// Ideally, we should remove the only recreated columns/tables from the change stream's FOR, then add them again after they are recreated.
+			m.updateState(me.updateKind(migrationKindAlter,
+				newOperation(me.definition(), operationKindDrop, &ast.AlterChangeStream{Name: cs.node.Name, ChangeStreamAlteration: &ast.ChangeStreamDropForAll{}}),
+				newOperation(me.definition(), operationKindAdd, &ast.AlterChangeStream{Name: cs.node.Name, ChangeStreamAlteration: &ast.ChangeStreamSetFor{For: cs.node.For}}),
+			))
+		}
+	default:
+		panic(fmt.Sprintf("unexpected dependOn type on property graph: %T", dep))
+	}
+}
