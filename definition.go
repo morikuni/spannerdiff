@@ -16,51 +16,51 @@ type definition interface {
 }
 
 var _ = []definition{
-	&createTable{},
+	&table{},
 	&column{},
-	&createIndex{},
-	&createSearchIndex{},
-	&createPropertyGraph{},
+	&index{},
+	&searchIndex{},
+	&propertyGraph{},
 }
 
-type createTable struct {
+type table struct {
 	node *ast.CreateTable
 }
 
-func newCreateTable(ct *ast.CreateTable) *createTable {
-	return &createTable{ct}
+func newTable(ct *ast.CreateTable) *table {
+	return &table{ct}
 }
 
-func (c *createTable) id() identifier {
+func (c *table) id() identifier {
 	return c.tableID()
 }
 
-func (c *createTable) tableID() tableID {
+func (c *table) tableID() tableID {
 	return newTableIDFromPath(c.node.Name)
 }
 
-func (c *createTable) astNode() ast.Node {
+func (c *table) astNode() ast.Node {
 	return c.node
 }
 
-func (c *createTable) add() ast.DDL {
+func (c *table) add() ast.DDL {
 	return c.node
 }
 
-func (c *createTable) drop() ast.DDL {
+func (c *table) drop() ast.DDL {
 	return &ast.DropTable{
 		Name: c.node.Name,
 	}
 }
 
-func (c *createTable) dependsOn() []identifier {
+func (c *table) dependsOn() []identifier {
 	return nil
 }
 
-func (c *createTable) onDependencyChange(me, dependency migrationState, m *migration) {
+func (c *table) onDependencyChange(me, dependency migrationState, m *migration) {
 }
 
-func (c *createTable) columns() map[columnID]*ast.ColumnDef {
+func (c *table) columns() map[columnID]*ast.ColumnDef {
 	m := make(map[columnID]*ast.ColumnDef)
 	for _, col := range c.node.Columns {
 		m[newColumnID(newTableIDFromPath(c.node.Name), col.Name)] = col
@@ -70,10 +70,10 @@ func (c *createTable) columns() map[columnID]*ast.ColumnDef {
 
 type column struct {
 	node  *ast.ColumnDef
-	table *createTable
+	table *table
 }
 
-func newColumn(table *createTable, col *ast.ColumnDef) *column {
+func newColumn(table *table, col *ast.ColumnDef) *column {
 	return &column{col, table}
 }
 
@@ -113,7 +113,7 @@ func (c *column) dependsOn() []identifier {
 
 func (c *column) onDependencyChange(me, dependency migrationState, m *migration) {
 	switch dep := dependency.definition().(type) {
-	case *createTable:
+	case *table:
 		switch dependency.kind {
 		case migrationKindAdd, migrationKindDropAndAdd, migrationKindDrop:
 			// If the table is being added or dropped, the column is also being added or dropped.
@@ -124,40 +124,40 @@ func (c *column) onDependencyChange(me, dependency migrationState, m *migration)
 	}
 }
 
-type createIndex struct {
+type index struct {
 	node *ast.CreateIndex
 }
 
-func newCreateIndex(ci *ast.CreateIndex) *createIndex {
-	return &createIndex{ci}
+func newIndex(ci *ast.CreateIndex) *index {
+	return &index{ci}
 }
 
-func (c *createIndex) id() identifier {
+func (c *index) id() identifier {
 	return c.indexID()
 }
 
-func (c *createIndex) indexID() indexID {
+func (c *index) indexID() indexID {
 	return newIndexID(c.node.Name)
 }
-func (c *createIndex) tableID() tableID {
+func (c *index) tableID() tableID {
 	return newTableIDFromPath(c.node.TableName)
 }
 
-func (c *createIndex) astNode() ast.Node {
+func (c *index) astNode() ast.Node {
 	return c.node
 }
 
-func (c *createIndex) add() ast.DDL {
+func (c *index) add() ast.DDL {
 	return c.node
 }
 
-func (c *createIndex) drop() ast.DDL {
+func (c *index) drop() ast.DDL {
 	return &ast.DropIndex{
 		Name: c.node.Name,
 	}
 }
 
-func (c *createIndex) dependsOn() []identifier {
+func (c *index) dependsOn() []identifier {
 	var ids []identifier
 	for _, col := range c.node.Keys {
 		ids = append(ids, newColumnID(newTableIDFromPath(c.node.TableName), col.Name))
@@ -171,9 +171,9 @@ func (c *createIndex) dependsOn() []identifier {
 	return ids
 }
 
-func (c *createIndex) onDependencyChange(me, dependency migrationState, m *migration) {
+func (c *index) onDependencyChange(me, dependency migrationState, m *migration) {
 	switch dep := dependency.definition().(type) {
-	case *column, *createTable:
+	case *column, *table:
 		switch dependency.kind {
 		case migrationKindDropAndAdd:
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
@@ -183,41 +183,41 @@ func (c *createIndex) onDependencyChange(me, dependency migrationState, m *migra
 	}
 }
 
-type createSearchIndex struct {
+type searchIndex struct {
 	node *ast.CreateSearchIndex
 }
 
-func newCreateSearchIndex(csi *ast.CreateSearchIndex) *createSearchIndex {
-	return &createSearchIndex{csi}
+func newSearchIndex(csi *ast.CreateSearchIndex) *searchIndex {
+	return &searchIndex{csi}
 }
 
-func (c *createSearchIndex) id() identifier {
+func (c *searchIndex) id() identifier {
 	return c.searchIndexID()
 }
 
-func (c *createSearchIndex) searchIndexID() searchIndexID {
+func (c *searchIndex) searchIndexID() searchIndexID {
 	return newSearchIndexID(c.node.Name)
 }
 
-func (c *createSearchIndex) tableID() tableID {
+func (c *searchIndex) tableID() tableID {
 	return newTableIDFromIdent(c.node.TableName)
 }
 
-func (c *createSearchIndex) astNode() ast.Node {
+func (c *searchIndex) astNode() ast.Node {
 	return c.node
 }
 
-func (c *createSearchIndex) add() ast.DDL {
+func (c *searchIndex) add() ast.DDL {
 	return c.node
 }
 
-func (c *createSearchIndex) drop() ast.DDL {
+func (c *searchIndex) drop() ast.DDL {
 	return &ast.DropSearchIndex{
 		Name: c.node.Name,
 	}
 }
 
-func (c *createSearchIndex) dependsOn() []identifier {
+func (c *searchIndex) dependsOn() []identifier {
 	var ids []identifier
 	for _, col := range c.node.TokenListPart {
 		ids = append(ids, newColumnID(newTableIDFromIdent(c.node.TableName), col))
@@ -226,9 +226,9 @@ func (c *createSearchIndex) dependsOn() []identifier {
 	return ids
 }
 
-func (c *createSearchIndex) onDependencyChange(me, dependency migrationState, m *migration) {
+func (c *searchIndex) onDependencyChange(me, dependency migrationState, m *migration) {
 	switch dep := dependency.definition().(type) {
-	case *column, *createTable:
+	case *column, *table:
 		switch dependency.kind {
 		case migrationKindDropAndAdd:
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
@@ -238,37 +238,37 @@ func (c *createSearchIndex) onDependencyChange(me, dependency migrationState, m 
 	}
 }
 
-type createPropertyGraph struct {
+type propertyGraph struct {
 	node *ast.CreatePropertyGraph
 }
 
-func newCreatePropertyGraph(cpg *ast.CreatePropertyGraph) *createPropertyGraph {
-	return &createPropertyGraph{cpg}
+func newPropertyGraph(cpg *ast.CreatePropertyGraph) *propertyGraph {
+	return &propertyGraph{cpg}
 }
 
-func (c *createPropertyGraph) id() identifier {
+func (c *propertyGraph) id() identifier {
 	return newPropertyGraphID(c.node.Name)
 }
 
-func (c *createPropertyGraph) propertyGraphID() propertyGraphID {
+func (c *propertyGraph) propertyGraphID() propertyGraphID {
 	return newPropertyGraphID(c.node.Name)
 }
 
-func (c *createPropertyGraph) astNode() ast.Node {
+func (c *propertyGraph) astNode() ast.Node {
 	return c.node
 }
 
-func (c *createPropertyGraph) add() ast.DDL {
+func (c *propertyGraph) add() ast.DDL {
 	return c.node
 }
 
-func (c *createPropertyGraph) drop() ast.DDL {
+func (c *propertyGraph) drop() ast.DDL {
 	return &ast.DropPropertyGraph{
 		Name: c.node.Name,
 	}
 }
 
-func (c *createPropertyGraph) dependsOn() []identifier {
+func (c *propertyGraph) dependsOn() []identifier {
 	var ids []identifier
 	for _, elem := range c.node.Content.NodeTables.Tables.Elements {
 		tableID := newTableIDFromIdent(elem.Name)
@@ -327,9 +327,9 @@ func (c *createPropertyGraph) dependsOn() []identifier {
 	return ids
 }
 
-func (c *createPropertyGraph) onDependencyChange(me, dependency migrationState, m *migration) {
+func (c *propertyGraph) onDependencyChange(me, dependency migrationState, m *migration) {
 	switch dep := dependency.definition().(type) {
-	case *column, *createTable:
+	case *column, *table:
 		switch dependency.kind {
 		case migrationKindDropAndAdd:
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
@@ -343,7 +343,7 @@ type createView struct {
 	node *ast.CreateView
 }
 
-func newCreateView(cv *ast.CreateView) *createView {
+func newView(cv *ast.CreateView) *createView {
 	return &createView{cv}
 }
 

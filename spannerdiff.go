@@ -81,17 +81,17 @@ func newDefinitions(ddls []ast.DDL, errorOnUnsupported bool) (*definitions, erro
 	for _, ddl := range ddls {
 		switch ddl := ddl.(type) {
 		case *ast.CreateTable:
-			table := newCreateTable(ddl)
+			table := newTable(ddl)
 			d.all[table.tableID()] = table
 			for id, col := range table.columns() {
 				d.all[id] = newColumn(table, col)
 			}
 		case *ast.CreateIndex:
-			d.all[newIndexID(ddl.Name)] = newCreateIndex(ddl)
+			d.all[newIndexID(ddl.Name)] = newIndex(ddl)
 		case *ast.CreateSearchIndex:
-			d.all[newSearchIndexID(ddl.Name)] = newCreateSearchIndex(ddl)
+			d.all[newSearchIndexID(ddl.Name)] = newSearchIndex(ddl)
 		case *ast.CreatePropertyGraph:
-			d.all[newPropertyGraphID(ddl.Name)] = newCreatePropertyGraph(ddl)
+			d.all[newPropertyGraphID(ddl.Name)] = newPropertyGraph(ddl)
 		default:
 			if errorOnUnsupported {
 				return nil, fmt.Errorf("unsupported DDL: %s", ddl.SQL())
@@ -274,23 +274,25 @@ func (m *migration) alters(base, target *definitions) {
 			continue
 		}
 		switch targetTable := targetTable.(type) {
-		case *createTable:
-			m.alterTable(baseTable.(*createTable), targetTable)
+		case *table:
+			m.alterTable(baseTable.(*table), targetTable)
 		case *column:
 			m.alterColumn(baseTable.(*column), targetTable)
-		case *createIndex:
-			m.alterIndex(baseTable.(*createIndex), targetTable)
-		case *createSearchIndex:
-			m.alterSearchIndex(baseTable.(*createSearchIndex), targetTable)
-		case *createPropertyGraph:
-			m.alterPropertyGraph(baseTable.(*createPropertyGraph), targetTable)
+		case *index:
+			m.alterIndex(baseTable.(*index), targetTable)
+		case *searchIndex:
+			m.alterSearchIndex(baseTable.(*searchIndex), targetTable)
+		case *propertyGraph:
+			m.alterPropertyGraph(baseTable.(*propertyGraph), targetTable)
+		case *createView:
+
 		default:
 			panic(fmt.Sprintf("unexpected definition: %T", targetTable))
 		}
 	}
 }
 
-func (m *migration) alterTable(base, target *createTable) {
+func (m *migration) alterTable(base, target *table) {
 	// https://cloud.google.com/spanner/docs/schema-updates?t#supported-updates
 	// - Add or remove a foreign key from an existing table.
 	// - Add or remove a check constraint from an existing table.
@@ -482,7 +484,7 @@ func (m *migration) alterColumn(base, target *column) {
 	}
 }
 
-func (m *migration) alterIndex(base, target *createIndex) {
+func (m *migration) alterIndex(base, target *index) {
 	// --- not documented ---
 	// Add or remove a stored column from an existing index.
 
@@ -535,7 +537,7 @@ func (m *migration) alterIndex(base, target *createIndex) {
 	m.updateStateIfUndefined(newMigrationState(target.indexID(), base, target, migrationKindDropAndAdd))
 }
 
-func (m *migration) alterSearchIndex(base, target *createSearchIndex) {
+func (m *migration) alterSearchIndex(base, target *searchIndex) {
 	// --- not documented ---
 	// Add or remove a stored column from an existing search index.
 
@@ -588,7 +590,7 @@ func (m *migration) alterSearchIndex(base, target *createSearchIndex) {
 	m.updateStateIfUndefined(newMigrationState(target.searchIndexID(), base, target, migrationKindDropAndAdd))
 }
 
-func (m *migration) alterPropertyGraph(base, target *createPropertyGraph) {
+func (m *migration) alterPropertyGraph(base, target *propertyGraph) {
 	targetCopy := *target.node
 	targetCopy.OrReplace = true
 	m.updateStateIfUndefined(newMigrationState(target.propertyGraphID(), base, target, migrationKindAlter, &targetCopy))
