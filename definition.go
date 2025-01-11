@@ -36,6 +36,8 @@ func newDefinitions(ddls []ast.DDL, errorOnUnsupported bool) (*definitions, erro
 
 	for _, ddl := range ddls {
 		switch ddl := ddl.(type) {
+		case *ast.CreateSchema:
+			d.all[newSchemaID(ddl.Name)] = newSchema(ddl)
 		case *ast.CreateTable:
 			table := newTable(ddl)
 			d.all[table.tableID()] = table
@@ -59,6 +61,46 @@ func newDefinitions(ddls []ast.DDL, errorOnUnsupported bool) (*definitions, erro
 
 	return d, nil
 }
+
+type schema struct {
+	node *ast.CreateSchema
+}
+
+func newSchema(cs *ast.CreateSchema) *schema {
+	return &schema{cs}
+}
+
+func (s *schema) id() identifier {
+	return s.schemaID()
+}
+
+func (s *schema) schemaID() schemaID {
+	return newSchemaID(s.node.Name)
+}
+
+func (s *schema) astNode() ast.Node {
+	return s.node
+}
+
+func (s *schema) add() ast.DDL {
+	return s.node
+}
+
+func (s *schema) drop() ast.DDL {
+	return &ast.DropSchema{
+		Name: s.node.Name,
+	}
+}
+
+func (s *schema) alter(tgt definition, m *migration) {
+	m.updateStateIfUndefined(newMigrationState(s.schemaID(), s, tgt, migrationKindDropAndAdd))
+}
+
+func (s *schema) dependsOn() []identifier {
+	return nil
+}
+
+func (s *schema) onDependencyChange(me, dependency migrationState, m *migration) {}
 
 type table struct {
 	node *ast.CreateTable
@@ -206,8 +248,7 @@ func (t *table) dependsOn() []identifier {
 	return nil
 }
 
-func (t *table) onDependencyChange(me, dependency migrationState, m *migration) {
-}
+func (t *table) onDependencyChange(me, dependency migrationState, m *migration) {}
 
 func (t *table) columns() map[columnID]*ast.ColumnDef {
 	m := make(map[columnID]*ast.ColumnDef)
@@ -739,6 +780,4 @@ func (v *view) dependsOn() []identifier {
 	return nil
 }
 
-func (v *view) onDependencyChange(me, dependency migrationState, m *migration) {
-	return
-}
+func (v *view) onDependencyChange(me, dependency migrationState, m *migration) {}

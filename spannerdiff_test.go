@@ -18,9 +18,21 @@ func TestDiff(t *testing.T) {
 	}{
 		"unsupported ddl": {
 			``,
-			`CREATE SCHEMA SCH1`,
+			`ALTER INDEX IDX1 ADD STORED COLUMN T1_I1;`,
 			``,
 			true,
+		},
+		"add schema": {
+			``,
+			`CREATE SCHEMA S1;`,
+			`CREATE SCHEMA S1;`,
+			false,
+		},
+		"drop schema": {
+			`CREATE SCHEMA S1;`,
+			``,
+			`DROP SCHEMA S1;`,
+			false,
 		},
 		"add table": {
 			``,
