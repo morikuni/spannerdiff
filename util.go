@@ -28,7 +28,7 @@ func equalNode(a, b ast.Node) bool {
 			for _, o := range b.Records {
 				mb[o.Name.Name] = o.Value
 			}
-			return cmp.Equal(ma, mb)
+			return cmp.Equal(ma, mb, cmpopts.IgnoreTypes(token.Pos(0)))
 		}),
 	)
 }
