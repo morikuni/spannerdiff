@@ -83,19 +83,24 @@ func (mk migrationKind) String() string {
 }
 
 type migrationState struct {
-	id        identifier
-	base      definition
-	target    definition
-	kind      migrationKind
-	alterDDLs []ast.DDL
+	id     identifier
+	base   definition
+	target definition
+	kind   migrationKind
+	alters []operation
 }
 
 func newMigrationState(id identifier, base, target definition, kind migrationKind, alters ...ast.DDL) migrationState {
-	return migrationState{id, base, target, kind, alters}
+	var operations []operation
+	for _, ddl := range alters {
+		operations = append(operations, newOperation(target, operationKindAlter, ddl))
+	}
+	return migrationState{id, base, target, kind, operations}
 }
 
-func (ms migrationState) updateKind(kind migrationKind) migrationState {
+func (ms migrationState) updateKind(kind migrationKind, alters ...operation) migrationState {
 	ms.kind = kind
+	ms.alters = alters
 	return ms
 }
 
@@ -104,11 +109,7 @@ func (ms migrationState) operations() []operation {
 	case migrationKindAdd:
 		return []operation{newOperation(ms.target, operationKindAdd, ms.target.add())}
 	case migrationKindAlter:
-		ops := make([]operation, 0, len(ms.alterDDLs))
-		for _, ddl := range ms.alterDDLs {
-			ops = append(ops, newOperation(ms.target, operationKindAlter, ddl))
-		}
-		return ops
+		return ms.alters
 	case migrationKindDrop:
 		return []operation{newOperation(ms.base, operationKindDrop, ms.base.drop())}
 	case migrationKindDropAndAdd:
