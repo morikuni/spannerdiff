@@ -93,7 +93,7 @@ func (s *schema) drop() ast.DDL {
 }
 
 func (s *schema) alter(tgt definition, m *migration) {
-	m.updateStateIfUndefined(newMigrationState(s.schemaID(), s, tgt, migrationKindDropAndAdd))
+	m.updateStateIfUndefined(newDropAndAddState(s, tgt))
 }
 
 func (s *schema) dependsOn() []identifier {
@@ -144,7 +144,7 @@ func (t *table) alter(tgt definition, m *migration) {
 	// - Add, replace or remove a row deletion policy from an existing table.
 
 	if !equalNodes(base.node.PrimaryKeys, target.node.PrimaryKeys) {
-		m.updateStateIfUndefined(newMigrationState(target.tableID(), base, target, migrationKindDropAndAdd))
+		m.updateStateIfUndefined(newDropAndAddState(base, target))
 		return
 	}
 
@@ -237,14 +237,17 @@ func (t *table) alter(tgt definition, m *migration) {
 
 	if len(ddls) == 0 {
 		// If there are no DDLs, the table was changed but could not alter. Therefore, drop and create.
-		m.updateStateIfUndefined(newMigrationState(target.tableID(), base, target, migrationKindDropAndAdd))
+		m.updateStateIfUndefined(newDropAndAddState(base, target))
 		return
 	}
 
-	m.updateStateIfUndefined(newMigrationState(target.tableID(), base, target, migrationKindAlter, ddls...))
+	m.updateStateIfUndefined(newAlterState(base, target, ddls...))
 }
 
 func (t *table) dependsOn() []identifier {
+	if schemaID, ok := t.tableID().schemaID.get(); ok {
+		return []identifier{schemaID}
+	}
 	return nil
 }
 
@@ -349,7 +352,7 @@ func (c *column) alter(tgt definition, m *migration) {
 				ddls = append(ddls, &ast.AlterTable{Name: target.table.node.Name, TableAlteration: &ast.AlterColumn{Name: target.node.Name, Alteration: &ast.AlterColumnSetDefault{DefaultExpr: defaultExpr}}})
 			}
 		}
-		m.updateStateIfUndefined(newMigrationState(target.columnID(), base, target, migrationKindAlter, ddls...))
+		m.updateStateIfUndefined(newAlterState(base, target, ddls...))
 	} else {
 		switch tupleOf(columnTypeOf(base.node.Type), columnTypeOf(target.node.Type)) {
 		case tupleOf(scalar{ast.StringTypeName}, scalar{ast.BytesTypeName}),
@@ -362,13 +365,13 @@ func (c *column) alter(tgt definition, m *migration) {
 			tupleOf(array{scalar{ast.BytesTypeName}}, array{scalar{ast.BytesTypeName}}),
 			tupleOf(array{protoOrEnum{}}, array{protoOrEnum{}}):
 			if target.node.DefaultSemantics == nil {
-				m.updateStateIfUndefined(newMigrationState(target.columnID(), base, target, migrationKindAlter, &ast.AlterTable{Name: target.table.node.Name, TableAlteration: &ast.AlterColumn{Name: target.node.Name, Alteration: &ast.AlterColumnType{
+				m.updateStateIfUndefined(newAlterState(base, target, &ast.AlterTable{Name: target.table.node.Name, TableAlteration: &ast.AlterColumn{Name: target.node.Name, Alteration: &ast.AlterColumnType{
 					Type:    target.node.Type,
 					NotNull: target.node.NotNull,
 				}}}))
 				return
 			} else if defaultExpr, ok := target.node.DefaultSemantics.(*ast.ColumnDefaultExpr); ok {
-				m.updateStateIfUndefined(newMigrationState(target.columnID(), base, target, migrationKindAlter, &ast.AlterTable{Name: target.table.node.Name, TableAlteration: &ast.AlterColumn{Name: target.node.Name, Alteration: &ast.AlterColumnType{
+				m.updateStateIfUndefined(newAlterState(base, target, &ast.AlterTable{Name: target.table.node.Name, TableAlteration: &ast.AlterColumn{Name: target.node.Name, Alteration: &ast.AlterColumnType{
 					Type:        target.node.Type,
 					NotNull:     target.node.NotNull,
 					DefaultExpr: defaultExpr,
@@ -376,10 +379,10 @@ func (c *column) alter(tgt definition, m *migration) {
 				return
 			}
 		default:
-			m.updateStateIfUndefined(newMigrationState(target.columnID(), base, target, migrationKindDropAndAdd))
+			m.updateStateIfUndefined(newDropAndAddState(base, target))
 			return
 		}
-		m.updateStateIfUndefined(newMigrationState(target.columnID(), base, target, migrationKindDropAndAdd))
+		m.updateStateIfUndefined(newDropAndAddState(base, target))
 	}
 }
 
@@ -483,10 +486,10 @@ func (i *index) alter(tgt definition, m *migration) {
 		for _, col := range dropped {
 			ddls = append(ddls, &ast.AlterIndex{Name: target.node.Name, IndexAlteration: &ast.DropStoredColumn{Name: col}})
 		}
-		m.updateStateIfUndefined(newMigrationState(target.indexID(), base, target, migrationKindAlter, ddls...))
+		m.updateStateIfUndefined(newAlterState(base, target, ddls...))
 		return
 	}
-	m.updateStateIfUndefined(newMigrationState(target.indexID(), base, target, migrationKindDropAndAdd))
+	m.updateStateIfUndefined(newDropAndAddState(base, target))
 }
 
 func (i *index) dependsOn() []identifier {
@@ -499,13 +502,16 @@ func (i *index) dependsOn() []identifier {
 			ids = append(ids, newColumnID(newTableIDFromPath(i.node.TableName), col))
 		}
 	}
+	if schemaID, ok := i.indexID().schemaID.get(); ok {
+		ids = append(ids, schemaID)
+	}
 	ids = append(ids, i.tableID())
 	return ids
 }
 
 func (i *index) onDependencyChange(me, dependency migrationState, m *migration) {
 	switch dep := dependency.definition().(type) {
-	case *column, *table:
+	case *column, *table, *schema:
 		switch dependency.kind {
 		case migrationKindDropAndAdd:
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
@@ -599,10 +605,10 @@ func (si *searchIndex) alter(tgt definition, m *migration) {
 		for _, col := range dropped {
 			ddls = append(ddls, &ast.AlterSearchIndex{Name: target.node.Name, IndexAlteration: &ast.DropStoredColumn{Name: col}})
 		}
-		m.updateStateIfUndefined(newMigrationState(target.searchIndexID(), base, target, migrationKindAlter, ddls...))
+		m.updateStateIfUndefined(newAlterState(base, target, ddls...))
 		return
 	}
-	m.updateStateIfUndefined(newMigrationState(target.searchIndexID(), base, target, migrationKindDropAndAdd))
+	m.updateStateIfUndefined(newDropAndAddState(base, target))
 }
 
 func (si *searchIndex) dependsOn() []identifier {
@@ -662,7 +668,7 @@ func (pg *propertyGraph) alter(tgt definition, m *migration) {
 
 	targetCopy := *target.node
 	targetCopy.OrReplace = true
-	m.updateStateIfUndefined(newMigrationState(target.propertyGraphID(), base, target, migrationKindAlter, &targetCopy))
+	m.updateStateIfUndefined(newAlterState(base, target, &targetCopy))
 }
 
 func (pg *propertyGraph) dependsOn() []identifier {
@@ -772,7 +778,7 @@ func (v *view) alter(tgt definition, m *migration) {
 
 	targetCopy := *target.node
 	targetCopy.OrReplace = true
-	m.updateStateIfUndefined(newMigrationState(target.viewID(), base, target, migrationKindAlter, &targetCopy))
+	m.updateStateIfUndefined(newAlterState(base, target, &targetCopy))
 }
 
 func (v *view) dependsOn() []identifier {

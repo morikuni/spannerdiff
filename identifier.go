@@ -33,6 +33,37 @@ var _ = []struct{}{
 
 func isComparable[C comparable](_ C) struct{} { return struct{}{} }
 
+type optional[T any] struct {
+	value T
+	valid bool
+}
+
+func none[T comparable]() optional[T] {
+	return optional[T]{}
+}
+
+func some[T comparable](value T) optional[T] {
+	return optional[T]{value, true}
+}
+
+func (o optional[T]) get() (T, bool) {
+	return o.value, o.valid
+}
+
+func (o optional[T]) mustGet() T {
+	if o.valid {
+		return o.value
+	}
+	panic("optional value is not valid")
+}
+
+func (o optional[T]) or(a optional[T]) optional[T] {
+	if o.valid {
+		return o
+	}
+	return a
+}
+
 type schemaID struct {
 	name string
 }
@@ -50,16 +81,16 @@ func (s schemaID) String() string {
 }
 
 type tableID struct {
-	schemaID schemaID
+	schemaID optional[schemaID]
 	name     string
 }
 
 func newTableIDFromPath(path *ast.Path) tableID {
 	switch len(path.Idents) {
 	case 1:
-		return tableID{schemaID{}, path.Idents[0].Name}
+		return tableID{none[schemaID](), path.Idents[0].Name}
 	case 2:
-		return tableID{newSchemaID(path.Idents[0]), path.Idents[1].Name}
+		return tableID{some(newSchemaID(path.Idents[0])), path.Idents[1].Name}
 	default:
 		panic(fmt.Sprintf("unexpected table name: %s", path.SQL()))
 	}
@@ -69,10 +100,10 @@ func newTableIDFromIdent(ident *ast.Ident) tableID {
 }
 
 func (t tableID) ID() string {
-	if t.schemaID == (schemaID{}) {
-		return fmt.Sprintf("Table(%s)", t.name)
+	if schemaID, ok := t.schemaID.get(); ok {
+		return fmt.Sprintf("Table(%s.%s)", schemaID.name, t.name)
 	}
-	return fmt.Sprintf("Table(%s.%s)", t.schemaID.name, t.name)
+	return fmt.Sprintf("Table(%s)", t.name)
 }
 
 func (t tableID) String() string {
@@ -97,26 +128,26 @@ func (c columnID) String() string {
 }
 
 type indexID struct {
-	schemaID schemaID
+	schemaID optional[schemaID]
 	name     string
 }
 
 func newIndexID(path *ast.Path) indexID {
 	switch len(path.Idents) {
 	case 1:
-		return indexID{schemaID{}, path.Idents[0].Name}
+		return indexID{none[schemaID](), path.Idents[0].Name}
 	case 2:
-		return indexID{newSchemaID(path.Idents[0]), path.Idents[1].Name}
+		return indexID{some(newSchemaID(path.Idents[0])), path.Idents[1].Name}
 	default:
 		panic(fmt.Sprintf("unexpected index name: %s", path.SQL()))
 	}
 }
 
 func (i indexID) ID() string {
-	if i.schemaID == (schemaID{}) {
-		return fmt.Sprintf("Index(%s)", i.name)
+	if schemaID, ok := i.schemaID.get(); ok {
+		return fmt.Sprintf("Index(%s.%s)", schemaID.name, i.name)
 	}
-	return fmt.Sprintf("Index(%s.%s)", i.schemaID.name, i.name)
+	return fmt.Sprintf("Index(%s)", i.name)
 }
 
 func (i indexID) String() string {

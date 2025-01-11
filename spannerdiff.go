@@ -84,18 +84,38 @@ func (mk migrationKind) String() string {
 
 type migrationState struct {
 	id     identifier
-	base   definition
-	target definition
+	base   optional[definition]
+	target optional[definition]
 	kind   migrationKind
 	alters []operation
 }
 
-func newMigrationState(id identifier, base, target definition, kind migrationKind, alters ...ast.DDL) migrationState {
+func newAddState(target definition) migrationState {
+	return migrationState{target.id(), none[definition](), some(target), migrationKindAdd, nil}
+}
+
+func newAlterState(base, target definition, alters ...ast.DDL) migrationState {
 	var operations []operation
 	for _, ddl := range alters {
 		operations = append(operations, newOperation(target, operationKindAlter, ddl))
 	}
-	return migrationState{id, base, target, kind, operations}
+	return migrationState{base.id(), some(base), some(target), migrationKindAlter, operations}
+}
+
+func newDropState(base definition) migrationState {
+	return migrationState{base.id(), some(base), none[definition](), migrationKindDrop, nil}
+}
+
+func newDropAndAddState(base, target definition) migrationState {
+	return migrationState{base.id(), some(base), some(target), migrationKindDropAndAdd, nil}
+}
+
+func newMigrationState(base, target optional[definition], kind migrationKind, alters ...ast.DDL) migrationState {
+	var operations []operation
+	for _, ddl := range alters {
+		operations = append(operations, newOperation(target.or(base).mustGet(), operationKindAlter, ddl))
+	}
+	return migrationState{target.or(base).mustGet().id(), base, target, kind, operations}
 }
 
 func (ms migrationState) updateKind(kind migrationKind, alters ...operation) migrationState {
@@ -107,15 +127,15 @@ func (ms migrationState) updateKind(kind migrationKind, alters ...operation) mig
 func (ms migrationState) operations() []operation {
 	switch ms.kind {
 	case migrationKindAdd:
-		return []operation{newOperation(ms.target, operationKindAdd, ms.target.add())}
+		return []operation{newOperation(ms.target.mustGet(), operationKindAdd, ms.target.mustGet().add())}
 	case migrationKindAlter:
 		return ms.alters
 	case migrationKindDrop:
-		return []operation{newOperation(ms.base, operationKindDrop, ms.base.drop())}
+		return []operation{newOperation(ms.base.mustGet(), operationKindDrop, ms.base.mustGet().drop())}
 	case migrationKindDropAndAdd:
 		return []operation{
-			newOperation(ms.base, operationKindDrop, ms.base.drop()),
-			newOperation(ms.target, operationKindAdd, ms.target.add()),
+			newOperation(ms.base.mustGet(), operationKindDrop, ms.base.mustGet().drop()),
+			newOperation(ms.target.mustGet(), operationKindAdd, ms.target.mustGet().add()),
 		}
 	case migrationKindNone, migrationKindUndefined:
 		return nil
@@ -125,10 +145,7 @@ func (ms migrationState) operations() []operation {
 }
 
 func (ms migrationState) definition() definition {
-	if ms.target != nil {
-		return ms.target
-	}
-	return ms.base
+	return ms.target.or(ms.base).mustGet()
 }
 
 type migration struct {
@@ -157,13 +174,15 @@ func newMigration(base, target *definitions) *migration {
 }
 
 func (m *migration) initializeState(base, target definition) {
-	var def definition
-	if target != nil {
-		def = target
-	} else {
-		def = base
+	var baseOpt, targetOpt optional[definition]
+	if base != nil {
+		baseOpt = some(base)
 	}
-	m.states[def.id()] = newMigrationState(def.id(), base, target, migrationKindUndefined)
+	if target != nil {
+		targetOpt = some(target)
+	}
+	def := targetOpt.or(baseOpt).mustGet()
+	m.states[def.id()] = newMigrationState(baseOpt, targetOpt, migrationKindUndefined)
 	for _, id := range def.dependsOn() {
 		m.dependOn[id] = append(m.dependOn[id], def)
 	}
@@ -214,8 +233,8 @@ func diffDefinitions(base, target *definitions) ([]ast.DDL, error) {
 
 func (m *migration) drops(baseDefs, targetDefs *definitions) {
 	for id, base := range baseDefs.all {
-		if target, ok := targetDefs.all[id]; !ok {
-			m.updateStateIfUndefined(newMigrationState(id, base, target, migrationKindDrop))
+		if _, ok := targetDefs.all[id]; !ok {
+			m.updateStateIfUndefined(newDropState(base))
 		}
 	}
 }
@@ -223,7 +242,7 @@ func (m *migration) drops(baseDefs, targetDefs *definitions) {
 func (m *migration) adds(base, target *definitions) {
 	for id, target := range target.all {
 		if _, ok := base.all[id]; !ok {
-			m.updateStateIfUndefined(newMigrationState(id, nil, target, migrationKindAdd))
+			m.updateStateIfUndefined(newAddState(target))
 		}
 	}
 }
