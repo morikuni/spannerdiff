@@ -40,7 +40,7 @@ func newDefinitions(ddls []ast.DDL, errorOnUnsupported bool) (*definitions, erro
 			d.all[newSchemaID(ddl.Name)] = newSchema(ddl)
 		case *ast.CreateTable:
 			table := newTable(ddl)
-			d.all[table.tableID()] = table
+			d.all[table.id()] = table
 			for id, col := range table.columns() {
 				d.all[id] = newColumn(table, col)
 			}
@@ -71,10 +71,6 @@ func newSchema(cs *ast.CreateSchema) *schema {
 }
 
 func (s *schema) id() identifier {
-	return s.schemaID()
-}
-
-func (s *schema) schemaID() schemaID {
 	return newSchemaID(s.node.Name)
 }
 
@@ -116,6 +112,10 @@ func (t *table) id() identifier {
 
 func (t *table) tableID() tableID {
 	return newTableIDFromPath(t.node.Name)
+}
+
+func (t *table) schemaID() optional[schemaID] {
+	return t.tableID().schemaID
 }
 
 func (t *table) astNode() ast.Node {
@@ -245,7 +245,7 @@ func (t *table) alter(tgt definition, m *migration) {
 }
 
 func (t *table) dependsOn() []identifier {
-	if schemaID, ok := t.tableID().schemaID.get(); ok {
+	if schemaID, ok := t.schemaID().get(); ok {
 		return []identifier{schemaID}
 	}
 	return nil
@@ -271,10 +271,6 @@ func newColumn(table *table, col *ast.ColumnDef) *column {
 }
 
 func (c *column) id() identifier {
-	return c.columnID()
-}
-
-func (c *column) columnID() columnID {
 	return newColumnID(c.table.tableID(), c.node.Name)
 }
 
@@ -315,7 +311,7 @@ func (c *column) alter(tgt definition, m *migration) {
 	// - Enable or disable commit timestamps in value and primary key columns.
 	// - Set, change or drop the default value of a column.
 
-	if m.kind(base.columnID()) == migrationKindNone {
+	if m.kind(base.id()) == migrationKindNone {
 		// The table is added or created, so column is also added or created.
 		return
 	}
@@ -387,7 +383,7 @@ func (c *column) alter(tgt definition, m *migration) {
 }
 
 func (c *column) dependsOn() []identifier {
-	return []identifier{c.table.tableID()}
+	return []identifier{c.table.id()}
 }
 
 func (c *column) onDependencyChange(me, dependency migrationState, m *migration) {
@@ -422,6 +418,10 @@ func (i *index) tableID() tableID {
 	return newTableIDFromPath(i.node.TableName)
 }
 
+func (i *index) schemaID() optional[schemaID] {
+	return i.indexID().schemaID
+}
+
 func (i *index) astNode() ast.Node {
 	return i.node
 }
@@ -443,7 +443,7 @@ func (i *index) alter(tgt definition, m *migration) {
 	// --- not documented ---
 	// Add or remove a stored column from an existing index.
 
-	if m.kind(base.indexID()) == migrationKindNone {
+	if m.kind(base.id()) == migrationKindNone {
 		// The table or column is added or created, so index is also added or created.
 		return
 	}
@@ -502,7 +502,7 @@ func (i *index) dependsOn() []identifier {
 			ids = append(ids, newColumnID(newTableIDFromPath(i.node.TableName), col))
 		}
 	}
-	if schemaID, ok := i.indexID().schemaID.get(); ok {
+	if schemaID, ok := i.schemaID().get(); ok {
 		ids = append(ids, schemaID)
 	}
 	ids = append(ids, i.tableID())
@@ -530,10 +530,6 @@ func newSearchIndex(csi *ast.CreateSearchIndex) *searchIndex {
 }
 
 func (si *searchIndex) id() identifier {
-	return si.searchIndexID()
-}
-
-func (si *searchIndex) searchIndexID() searchIndexID {
 	return newSearchIndexID(si.node.Name)
 }
 
@@ -562,7 +558,7 @@ func (si *searchIndex) alter(tgt definition, m *migration) {
 	// --- not documented ---
 	// Add or remove a stored column from an existing search index.
 
-	if m.kind(base.searchIndexID()) == migrationKindNone {
+	if m.kind(base.id()) == migrationKindNone {
 		// The table or column is added or created, so search index is also added or created.
 		return
 	}
@@ -641,10 +637,6 @@ func newPropertyGraph(cpg *ast.CreatePropertyGraph) *propertyGraph {
 }
 
 func (pg *propertyGraph) id() identifier {
-	return newPropertyGraphID(pg.node.Name)
-}
-
-func (pg *propertyGraph) propertyGraphID() propertyGraphID {
 	return newPropertyGraphID(pg.node.Name)
 }
 
@@ -751,10 +743,6 @@ func newView(cv *ast.CreateView) *view {
 }
 
 func (v *view) id() identifier {
-	return newViewID(v.node.Name)
-}
-
-func (v *view) viewID() viewID {
 	return newViewID(v.node.Name)
 }
 

@@ -90,6 +90,10 @@ type migrationState struct {
 	alters []operation
 }
 
+func newInitialState(base, target optional[definition]) migrationState {
+	return migrationState{target.or(base).mustGet().id(), base, target, migrationKindUndefined, nil}
+}
+
 func newAddState(target definition) migrationState {
 	return migrationState{target.id(), none[definition](), some(target), migrationKindAdd, nil}
 }
@@ -108,14 +112,6 @@ func newDropState(base definition) migrationState {
 
 func newDropAndAddState(base, target definition) migrationState {
 	return migrationState{base.id(), some(base), some(target), migrationKindDropAndAdd, nil}
-}
-
-func newMigrationState(base, target optional[definition], kind migrationKind, alters ...ast.DDL) migrationState {
-	var operations []operation
-	for _, ddl := range alters {
-		operations = append(operations, newOperation(target.or(base).mustGet(), operationKindAlter, ddl))
-	}
-	return migrationState{target.or(base).mustGet().id(), base, target, kind, operations}
 }
 
 func (ms migrationState) updateKind(kind migrationKind, alters ...operation) migrationState {
@@ -163,26 +159,31 @@ func newMigration(base, target *definitions) *migration {
 		make(map[identifier][]definition),
 	}
 
-	for _, base := range base.all {
-		m.initializeState(base, target.all[base.id()])
+	for id := range base.all {
+		m.initializeState(id)
 	}
-	for _, target := range target.all {
-		m.initializeState(base.all[target.id()], target)
+	for id := range target.all {
+		m.initializeState(id)
 	}
 
 	return m
 }
 
-func (m *migration) initializeState(base, target definition) {
+func (m *migration) initializeState(id identifier) {
 	var baseOpt, targetOpt optional[definition]
-	if base != nil {
+	if base, ok := m.baseDefs.all[id]; ok {
 		baseOpt = some(base)
 	}
-	if target != nil {
+	if target, ok := m.targetDefs.all[id]; ok {
 		targetOpt = some(target)
 	}
 	def := targetOpt.or(baseOpt).mustGet()
-	m.states[def.id()] = newMigrationState(baseOpt, targetOpt, migrationKindUndefined)
+
+	if _, ok := m.states[def.id()]; ok {
+		return
+	}
+
+	m.states[def.id()] = newInitialState(baseOpt, targetOpt)
 	for _, id := range def.dependsOn() {
 		m.dependOn[id] = append(m.dependOn[id], def)
 	}
