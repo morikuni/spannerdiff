@@ -104,12 +104,12 @@ func (c *column) dependsOn() []identifier {
 }
 
 func (c *column) onDependencyChange(me, dependency migrationState) migrationState {
-	switch dep := dependency.def.(type) {
+	switch dep := dependency.definition().(type) {
 	case *createTable:
 		switch dependency.kind {
 		case migrationKindAdd, migrationKindDropAndAdd, migrationKindDrop:
 			// If the table is being added or dropped, the column is also being added or dropped.
-			return newMigrationState(c.columnID(), c, migrationKindNone)
+			return me.updateKind(migrationKindNone)
 		default:
 			return me
 		}
@@ -162,16 +162,16 @@ func (c *createIndex) dependsOn() []identifier {
 }
 
 func (c *createIndex) onDependencyChange(me, dependency migrationState) migrationState {
-	switch dependency.def.(type) {
+	switch dep := dependency.definition().(type) {
 	case *column, *createTable:
 		switch dependency.kind {
 		case migrationKindDropAndAdd:
-			return newMigrationState(c.indexID(), c, migrationKindDropAndAdd)
+			return me.updateKind(migrationKindDropAndAdd)
 		default:
 			return me
 		}
 	default:
-		panic(fmt.Sprintf("unexpected dependOn type on index: %T", dependency.def))
+		panic(fmt.Sprintf("unexpected dependOn type on index: %T", dep))
 	}
 }
 
@@ -215,16 +215,16 @@ func (c *createSearchIndex) dependsOn() []identifier {
 }
 
 func (c *createSearchIndex) onDependencyChange(me, dependency migrationState) migrationState {
-	switch dependency.def.(type) {
+	switch dep := dependency.definition().(type) {
 	case *column, *createTable:
 		switch dependency.kind {
 		case migrationKindDropAndAdd:
-			return newMigrationState(c.searchIndexID(), c, migrationKindDropAndAdd)
+			return me.updateKind(migrationKindDropAndAdd)
 		default:
 			return me
 		}
 	default:
-		panic(fmt.Sprintf("unexpected dependOn type on search index: %T", dependency.def))
+		panic(fmt.Sprintf("unexpected dependOn type on search index: %T", dep))
 	}
 }
 
@@ -314,15 +314,49 @@ func (c *createPropertyGraph) dependsOn() []identifier {
 }
 
 func (c *createPropertyGraph) onDependencyChange(me, dependency migrationState) migrationState {
-	switch dependency.def.(type) {
+	switch dep := dependency.definition().(type) {
 	case *column, *createTable:
 		switch dependency.kind {
 		case migrationKindDropAndAdd:
-			return newMigrationState(newPropertyGraphID(c.node.Name), c, migrationKindDropAndAdd)
+			return me.updateKind(migrationKindDropAndAdd)
 		default:
 			return me
 		}
 	default:
-		panic(fmt.Sprintf("unexpected dependOn type on property graph: %T", dependency.def))
+		panic(fmt.Sprintf("unexpected dependOn type on property graph: %T", dep))
 	}
+}
+
+type createView struct {
+	node *ast.CreateView
+}
+
+func newCreateView(cv *ast.CreateView) *createView {
+	return &createView{cv}
+}
+
+func (c *createView) id() identifier {
+	return newViewID(c.node.Name)
+}
+
+func (c *createView) viewID() viewID {
+	return newViewID(c.node.Name)
+}
+
+func (c *createView) add() ast.DDL {
+	return c.node
+}
+
+func (c *createView) drop() ast.DDL {
+	return &ast.DropView{
+		Name: c.node.Name,
+	}
+}
+
+func (c *createView) dependsOn() []identifier {
+	return nil
+}
+
+func (c *createView) onDependencyChange(me, dependency migrationState) migrationState {
+	return me
 }

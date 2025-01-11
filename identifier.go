@@ -2,13 +2,13 @@ package spannerdiff
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/cloudspannerecosystem/memefish/ast"
 )
 
 type identifier interface {
 	ID() string
+	String() string
 }
 
 var _ = []identifier{
@@ -17,6 +17,7 @@ var _ = []identifier{
 	indexID{},
 	searchIndexID{},
 	propertyGraphID{},
+	viewID{},
 }
 
 var _ = []struct{}{
@@ -25,11 +26,15 @@ var _ = []struct{}{
 	isComparable(indexID{}),
 	isComparable(searchIndexID{}),
 	isComparable(propertyGraphID{}),
+	isComparable(viewID{}),
 }
 
 func isComparable[C comparable](_ C) struct{} { return struct{}{} }
 
-type tableID [2]string
+type tableID struct {
+	schema string
+	name   string
+}
 
 func newTableIDFromPath(path *ast.Path) tableID {
 	switch len(path.Idents) {
@@ -46,10 +51,14 @@ func newTableIDFromIdent(ident *ast.Ident) tableID {
 }
 
 func (t tableID) ID() string {
-	if t[0] == "" {
-		return fmt.Sprintf("TableID(%s)", t[1])
+	if t.schema == "" {
+		return fmt.Sprintf("Table(%s)", t.name)
 	}
-	return fmt.Sprintf("TableID(%s:%s)", t[0], t[1])
+	return fmt.Sprintf("Table(%s.%s)", t.schema, t.name)
+}
+
+func (t tableID) String() string {
+	return t.ID()
 }
 
 type columnID struct {
@@ -62,15 +71,22 @@ func newColumnID(tableID tableID, ident *ast.Ident) columnID {
 }
 
 func (c columnID) ID() string {
-	return fmt.Sprintf("ColumnID(%s:%s)", c.tableID.ID(), c.name)
+	return fmt.Sprintf("Column(%s:%s)", c.tableID.ID(), c.name)
 }
 
-type indexID [2]string
+func (c columnID) String() string {
+	return c.ID()
+}
+
+type indexID struct {
+	schema string
+	name   string
+}
 
 func newIndexID(path *ast.Path) indexID {
 	switch len(path.Idents) {
 	case 1:
-		return indexID{path.Idents[0].Name, ""}
+		return indexID{"", path.Idents[0].Name}
 	case 2:
 		return indexID{path.Idents[0].Name, path.Idents[1].Name}
 	default:
@@ -79,7 +95,14 @@ func newIndexID(path *ast.Path) indexID {
 }
 
 func (i indexID) ID() string {
-	return fmt.Sprintf("IndexID(%s)", strings.Join(i[:], "."))
+	if i.schema == "" {
+		return fmt.Sprintf("Index(%s)", i.name)
+	}
+	return fmt.Sprintf("Index(%s.%s)", i.schema, i.name)
+}
+
+func (i indexID) String() string {
+	return i.ID()
 }
 
 type searchIndexID struct {
@@ -91,7 +114,11 @@ func newSearchIndexID(ident *ast.Ident) searchIndexID {
 }
 
 func (i searchIndexID) ID() string {
-	return fmt.Sprintf("SearchIndexID(%s)", i.name)
+	return fmt.Sprintf("SearchIndex(%s)", i.name)
+}
+
+func (i searchIndexID) String() string {
+	return i.ID()
 }
 
 type propertyGraphID struct {
@@ -103,5 +130,36 @@ func newPropertyGraphID(ident *ast.Ident) propertyGraphID {
 }
 
 func (i propertyGraphID) ID() string {
-	return fmt.Sprintf("PropertyGraphID(%s)", i.name)
+	return fmt.Sprintf("PropertyGraph(%s)", i.name)
+}
+
+func (i propertyGraphID) String() string {
+	return i.ID()
+}
+
+type viewID struct {
+	schema string
+	name   string
+}
+
+func newViewID(path *ast.Path) viewID {
+	switch len(path.Idents) {
+	case 1:
+		return viewID{"", path.Idents[0].Name}
+	case 2:
+		return viewID{path.Idents[0].Name, path.Idents[1].Name}
+	default:
+		panic(fmt.Sprintf("unexpected view name: %s", path.SQL()))
+	}
+}
+
+func (i viewID) ID() string {
+	if i.schema == "" {
+		return fmt.Sprintf("View(%s)", i.name)
+	}
+	return fmt.Sprintf("View(%s.%s)", i.schema, i.name)
+}
+
+func (i viewID) String() string {
+	return i.ID()
 }
