@@ -1,7 +1,7 @@
 github.com/MakeNowJust/heredoc/v2 v2.0.1 h1:rlCHh70XXXv7toz95ajQWOWQnN4WNLt0TdpZYIR/J6A=
 github.com/MakeNowJust/heredoc/v2 v2.0.1/go.mod h1:6/2Abh5s+hc3g9nbWLe9ObDIOhaRrqsyY9MWy+4JdRM=
-github.com/apstndb/memefish v0.0.0-20241220140550-65341ea6e6b6 h1:LIo+HC58ZlyLBbTrKQfnNp1Y1zOxiQBpTRkPsSW1XE4=
-github.com/apstndb/memefish v0.0.0-20241220140550-65341ea6e6b6/go.mod h1:rrHSb7mQfV8Xl47cvnE1dYJ8+zpvog49Yma0j4YCDnc=
+github.com/cloudspannerecosystem/memefish v0.3.1 h1:g3DaGE2slM5KxBlgN6+YWvEf44WB1xMrJdY27gQjDA4=
+github.com/cloudspannerecosystem/memefish v0.3.1/go.mod h1:xZ7uDI8lMlT8BF+3tmMzxdPD1TH4ZzyoiR/MNF1M3Fc=
 github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=
 github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
 github.com/k0kubun/pp v1.3.1-0.20200204103551-99835366d1cc h1:XLjmW07gT7cG/wb6mavIrvAIWBYaTacPo8UOnxGSspA=
