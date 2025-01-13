@@ -17,6 +17,7 @@ var _ = []identifier{
 	columnID{},
 	indexID{},
 	searchIndexID{},
+	vectorIndexID{},
 	propertyGraphID{},
 	viewID{},
 	changeStreamID{},
@@ -29,6 +30,7 @@ var _ = []struct{}{
 	isComparable(columnID{}),
 	isComparable(indexID{}),
 	isComparable(searchIndexID{}),
+	isComparable(vectorIndexID{}),
 	isComparable(propertyGraphID{}),
 	isComparable(viewID{}),
 	isComparable(changeStreamID{}),
@@ -171,6 +173,22 @@ func (i searchIndexID) ID() string {
 }
 
 func (i searchIndexID) String() string {
+	return i.ID()
+}
+
+type vectorIndexID struct {
+	name string
+}
+
+func newVectorIndexID(ident *ast.Ident) vectorIndexID {
+	return vectorIndexID{ident.Name}
+}
+
+func (i vectorIndexID) ID() string {
+	return fmt.Sprintf("VectorIndex(%s)", i.name)
+}
+
+func (i vectorIndexID) String() string {
 	return i.ID()
 }
 

@@ -21,6 +21,7 @@ var _ = []definition{
 	&column{},
 	&index{},
 	&searchIndex{},
+	&vectorIndex{},
 	&propertyGraph{},
 	&view{},
 	&changeStream{},
@@ -58,6 +59,8 @@ func newDefinitions(ddls []ast.DDL, errorOnUnsupported bool) (*definitions, erro
 			d.all[newChangeStreamID(ddl.Name)] = newChangeStream(ddl)
 		case *ast.CreateSequence:
 			d.all[newSequenceID(ddl.Name)] = newSequence(ddl)
+		case *ast.CreateVectorIndex:
+			d.all[newVectorIndexID(ddl.Name)] = newVectorIndex(ddl)
 		default:
 			if errorOnUnsupported {
 				return nil, fmt.Errorf("unsupported DDL: %s", ddl.SQL())
@@ -631,6 +634,60 @@ func (si *searchIndex) onDependencyChange(me, dependency migrationState, m *migr
 		}
 	default:
 		panic(fmt.Sprintf("unexpected dependOn type on search index: %T", dep))
+	}
+}
+
+type vectorIndex struct {
+	node *ast.CreateVectorIndex
+}
+
+func newVectorIndex(cvi *ast.CreateVectorIndex) *vectorIndex {
+	return &vectorIndex{cvi}
+}
+
+func (vi *vectorIndex) id() identifier {
+	return newVectorIndexID(vi.node.Name)
+}
+
+func (vi *vectorIndex) tableID() tableID {
+	return newTableIDFromIdent(vi.node.TableName)
+}
+
+func (vi *vectorIndex) astNode() ast.Node {
+	return vi.node
+}
+
+func (vi *vectorIndex) add() ast.DDL {
+	return vi.node
+}
+
+func (vi *vectorIndex) drop() ast.DDL {
+	return &ast.DropVectorIndex{
+		Name: vi.node.Name,
+	}
+}
+
+func (vi *vectorIndex) alter(tgt definition, m *migration) {
+	// ALTER VECTOR INDEX is not supported.
+	m.updateStateIfUndefined(newDropAndAddState(vi, tgt))
+}
+
+func (vi *vectorIndex) dependsOn() []identifier {
+	var ids []identifier
+	ids = append(ids, newColumnID(newTableIDFromIdent(vi.node.TableName), vi.node.ColumnName))
+	ids = append(ids, vi.tableID())
+	return ids
+}
+
+func (vi *vectorIndex) onDependencyChange(me, dependency migrationState, m *migration) {
+	switch dep := dependency.definition().(type) {
+	case *column, *table:
+		switch dependency.kind {
+		case migrationKindDropAndAdd:
+			m.updateState(me.updateKind(migrationKindDropAndAdd))
+		}
+	default:
+		panic(fmt.Sprintf("unexpected dependOn type on vector index: %T", dep))
 	}
 }
 
