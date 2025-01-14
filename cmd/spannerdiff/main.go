@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/mattn/go-isatty"
 	"github.com/morikuni/aec"
 
 	"github.com/morikuni/spannerdiff"
@@ -16,7 +17,7 @@ func main() {
 	os.Exit(realMain(os.Args, os.Stdin, os.Stdout, os.Stderr))
 }
 
-func realMain(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer) int {
 	fs := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	baseDDLFile := fs.String("base-ddl-file", "", "read base schema from file")
 	baseFromStdin := fs.Bool("base-from-stdin", false, "read base schema from stdin")
@@ -24,6 +25,7 @@ func realMain(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	targetDDLFile := fs.String("target-ddl-file", "", "read target schema from file")
 	targetFromStdin := fs.Bool("target-from-stdin", false, "read target schema from stdin")
 	targetDDL := fs.String("target-ddl", "", "target schema DDL")
+	color := fs.String("color", "auto", "colorize output. [auto, always, never]")
 
 	if err := fs.Parse(args[1:]); err != nil {
 		fmt.Fprintln(stderr, aec.RedF.Apply(err.Error()))
@@ -67,7 +69,10 @@ func realMain(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		target = strings.NewReader(*targetDDL)
 	}
 
-	err := spannerdiff.Diff(base, target, stdout, spannerdiff.DiffOption{})
+	enableColor := *color == "always" || (*color == "auto" && isatty.IsTerminal(stdout.Fd()))
+	err := spannerdiff.Diff(base, target, stdout, spannerdiff.DiffOption{
+		Colorize: enableColor,
+	})
 	if err != nil {
 		fmt.Fprintln(stderr, aec.RedF.Apply(err.Error()))
 		return 1
