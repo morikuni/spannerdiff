@@ -10,6 +10,7 @@ import (
 
 type DiffOption struct {
 	ErrorOnUnsupportedDDL bool
+	Colorize              bool
 }
 
 func Diff(baseSQL, targetSQL io.Reader, output io.Writer, option DiffOption) error {
@@ -45,9 +46,9 @@ func Diff(baseSQL, targetSQL io.Reader, output io.Writer, option DiffOption) err
 		return err
 	}
 
+	printer := newPrinter(option.Colorize)
 	for i, stmt := range stmts {
-		_, err = fmt.Fprint(output, stmt.SQL())
-		if err != nil {
+		if err := printer(output, stmt.SQL()); err != nil {
 			return fmt.Errorf("failed to write migration DDL: %w", err)
 		}
 		_, err = fmt.Fprintln(output, ";")
