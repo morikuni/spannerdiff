@@ -22,6 +22,10 @@ $ go install github.com/morikuni/spannerdiff/cmd/spannerdiff
 - `CREATE SEQUENCE`
 - `CREATE VECTOR INDEX`
 
+## Colored Output
+
+![colored output](./example.png)
+
 ## Example
 
 ```sh
