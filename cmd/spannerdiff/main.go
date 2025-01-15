@@ -7,7 +7,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/mattn/go-isatty"
 	"github.com/morikuni/aec"
 
 	"github.com/morikuni/spannerdiff"
@@ -69,9 +68,12 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 		target = strings.NewReader(*targetDDL)
 	}
 
-	enableColor := *color == "always" || (*color == "auto" && isatty.IsTerminal(stdout.Fd()))
+	cm, ok := spannerdiff.NewColorMode(*color)
+	if !ok {
+		fmt.Fprintln(stderr, aec.RedF.Apply(fmt.Sprintf("invalid color mode: %s", *color)))
+	}
 	err := spannerdiff.Diff(base, target, stdout, spannerdiff.DiffOption{
-		Colorize: enableColor,
+		Printer: spannerdiff.DetectTerminalPrinter(cm, stdout),
 	})
 	if err != nil {
 		fmt.Fprintln(stderr, aec.RedF.Apply(err.Error()))
