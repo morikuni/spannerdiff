@@ -10,7 +10,7 @@ import (
 
 type DiffOption struct {
 	ErrorOnUnsupportedDDL bool
-	Colorize              bool
+	Printer               Printer
 }
 
 func Diff(baseSQL, targetSQL io.Reader, output io.Writer, option DiffOption) error {
@@ -46,20 +46,15 @@ func Diff(baseSQL, targetSQL io.Reader, output io.Writer, option DiffOption) err
 		return err
 	}
 
-	printer := newPrinter(option.Colorize)
+	printer := option.Printer
+	if printer == nil {
+		printer = NoStylePrinter{}
+	}
+	ctx := PrintContext{TotalSQLs: len(stmts)}
 	for i, stmt := range stmts {
-		if err := printer(output, stmt.SQL()); err != nil {
+		ctx.Index = i
+		if err := printer.Print(ctx, output, stmt.SQL()+";\n"); err != nil {
 			return fmt.Errorf("failed to write migration DDL: %w", err)
-		}
-		_, err = fmt.Fprintln(output, ";")
-		if err != nil {
-			return fmt.Errorf("failed to write migration DDL: %w", err)
-		}
-		if i < len(stmts)-1 {
-			_, err = fmt.Fprintln(output)
-			if err != nil {
-				return fmt.Errorf("failed to write migration DDL: %w", err)
-			}
 		}
 	}
 
