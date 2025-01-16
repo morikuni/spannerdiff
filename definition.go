@@ -186,14 +186,14 @@ func (t *table) alter(tgt definition, m *migration) {
 		for _, syn := range target.node.Synonyms {
 			targetSynonyms[syn.Name.Name] = struct{}{}
 		}
-		for syn := range targetSynonyms {
-			if _, ok := baseSynonyms[syn]; !ok {
-				ddls = append(ddls, &ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.AddSynonym{Name: &ast.Ident{Name: syn}}})
-			}
-		}
 		for syn := range baseSynonyms {
 			if _, ok := targetSynonyms[syn]; !ok {
 				ddls = append(ddls, &ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.DropSynonym{Name: &ast.Ident{Name: syn}}})
+			}
+		}
+		for syn := range targetSynonyms {
+			if _, ok := baseSynonyms[syn]; !ok {
+				ddls = append(ddls, &ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.AddSynonym{Name: &ast.Ident{Name: syn}}})
 			}
 		}
 	}
@@ -216,18 +216,18 @@ func (t *table) alter(tgt definition, m *migration) {
 				added[name] = tc
 			}
 		}
-		dropped := make(map[string]*ast.TableConstraint, len(baseConstraints))
-		for name, tc := range baseConstraints {
-			if _, ok := targetConstraints[name]; !ok {
-				dropped[name] = tc
-			}
-		}
 		dropAndAdd := make(map[string]*ast.TableConstraint, len(baseConstraints))
 		for name, baseTC := range baseConstraints {
 			if targetTC, ok := targetConstraints[name]; ok {
 				if !equalNode(baseTC, targetTC) {
 					dropAndAdd[name] = targetTC
 				}
+			}
+		}
+		dropped := make(map[string]*ast.TableConstraint, len(baseConstraints))
+		for name, tc := range baseConstraints {
+			if _, ok := targetConstraints[name]; !ok {
+				dropped[name] = tc
 			}
 		}
 		for _, tc := range added {
