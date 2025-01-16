@@ -26,6 +26,7 @@ var _ = []definition{
 	&view{},
 	&changeStream{},
 	&sequence{},
+	&model{},
 }
 
 type definitions struct {
@@ -61,6 +62,8 @@ func newDefinitions(ddls []ast.DDL, errorOnUnsupported bool) (*definitions, erro
 			d.all[newSequenceID(ddl.Name)] = newSequence(ddl)
 		case *ast.CreateVectorIndex:
 			d.all[newVectorIndexID(ddl.Name)] = newVectorIndex(ddl)
+		case *ast.CreateModel:
+			d.all[newModelID(ddl.Name)] = newModel(ddl)
 		default:
 			if errorOnUnsupported {
 				return nil, fmt.Errorf("unsupported DDL: %s", ddl.SQL())
@@ -981,3 +984,53 @@ func (s *sequence) dependsOn() []identifier {
 }
 
 func (s *sequence) onDependencyChange(me, dependency migrationState, m *migration) {}
+
+type model struct {
+	node *ast.CreateModel
+}
+
+func newModel(cm *ast.CreateModel) *model {
+	return &model{cm}
+}
+
+func (m *model) id() identifier {
+	return newModelID(m.node.Name)
+}
+
+func (m *model) astNode() ast.Node {
+	return m.node
+}
+
+func (m *model) add() ast.DDL {
+	return m.node
+}
+
+func (m *model) drop() ast.DDL {
+	return &ast.DropModel{
+		Name: m.node.Name,
+	}
+}
+
+func (m *model) alter(tgt definition, migration *migration) {
+	base := m
+	target := tgt.(*model)
+
+	baseCopy := *base.node
+	targetCopy := *target.node
+	baseCopy.Options = nil
+	targetCopy.Options = nil
+	if equalNode(&baseCopy, &targetCopy) {
+		migration.updateStateIfUndefined(newAlterState(base, target, &ast.AlterModel{Name: target.node.Name, Options: target.node.Options}))
+		return
+	}
+
+	targetCopy = *target.node
+	targetCopy.OrReplace = true
+	migration.updateStateIfUndefined(newAlterState(base, target, &targetCopy))
+}
+
+func (m *model) dependsOn() []identifier {
+	return nil
+}
+
+func (m *model) onDependencyChange(me, dependency migrationState, migration *migration) {}

@@ -22,6 +22,7 @@ var _ = []identifier{
 	viewID{},
 	changeStreamID{},
 	sequenceID{},
+	modelID{},
 }
 
 var _ = []struct{}{
@@ -275,5 +276,21 @@ func (i sequenceID) ID() string {
 }
 
 func (i sequenceID) String() string {
+	return i.ID()
+}
+
+type modelID struct {
+	name string
+}
+
+func newModelID(ident *ast.Ident) modelID {
+	return modelID{ident.Name}
+}
+
+func (i modelID) ID() string {
+	return fmt.Sprintf("Model(%s)", i.name)
+}
+
+func (i modelID) String() string {
 	return i.ID()
 }
