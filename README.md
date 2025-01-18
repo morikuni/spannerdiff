@@ -22,6 +22,7 @@ $ go install github.com/morikuni/spannerdiff/cmd/spannerdiff
 - `CREATE SEQUENCE`
 - `CREATE VECTOR INDEX`
 - `CREATE MODEL`
+- `CREATE PROTO BUNDLE`
 
 ## Colored Output
 

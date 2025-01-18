@@ -23,6 +23,7 @@ var _ = []identifier{
 	changeStreamID{},
 	sequenceID{},
 	modelID{},
+	protoBundleID{},
 }
 
 var _ = []struct{}{
@@ -36,6 +37,8 @@ var _ = []struct{}{
 	isComparable(viewID{}),
 	isComparable(changeStreamID{}),
 	isComparable(sequenceID{}),
+	isComparable(modelID{}),
+	isComparable(protoBundleID{}),
 }
 
 func isComparable[C comparable](_ C) struct{} { return struct{}{} }
@@ -292,5 +295,20 @@ func (i modelID) ID() string {
 }
 
 func (i modelID) String() string {
+	return i.ID()
+}
+
+// Only one proto bundle can be defined in a schema.
+type protoBundleID struct{}
+
+func newProtoBundleID() protoBundleID {
+	return protoBundleID{}
+}
+
+func (i protoBundleID) ID() string {
+	return "ProtoBundle"
+}
+
+func (i protoBundleID) String() string {
 	return i.ID()
 }
