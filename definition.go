@@ -30,6 +30,7 @@ var _ = []definition{
 	&sequence{},
 	&model{},
 	&protoBundle{},
+	&role{},
 }
 
 type definitions struct {
@@ -82,6 +83,8 @@ func newDefinitions(ddls []ast.DDL, errorOnUnsupported bool) (*definitions, erro
 			add(newModel(ddl))
 		case *ast.CreateProtoBundle:
 			add(newProtoBundle(ddl))
+		case *ast.CreateRole:
+			add(newRole(ddl))
 		default:
 			if errorOnUnsupported {
 				return nil, fmt.Errorf("unsupported DDL: %s", ddl.SQL())
@@ -1103,3 +1106,42 @@ func (pb *protoBundle) dependsOn() []identifier {
 }
 
 func (pb *protoBundle) onDependencyChange(me, dependency migrationState, migration *migration) {}
+
+type role struct {
+	node *ast.CreateRole
+}
+
+func newRole(cr *ast.CreateRole) *role {
+	return &role{cr}
+}
+
+func (r *role) id() identifier {
+	return newRoleID(r.node.Name)
+}
+
+func (r *role) astNode() ast.Node {
+	return r.node
+}
+
+func (r *role) add() ast.DDL {
+	return r.node
+}
+
+func (r *role) drop() ast.DDL {
+	return &ast.DropRole{
+		Name: r.node.Name,
+	}
+}
+
+func (r *role) alter(tgt definition, m *migration) {
+	base := r
+	target := tgt.(*role)
+
+	m.updateStateIfUndefined(newDropAndAddState(base, target))
+}
+
+func (r *role) dependsOn() []identifier {
+	return nil
+}
+
+func (r *role) onDependencyChange(me, dependency migrationState, m *migration) {}

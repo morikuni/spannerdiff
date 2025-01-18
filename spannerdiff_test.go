@@ -790,6 +790,18 @@ func TestDiff(t *testing.T) {
 			"",
 			true,
 		},
+		"add role": {
+			``,
+			`CREATE ROLE R1;`,
+			`CREATE ROLE R1;`,
+			false,
+		},
+		"drop role": {
+			`CREATE ROLE R1;`,
+			``,
+			`DROP ROLE R1;`,
+			false,
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			var buf bytes.Buffer

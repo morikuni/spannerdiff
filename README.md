@@ -23,6 +23,7 @@ $ go install github.com/morikuni/spannerdiff/cmd/spannerdiff
 - `CREATE VECTOR INDEX`
 - `CREATE MODEL`
 - `CREATE PROTO BUNDLE`
+- `CREATE ROLE`
 
 ## Colored Output
 

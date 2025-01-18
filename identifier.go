@@ -24,6 +24,7 @@ var _ = []identifier{
 	sequenceID{},
 	modelID{},
 	protoBundleID{},
+	roleID{},
 }
 
 var _ = []struct{}{
@@ -39,6 +40,7 @@ var _ = []struct{}{
 	isComparable(sequenceID{}),
 	isComparable(modelID{}),
 	isComparable(protoBundleID{}),
+	isComparable(roleID{}),
 }
 
 func isComparable[C comparable](_ C) struct{} { return struct{}{} }
@@ -279,5 +281,21 @@ func (i protoBundleID) ID() string {
 }
 
 func (i protoBundleID) String() string {
+	return i.ID()
+}
+
+type roleID struct {
+	name string
+}
+
+func newRoleID(ident *ast.Ident) roleID {
+	return roleID{ident.Name}
+}
+
+func (i roleID) ID() string {
+	return fmt.Sprintf("Role(%s)", i.name)
+}
+
+func (i roleID) String() string {
 	return i.ID()
 }
