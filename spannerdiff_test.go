@@ -766,6 +766,30 @@ func TestDiff(t *testing.T) {
 			CREATE OR REPLACE MODEL M1 INPUT (F1 FLOAT64) OUTPUT (F3 FLOAT64) REMOTE OPTIONS ( endpoint = 'model' );`,
 			false,
 		},
+		"add proto bundle": {
+			``,
+			"CREATE PROTO BUNDLE (`test.proto`)",
+			"CREATE PROTO BUNDLE (`test.proto`)",
+			false,
+		},
+		"drop proto bundle": {
+			"CREATE PROTO BUNDLE (`test.proto`)",
+			``,
+			"DROP PROTO BUNDLE",
+			false,
+		},
+		"alter proto bundle": {
+			"CREATE PROTO BUNDLE (`test.proto`)",
+			"CREATE PROTO BUNDLE (`test2.proto`)",
+			"ALTER PROTO BUNDLE INSERT (`test2.proto`) DELETE (`test.proto`)",
+			false,
+		},
+		"proto bundle twice": {
+			"CREATE PROTO BUNDLE (`test.proto`); CREATE PROTO BUNDLE (`test2.proto`)",
+			"CREATE PROTO BUNDLE (`test.proto`); CREATE PROTO BUNDLE (`test2.proto`)",
+			"",
+			true,
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			var buf bytes.Buffer
