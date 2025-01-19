@@ -3,6 +3,7 @@ package spannerdiff
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/cloudspannerecosystem/memefish/ast"
 )
@@ -40,42 +41,66 @@ func newDefinitions(ddls []ast.DDL, errorOnUnsupported bool) (*definitions, erro
 		make(map[identifier]definition),
 	}
 
+	var duplicated map[identifier]struct{}
+	add := func(def definition) {
+		id := def.id()
+		if _, exists := d.all[id]; exists {
+			if duplicated == nil {
+				duplicated = make(map[identifier]struct{})
+			}
+			duplicated[id] = struct{}{}
+			return
+		}
+		d.all[id] = def
+	}
+
 	for _, ddl := range ddls {
 		switch ddl := ddl.(type) {
 		case *ast.CreateSchema:
-			d.all[newSchemaID(ddl.Name)] = newSchema(ddl)
+			add(newSchema(ddl))
 		case *ast.CreateTable:
 			table := newTable(ddl)
-			d.all[table.id()] = table
-			for id, col := range table.columns() {
-				d.all[id] = newColumn(table, col)
+			add(table)
+			for _, col := range table.columns() {
+				add(newColumn(table, col))
 			}
 		case *ast.CreateIndex:
-			d.all[newIndexID(ddl.Name)] = newIndex(ddl)
+			add(newIndex(ddl))
 		case *ast.CreateSearchIndex:
-			d.all[newSearchIndexID(ddl.Name)] = newSearchIndex(ddl)
+			add(newSearchIndex(ddl))
 		case *ast.CreatePropertyGraph:
-			d.all[newPropertyGraphID(ddl.Name)] = newPropertyGraph(ddl)
+			add(newPropertyGraph(ddl))
 		case *ast.CreateView:
-			d.all[newViewID(ddl.Name)] = newView(ddl)
+			add(newView(ddl))
 		case *ast.CreateChangeStream:
-			d.all[newChangeStreamID(ddl.Name)] = newChangeStream(ddl)
+			add(newChangeStream(ddl))
 		case *ast.CreateSequence:
-			d.all[newSequenceID(ddl.Name)] = newSequence(ddl)
+			add(newSequence(ddl))
 		case *ast.CreateVectorIndex:
-			d.all[newVectorIndexID(ddl.Name)] = newVectorIndex(ddl)
+			add(newVectorIndex(ddl))
 		case *ast.CreateModel:
-			d.all[newModelID(ddl.Name)] = newModel(ddl)
+			add(newModel(ddl))
 		case *ast.CreateProtoBundle:
-			if _, exists := d.all[newProtoBundleID()]; exists {
-				return nil, errors.New("CREATE PROTO BUNDLE can be used only once")
-			}
-			d.all[newProtoBundleID()] = newProtoBundle(ddl)
+			add(newProtoBundle(ddl))
 		default:
 			if errorOnUnsupported {
 				return nil, fmt.Errorf("unsupported DDL: %s", ddl.SQL())
 			}
 		}
+	}
+
+	if duplicated != nil {
+		var b strings.Builder
+		b.WriteString("duplicated definition found: ")
+		var count int
+		for id := range duplicated {
+			if count > 0 {
+				b.WriteString(", ")
+			}
+			b.WriteString(id.String())
+			count++
+		}
+		return nil, errors.New(b.String())
 	}
 
 	return d, nil
