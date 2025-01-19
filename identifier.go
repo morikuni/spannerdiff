@@ -43,37 +43,6 @@ var _ = []struct{}{
 
 func isComparable[C comparable](_ C) struct{} { return struct{}{} }
 
-type optional[T any] struct {
-	value T
-	valid bool
-}
-
-func none[T comparable]() optional[T] {
-	return optional[T]{}
-}
-
-func some[T comparable](value T) optional[T] {
-	return optional[T]{value, true}
-}
-
-func (o optional[T]) get() (T, bool) {
-	return o.value, o.valid
-}
-
-func (o optional[T]) mustGet() T {
-	if o.valid {
-		return o.value
-	}
-	panic("optional value is not valid")
-}
-
-func (o optional[T]) or(a optional[T]) optional[T] {
-	if o.valid {
-		return o
-	}
-	return a
-}
-
 type schemaID struct {
 	name string
 }
