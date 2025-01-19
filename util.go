@@ -9,6 +9,37 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
+type optional[T any] struct {
+	value T
+	valid bool
+}
+
+func none[T comparable]() optional[T] {
+	return optional[T]{}
+}
+
+func some[T comparable](value T) optional[T] {
+	return optional[T]{value, true}
+}
+
+func (o optional[T]) get() (T, bool) {
+	return o.value, o.valid
+}
+
+func (o optional[T]) mustGet() T {
+	if o.valid {
+		return o.value
+	}
+	panic("optional value is not valid")
+}
+
+func (o optional[T]) or(a optional[T]) optional[T] {
+	if o.valid {
+		return o
+	}
+	return a
+}
+
 func equalNode(a, b ast.Node) bool {
 	return cmp.Equal(a, b,
 		cmpopts.IgnoreTypes(token.Pos(0)),
