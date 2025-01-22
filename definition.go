@@ -1553,7 +1553,7 @@ func (g *grant) dependsOn() []identifier {
 }
 func (g *grant) onDependencyChange(me, dependency migrationState, m *migration) {
 	switch dep := dependency.definition().(type) {
-	case *role, *table, *view, *changeStream:
+	case *role, *table, *column, *view, *changeStream:
 		switch dependency.kind {
 		case migrationKindDropAndAdd:
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
