@@ -24,6 +24,7 @@ $ go install github.com/morikuni/spannerdiff/cmd/spannerdiff
 - `CREATE MODEL`
 - `CREATE PROTO BUNDLE`
 - `CREATE ROLE`
+- `GRANT`
 
 ## Colored Output
 
