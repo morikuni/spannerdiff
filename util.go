@@ -125,3 +125,34 @@ type tuple struct {
 func tupleOf(a, b columnType) tuple {
 	return tuple{a, b}
 }
+
+func unique[T comparable](is []T) []T {
+	m := make(map[T]struct{})
+	result := make([]T, 0, len(is))
+	for _, i := range is {
+		if _, ok := m[i]; !ok {
+			m[i] = struct{}{}
+			result = append(result, i)
+		}
+	}
+	return result
+}
+
+func uniqueByFunc[A any, B comparable](is []A, f func(A) B) []A {
+	m := make(map[B]A)
+	result := make([]A, 0, len(is))
+	for _, i := range is {
+		key := f(i)
+		if _, ok := m[key]; !ok {
+			m[key] = i
+			result = append(result, i)
+		}
+	}
+	return result
+}
+
+func uniqueIdent(is []*ast.Ident) []*ast.Ident {
+	return uniqueByFunc(is, func(i *ast.Ident) string {
+		return i.Name
+	})
+}

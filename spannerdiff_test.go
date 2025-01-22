@@ -737,15 +737,18 @@ func TestDiff(t *testing.T) {
 		},
 		"add model": {
 			``,
-			`CREATE MODEL M1 INPUT (F1 FLOAT64) OUTPUT (F2 FLOAT64) REMOTE OPTIONS ( endpoint = 'model' );`,
-			`CREATE MODEL M1 INPUT (F1 FLOAT64) OUTPUT (F2 FLOAT64) REMOTE OPTIONS ( endpoint = 'model' );`,
+			`
+			CREATE MODEL M1 INPUT (F1 FLOAT64) OUTPUT (F2 FLOAT64) REMOTE OPTIONS ( endpoint = 'model' );`,
+			`
+			CREATE MODEL M1 INPUT (F1 FLOAT64) OUTPUT (F2 FLOAT64) REMOTE OPTIONS ( endpoint = 'model' );`,
 			false,
 		},
 		"drop model": {
 			`
 			CREATE MODEL M1 INPUT (F1 FLOAT64) OUTPUT (F2 FLOAT64) REMOTE OPTIONS ( endpoint = 'model' );`,
 			``,
-			`DROP MODEL M1;`,
+			`
+			DROP MODEL M1;`,
 			false,
 		},
 		"alter model": {
@@ -792,14 +795,111 @@ func TestDiff(t *testing.T) {
 		},
 		"add role": {
 			``,
-			`CREATE ROLE R1;`,
+			`
+			CREATE ROLE R1;`,
 			`CREATE ROLE R1;`,
 			false,
 		},
 		"drop role": {
-			`CREATE ROLE R1;`,
+			`
+			CREATE ROLE R1;`,
 			``,
-			`DROP ROLE R1;`,
+			`
+			DROP ROLE R1;`,
+			false,
+		},
+		"add table grant": {
+			``,
+			`
+			GRANT SELECT, UPDATE ON TABLE T1 TO ROLE R1;`,
+			`
+			GRANT SELECT, UPDATE ON TABLE T1 TO ROLE R1;`,
+			false,
+		},
+		"drop table grant": {
+			`
+			GRANT SELECT, UPDATE ON TABLE T1 TO ROLE R1;`,
+			``,
+			`
+			REVOKE SELECT, UPDATE ON TABLE T1 FROM ROLE R1;`,
+			false,
+		},
+		"alter table grant": {
+			`
+			GRANT SELECT, SELECT(T1_C1), UPDATE, INSERT(T1_C1, T1_C2) ON TABLE T1 TO ROLE R1;
+			GRANT UPDATE, DELETE ON TABLE T1 TO ROLE R2;`,
+			`
+			GRANT SELECT(T1_C2), DELETE ON TABLE T1 TO ROLE R1;
+			GRANT SELECT, UPDATE(T1_C1, T1_C2), UPDATE, INSERT ON TABLE T1 TO ROLE R2;`,
+			`
+			REVOKE SELECT, SELECT(T1_C1), UPDATE, INSERT(T1_C1, T1_C2) ON TABLE T1 FROM ROLE R1;
+			GRANT SELECT(T1_C2), DELETE ON TABLE T1 TO ROLE R1;
+			REVOKE DELETE ON TABLE T1 FROM ROLE R2;
+			GRANT SELECT, UPDATE(T1_C1, T1_C2), INSERT ON TABLE T1 TO ROLE R2;`,
+			false,
+		},
+		"add view grant": {
+			``,
+			`
+			GRANT SELECT ON VIEW V1 TO ROLE R1;`,
+			`
+			GRANT SELECT ON VIEW V1 TO ROLE R1;`,
+			false,
+		},
+		"drop view grant": {
+			`
+			GRANT SELECT ON VIEW V1 TO ROLE R1;`,
+			``,
+			`
+			REVOKE SELECT ON VIEW V1 FROM ROLE R1;`,
+			false,
+		},
+		"add change stream grant": {
+			``,
+			`
+			GRANT SELECT ON CHANGE STREAM S1 TO ROLE R1;`,
+			`
+			GRANT SELECT ON CHANGE STREAM S1 TO ROLE R1;`,
+			false,
+		},
+		"drop change stream grant": {
+			`
+			GRANT SELECT ON CHANGE STREAM S1 TO ROLE R1;`,
+			``,
+			`
+			REVOKE SELECT ON CHANGE STREAM S1 FROM ROLE R1;`,
+			false,
+		},
+		"add table function grant": {
+			``,
+			`
+			GRANT EXECUTE ON TABLE FUNCTION READ_CS1 TO ROLE R1;`,
+			`
+			GRANT EXECUTE ON TABLE FUNCTION READ_CS1 TO ROLE R1;`,
+			false,
+		},
+		"drop table function grant": {
+			`
+			GRANT EXECUTE ON TABLE FUNCTION READ_CS1 TO ROLE R1;`,
+			``,
+			`
+			REVOKE EXECUTE ON TABLE FUNCTION READ_CS1 FROM ROLE R1;`,
+			false,
+		},
+		"add role grant": {
+			``,
+			`
+			GRANT ROLE R2 TO ROLE R1;`,
+			`
+			GRANT ROLE R2 TO ROLE R1;`,
+			false,
+		},
+		"drop role grant": {
+			`
+			GRANT ROLE R2 TO ROLE R1;`,
+			``,
+			`
+			REVOKE ROLE R2 FROM ROLE R1;`,
 			false,
 		},
 	} {

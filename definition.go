@@ -3,6 +3,7 @@ package spannerdiff
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/cloudspannerecosystem/memefish/ast"
@@ -31,6 +32,15 @@ var _ = []definition{
 	&model{},
 	&protoBundle{},
 	&role{},
+	&grant{},
+}
+
+type merger interface {
+	merge(other definition) (couldMerge bool)
+}
+
+var _ = []merger{
+	&grant{},
 }
 
 type definitions struct {
@@ -45,7 +55,10 @@ func newDefinitions(ddls []ast.DDL, errorOnUnsupported bool) (*definitions, erro
 	var duplicated map[identifier]struct{}
 	add := func(def definition) {
 		id := def.id()
-		if _, exists := d.all[id]; exists {
+		if old, exists := d.all[id]; exists {
+			if m, ok := old.(merger); ok && m.merge(def) {
+				return
+			}
 			if duplicated == nil {
 				duplicated = make(map[identifier]struct{})
 			}
@@ -85,6 +98,10 @@ func newDefinitions(ddls []ast.DDL, errorOnUnsupported bool) (*definitions, erro
 			add(newProtoBundle(ddl))
 		case *ast.CreateRole:
 			add(newRole(ddl))
+		case *ast.Grant:
+			for _, g := range newGrant(ddl) {
+				add(g)
+			}
 		default:
 			if errorOnUnsupported {
 				return nil, fmt.Errorf("unsupported DDL: %s", ddl.SQL())
@@ -816,7 +833,7 @@ func newView(cv *ast.CreateView) *view {
 }
 
 func (v *view) id() identifier {
-	return newViewID(v.node.Name)
+	return newViewIDFromPath(v.node.Name)
 }
 
 func (v *view) astNode() ast.Node {
@@ -1145,3 +1162,403 @@ func (r *role) dependsOn() []identifier {
 }
 
 func (r *role) onDependencyChange(me, dependency migrationState, m *migration) {}
+
+type grant struct {
+	node    *ast.Grant
+	grantID grantID
+}
+
+func newGrant(g *ast.Grant) []definition {
+	var grants []definition
+	switch t := g.Privilege.(type) {
+	case *ast.PrivilegeOnTable:
+		for _, r := range g.Roles {
+			for _, tableName := range t.Names {
+				grants = append(
+					grants,
+					&grant{
+						&ast.Grant{
+							Roles: []*ast.Ident{r},
+							Privilege: &ast.PrivilegeOnTable{
+								Privileges: t.Privileges,
+								Names:      []*ast.Ident{tableName},
+							},
+						},
+						newGrantID(newRoleID(r), newTableIDFromIdent(tableName)),
+					},
+				)
+			}
+		}
+	case *ast.SelectPrivilegeOnView:
+		for _, r := range g.Roles {
+			for _, viewName := range t.Names {
+				grants = append(grants, &grant{
+					&ast.Grant{
+						Roles: []*ast.Ident{r},
+						Privilege: &ast.SelectPrivilegeOnView{
+							Names: []*ast.Ident{viewName},
+						},
+					},
+					newGrantID(newRoleID(r), newViewIDFromIdent(viewName)),
+				})
+			}
+		}
+	case *ast.SelectPrivilegeOnChangeStream:
+		for _, r := range g.Roles {
+			for _, csName := range t.Names {
+				grants = append(grants, &grant{
+					&ast.Grant{
+						Roles: []*ast.Ident{r},
+						Privilege: &ast.SelectPrivilegeOnChangeStream{
+							Names: []*ast.Ident{csName},
+						},
+					},
+					newGrantID(newRoleID(r), newChangeStreamID(csName)),
+				})
+			}
+		}
+	case *ast.ExecutePrivilegeOnTableFunction:
+		for _, r := range g.Roles {
+			for _, csrfName := range t.Names {
+				grants = append(grants, &grant{
+					&ast.Grant{
+						Roles: []*ast.Ident{r},
+						Privilege: &ast.ExecutePrivilegeOnTableFunction{
+							Names: []*ast.Ident{csrfName},
+						},
+					},
+					newGrantID(newRoleID(r), newChangeStreamReadFunctionID(csrfName)),
+				})
+			}
+		}
+	case *ast.RolePrivilege:
+		for _, r := range g.Roles {
+			for _, roleName := range t.Names {
+				grants = append(grants, &grant{
+					&ast.Grant{
+						Roles: []*ast.Ident{r},
+						Privilege: &ast.RolePrivilege{
+							Names: []*ast.Ident{roleName},
+						},
+					},
+					newGrantID(newRoleID(r), newRoleID(roleName)),
+				})
+			}
+		}
+	default:
+		panic(fmt.Sprintf("unexpected grant type: %T: %s", t, g.SQL()))
+	}
+	return grants
+}
+
+func (g *grant) merge(other definition) bool {
+	oth := other.(*grant)
+	switch p1 := g.node.Privilege.(type) {
+	case *ast.PrivilegeOnTable:
+		p2 := oth.node.Privilege.(*ast.PrivilegeOnTable)
+		var hasSelect, hasUpdate, hasInsert, hasDelete bool
+		var selectWithColumn, updateWithColumn, insertWithColumn []*ast.Ident
+		for _, p := range append(p1.Privileges, p2.Privileges...) {
+			switch t := p.(type) {
+			case *ast.SelectPrivilege:
+				if len(t.Columns) == 0 {
+					hasSelect = true
+				} else {
+					selectWithColumn = append(selectWithColumn, t.Columns...)
+				}
+			case *ast.UpdatePrivilege:
+				if len(t.Columns) == 0 {
+					hasUpdate = true
+				} else {
+					updateWithColumn = append(updateWithColumn, t.Columns...)
+				}
+			case *ast.InsertPrivilege:
+				if len(t.Columns) == 0 {
+					hasInsert = true
+				} else {
+					insertWithColumn = append(insertWithColumn, t.Columns...)
+				}
+			case *ast.DeletePrivilege:
+				hasDelete = true
+			}
+		}
+		selectWithColumn = uniqueIdent(selectWithColumn)
+		updateWithColumn = uniqueIdent(updateWithColumn)
+		insertWithColumn = uniqueIdent(insertWithColumn)
+		var privileges []ast.TablePrivilege
+		if hasSelect {
+			privileges = append(privileges, &ast.SelectPrivilege{})
+		}
+		if len(selectWithColumn) > 0 {
+			privileges = append(privileges, &ast.SelectPrivilege{Columns: selectWithColumn})
+		}
+		if hasUpdate {
+			privileges = append(privileges, &ast.UpdatePrivilege{})
+		}
+		if len(updateWithColumn) > 0 {
+			privileges = append(privileges, &ast.UpdatePrivilege{Columns: updateWithColumn})
+		}
+		if hasInsert {
+			privileges = append(privileges, &ast.InsertPrivilege{})
+		}
+		if len(insertWithColumn) > 0 {
+			privileges = append(privileges, &ast.InsertPrivilege{Columns: insertWithColumn})
+		}
+		if hasDelete {
+			privileges = append(privileges, &ast.DeletePrivilege{})
+		}
+		p1.Privileges = privileges
+		return true
+	case *ast.SelectPrivilegeOnView, *ast.SelectPrivilegeOnChangeStream, *ast.ExecutePrivilegeOnTableFunction, *ast.RolePrivilege:
+		// no additional parameters exist
+		return true
+	default:
+		panic(fmt.Sprintf("unexpected grant type: %T: %s", g.node.Privilege, g.node.SQL()))
+	}
+}
+
+func (g *grant) id() identifier {
+	return g.grantID
+}
+
+func (g *grant) astNode() ast.Node {
+	return g.node
+}
+
+func (g *grant) add() ast.DDL {
+	return g.node
+}
+
+func (g *grant) drop() ast.DDL {
+	return &ast.Revoke{
+		Roles:     g.node.Roles,
+		Privilege: g.node.Privilege,
+	}
+}
+
+func (g *grant) alter(tgt definition, m *migration) {
+	base := g
+	target := tgt.(*grant)
+
+	switch baseP := base.node.Privilege.(type) {
+	case *ast.PrivilegeOnTable:
+		targetP := target.node.Privilege.(*ast.PrivilegeOnTable)
+		processPrivilegeDetails := func(privileges []ast.TablePrivilege) (hasSelect, hasUpdate, hasInsert, hasDelete bool, selectColumnIDs, updateColumnIDs, insertColumnIDs []columnID, selectWithColumn, updateWithColumn, insertWithColumn map[columnID]*ast.Ident) {
+			selectWithColumn = make(map[columnID]*ast.Ident)
+			updateWithColumn = make(map[columnID]*ast.Ident)
+			insertWithColumn = make(map[columnID]*ast.Ident)
+
+			for _, p := range privileges {
+				switch t := p.(type) {
+				case *ast.SelectPrivilege:
+					if len(t.Columns) == 0 {
+						hasSelect = true
+					} else {
+						for _, col := range t.Columns {
+							colID := newColumnID(newTableIDFromIdent(baseP.Names[0]), col)
+							if _, ok := selectWithColumn[colID]; !ok {
+								selectWithColumn[colID] = col
+								selectColumnIDs = append(selectColumnIDs, colID)
+							}
+						}
+					}
+				case *ast.UpdatePrivilege:
+					if len(t.Columns) == 0 {
+						hasUpdate = true
+					} else {
+						for _, col := range t.Columns {
+							colID := newColumnID(newTableIDFromIdent(baseP.Names[0]), col)
+							if _, ok := updateWithColumn[colID]; !ok {
+								updateWithColumn[colID] = col
+								updateColumnIDs = append(updateColumnIDs, colID)
+							}
+						}
+					}
+				case *ast.InsertPrivilege:
+					if len(t.Columns) == 0 {
+						hasInsert = true
+					} else {
+						for _, col := range t.Columns {
+							colID := newColumnID(newTableIDFromIdent(baseP.Names[0]), col)
+							if _, ok := insertWithColumn[colID]; !ok {
+								insertWithColumn[colID] = col
+								insertColumnIDs = append(insertColumnIDs, colID)
+							}
+						}
+					}
+				case *ast.DeletePrivilege:
+					hasDelete = true
+				}
+			}
+
+			return hasSelect, hasUpdate, hasInsert, hasDelete, selectColumnIDs, updateColumnIDs, insertColumnIDs, selectWithColumn, updateWithColumn, insertWithColumn
+		}
+
+		baseHasSelect, baseHasUpdate, baseHasInsert, baseHasDelete, baseSelectColumIDs, baseUpdateColumnIDs, baseInsertColumnIDs, baseSelectWithColumn, baseUpdateWithColumn, baseInsertWithColumn := processPrivilegeDetails(baseP.Privileges)
+		targetHasSelect, targetHasUpdate, targetHasInsert, targetHasDelete, targetSelectColumIDs, targetUpdateColumnIDs, targetInsertColumnIDs, targetSelectWithColumn, targetUpdateWithColumn, targetInsertWithColumn := processPrivilegeDetails(targetP.Privileges)
+
+		var added, dropped []ast.TablePrivilege
+		if baseHasSelect != targetHasSelect {
+			if targetHasSelect {
+				added = append(added, &ast.SelectPrivilege{})
+			} else {
+				dropped = append(dropped, &ast.SelectPrivilege{})
+			}
+		}
+		if !slices.Equal(baseSelectColumIDs, targetSelectColumIDs) {
+			var addedColumns, droppedColumns []*ast.Ident
+			for _, colID := range targetSelectColumIDs {
+				if _, ok := baseSelectWithColumn[colID]; !ok {
+					addedColumns = append(addedColumns, targetSelectWithColumn[colID])
+				}
+			}
+			for _, colID := range baseSelectColumIDs {
+				if _, ok := targetSelectWithColumn[colID]; !ok {
+					droppedColumns = append(droppedColumns, baseSelectWithColumn[colID])
+				}
+			}
+			if len(addedColumns) > 0 {
+				added = append(added, &ast.SelectPrivilege{Columns: addedColumns})
+			}
+			if len(droppedColumns) > 0 {
+				dropped = append(dropped, &ast.SelectPrivilege{Columns: droppedColumns})
+			}
+		}
+		if baseHasUpdate != targetHasUpdate {
+			if targetHasUpdate {
+				added = append(added, &ast.UpdatePrivilege{})
+			} else {
+				dropped = append(dropped, &ast.UpdatePrivilege{})
+			}
+		}
+		if !slices.Equal(baseUpdateColumnIDs, targetUpdateColumnIDs) {
+			var addedColumns, droppedColumns []*ast.Ident
+			for _, colID := range targetUpdateColumnIDs {
+				if _, ok := baseUpdateWithColumn[colID]; !ok {
+					addedColumns = append(addedColumns, targetUpdateWithColumn[colID])
+				}
+			}
+			for _, colID := range baseUpdateColumnIDs {
+				if _, ok := targetUpdateWithColumn[colID]; !ok {
+					droppedColumns = append(droppedColumns, baseUpdateWithColumn[colID])
+				}
+			}
+			if len(addedColumns) > 0 {
+				added = append(added, &ast.UpdatePrivilege{Columns: addedColumns})
+			}
+			if len(droppedColumns) > 0 {
+				dropped = append(dropped, &ast.UpdatePrivilege{Columns: droppedColumns})
+			}
+		}
+		if baseHasInsert != targetHasInsert {
+			if targetHasInsert {
+				added = append(added, &ast.InsertPrivilege{})
+			} else {
+				dropped = append(dropped, &ast.InsertPrivilege{})
+			}
+		}
+		if !slices.Equal(baseInsertColumnIDs, targetInsertColumnIDs) {
+			var addedColumns, droppedColumns []*ast.Ident
+			for _, colID := range targetInsertColumnIDs {
+				if _, ok := baseInsertWithColumn[colID]; !ok {
+					addedColumns = append(addedColumns, targetInsertWithColumn[colID])
+				}
+			}
+			for _, colID := range baseInsertColumnIDs {
+				if _, ok := targetInsertWithColumn[colID]; !ok {
+					droppedColumns = append(droppedColumns, baseInsertWithColumn[colID])
+				}
+			}
+			if len(addedColumns) > 0 {
+				added = append(added, &ast.InsertPrivilege{Columns: addedColumns})
+			}
+			if len(droppedColumns) > 0 {
+				dropped = append(dropped, &ast.InsertPrivilege{Columns: droppedColumns})
+			}
+		}
+		if baseHasDelete != targetHasDelete {
+			if targetHasDelete {
+				added = append(added, &ast.DeletePrivilege{})
+			} else {
+				dropped = append(dropped, &ast.DeletePrivilege{})
+			}
+		}
+		var ddls []ast.DDL
+		if len(dropped) > 0 {
+			ddls = append(ddls, &ast.Revoke{
+				Roles:     target.node.Roles,
+				Privilege: &ast.PrivilegeOnTable{Privileges: dropped, Names: targetP.Names},
+			})
+		}
+		if len(added) > 0 {
+			ddls = append(ddls, &ast.Grant{
+				Roles:     target.node.Roles,
+				Privilege: &ast.PrivilegeOnTable{Privileges: added, Names: targetP.Names},
+			})
+		}
+
+		m.updateStateIfUndefined(newAlterState(base, target, ddls...))
+	case *ast.SelectPrivilegeOnView, *ast.SelectPrivilegeOnChangeStream, *ast.ExecutePrivilegeOnTableFunction, *ast.RolePrivilege:
+		// never come here, because grant type handles only single target name (1 view, change stream, table function or role per grant type)
+		panic(fmt.Sprintf("unsupported GRANT alteration on: %s", target.node.SQL()))
+	}
+}
+
+func (g *grant) dependsOn() []identifier {
+	var ids []identifier
+	for _, role := range g.node.Roles {
+		ids = append(ids, newRoleID(role))
+	}
+	switch p := g.node.Privilege.(type) {
+	case *ast.PrivilegeOnTable:
+		for _, tableName := range p.Names {
+			ids = append(ids, newTableIDFromIdent(tableName))
+		}
+		for _, tp := range p.Privileges {
+			switch t := tp.(type) {
+			case *ast.SelectPrivilege:
+				for _, col := range t.Columns {
+					ids = append(ids, newColumnID(newTableIDFromIdent(p.Names[0]), col))
+				}
+			case *ast.UpdatePrivilege:
+				for _, col := range t.Columns {
+					ids = append(ids, newColumnID(newTableIDFromIdent(p.Names[0]), col))
+				}
+			case *ast.InsertPrivilege:
+				for _, col := range t.Columns {
+					ids = append(ids, newColumnID(newTableIDFromIdent(p.Names[0]), col))
+				}
+			case *ast.DeletePrivilege:
+				// none
+			default:
+				panic(fmt.Sprintf("unexpected privilege type: %T", tp))
+			}
+		}
+	case *ast.SelectPrivilegeOnView:
+		for _, viewName := range p.Names {
+			ids = append(ids, newViewIDFromIdent(viewName))
+		}
+	case *ast.SelectPrivilegeOnChangeStream:
+		for _, csName := range p.Names {
+			ids = append(ids, newChangeStreamID(csName))
+		}
+	case *ast.ExecutePrivilegeOnTableFunction:
+		// none
+	case *ast.RolePrivilege:
+		for _, roleName := range p.Names {
+			ids = append(ids, newRoleID(roleName))
+		}
+	}
+	return ids
+}
+func (g *grant) onDependencyChange(me, dependency migrationState, m *migration) {
+	switch dep := dependency.definition().(type) {
+	case *role, *table, *view, *changeStream:
+		switch dependency.kind {
+		case migrationKindDropAndAdd:
+			m.updateState(me.updateKind(migrationKindDropAndAdd))
+		}
+	default:
+		panic(fmt.Sprintf("unexpected dependOn type on grant: %T", dep))
+	}
+}
