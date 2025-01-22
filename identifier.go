@@ -24,6 +24,8 @@ var _ = []identifier{
 	sequenceID{},
 	modelID{},
 	protoBundleID{},
+	roleID{},
+	grantID{},
 }
 
 var _ = []struct{}{
@@ -39,6 +41,7 @@ var _ = []struct{}{
 	isComparable(sequenceID{}),
 	isComparable(modelID{}),
 	isComparable(protoBundleID{}),
+	isComparable(roleID{}),
 }
 
 func isComparable[C comparable](_ C) struct{} { return struct{}{} }
@@ -186,7 +189,7 @@ type viewID struct {
 	name   string
 }
 
-func newViewID(path *ast.Path) viewID {
+func newViewIDFromPath(path *ast.Path) viewID {
 	switch len(path.Idents) {
 	case 1:
 		return viewID{"", path.Idents[0].Name}
@@ -195,6 +198,10 @@ func newViewID(path *ast.Path) viewID {
 	default:
 		panic(fmt.Sprintf("unexpected view name: %s", path.SQL()))
 	}
+}
+
+func newViewIDFromIdent(ident *ast.Ident) viewID {
+	return newViewIDFromPath(&ast.Path{Idents: []*ast.Ident{ident}})
 }
 
 func (i viewID) ID() string {
@@ -279,5 +286,58 @@ func (i protoBundleID) ID() string {
 }
 
 func (i protoBundleID) String() string {
+	return i.ID()
+}
+
+type roleID struct {
+	name string
+}
+
+func newRoleID(ident *ast.Ident) roleID {
+	return roleID{ident.Name}
+}
+
+func (i roleID) ID() string {
+	return fmt.Sprintf("Role(%s)", i.name)
+}
+
+func (i roleID) String() string {
+	return i.ID()
+}
+
+type grantID struct {
+	roleID      roleID
+	privilegeID identifier
+}
+
+type grantPrivilegeID interface {
+	tableID | viewID | changeStreamID | roleID | changeStreamReadFunctionID
+}
+
+func newGrantID[ID grantPrivilegeID](roleID roleID, privilegeID ID) grantID {
+	return grantID{roleID, identifier(privilegeID)}
+}
+
+func (i grantID) ID() string {
+	return fmt.Sprintf("Grant(%s):%s", i.roleID.ID(), i.privilegeID.ID())
+}
+
+func (i grantID) String() string {
+	return i.ID()
+}
+
+type changeStreamReadFunctionID struct {
+	name string
+}
+
+func newChangeStreamReadFunctionID(name *ast.Ident) changeStreamReadFunctionID {
+	return changeStreamReadFunctionID{name.Name}
+}
+
+func (i changeStreamReadFunctionID) ID() string {
+	return fmt.Sprintf("ChangeStreamReadFunction(%s)", i.name)
+}
+
+func (i changeStreamReadFunctionID) String() string {
 	return i.ID()
 }

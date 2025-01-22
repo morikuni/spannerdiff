@@ -180,7 +180,7 @@ func (m *migration) initializeState(id identifier) {
 	}
 
 	m.states[def.id()] = newInitialState(baseOpt, targetOpt)
-	for _, id := range def.dependsOn() {
+	for _, id := range unique(def.dependsOn()) {
 		m.dependOn[id] = append(m.dependOn[id], def)
 	}
 }
