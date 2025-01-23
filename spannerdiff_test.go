@@ -18,20 +18,25 @@ func TestDiff(t *testing.T) {
 	}{
 		"unsupported ddl": {
 			``,
-			`ALTER INDEX IDX1 ADD STORED COLUMN T1_I1;`,
+			`
+			ALTER INDEX IDX1 ADD STORED COLUMN T1_I1;`,
 			``,
 			true,
 		},
 		"add schema": {
 			``,
-			`CREATE SCHEMA S1;`,
-			`CREATE SCHEMA S1;`,
+			`
+			CREATE SCHEMA S1;`,
+			`
+			CREATE SCHEMA S1;`,
 			false,
 		},
 		"drop schema": {
-			`CREATE SCHEMA S1;`,
+			`
+			CREATE SCHEMA S1;`,
 			``,
-			`DROP SCHEMA S1;`,
+			`
+			DROP SCHEMA S1;`,
 			false,
 		},
 		"add table": {
@@ -52,7 +57,8 @@ func TestDiff(t *testing.T) {
 			  T1_I1 INT64 NOT NULL,
 			) PRIMARY KEY(T1_I1)`,
 			``,
-			`DROP TABLE T1;`,
+			`
+			DROP TABLE T1;`,
 			false,
 		},
 		"recreate table": {
@@ -76,48 +82,32 @@ func TestDiff(t *testing.T) {
 			CREATE TABLE T1 (
 			  T1_I1 INT64 NOT NULL,
 			  T1_S1 STRING(MAX)
-			) PRIMARY KEY(T1_I1);
-			CREATE TABLE T2 (
-			  T2_I1 INT64 NOT NULL,
-			  T2_S1 STRING(MAX)
-			) PRIMARY KEY(T2_I1)`,
+			) PRIMARY KEY(T1_I1)`,
 			`
 			CREATE TABLE T1 (
 			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX)
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
 			) PRIMARY KEY(T1_I1);
-			CREATE TABLE T2 (
-			  T2_I1 INT64 NOT NULL,
-			  T2_S1 STRING(MAX),
-			  CONSTRAINT FK1 FOREIGN KEY (T2_S1) REFERENCES T1 (T1_S1),
-			) PRIMARY KEY(T2_I1);
 			`,
 			`
-			ALTER TABLE T2 ADD CONSTRAINT FK1 FOREIGN KEY (T2_S1) REFERENCES T1(T1_S1);`,
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2(T2_S1);`,
 			false,
 		},
 		"drop foreign key": {
 			`
 			CREATE TABLE T1 (
 			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX)
-			) PRIMARY KEY(T1_I1);
-			CREATE TABLE T2 (
-			  T2_I1 INT64 NOT NULL,
-			  T2_S1 STRING(MAX),
-			  CONSTRAINT FK1 FOREIGN KEY (T2_S1) REFERENCES T1 (T1_S1),
-			) PRIMARY KEY(T2_I1)`,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1);`,
 			`
 			CREATE TABLE T1 (
 			  T1_I1 INT64 NOT NULL,
 			  T1_S1 STRING(MAX)
-			) PRIMARY KEY(T1_I1);
-			CREATE TABLE T2 (
-			  T2_I1 INT64 NOT NULL,
-			  T2_S1 STRING(MAX)
-			) PRIMARY KEY(T2_I1)`,
+			) PRIMARY KEY(T1_I1);`,
 			`
-			ALTER TABLE T2 DROP CONSTRAINT FK1;`,
+			ALTER TABLE T1 DROP CONSTRAINT FK1;`,
 			false,
 		},
 		"recreate foreign key": {
@@ -125,25 +115,17 @@ func TestDiff(t *testing.T) {
 			CREATE TABLE T1 (
 			  T1_I1 INT64 NOT NULL,
 			  T1_S1 STRING(MAX),
-			) PRIMARY KEY(T1_I1);
-			CREATE TABLE T2 (
-			  T2_I1 INT64 NOT NULL,
-			  T2_S1 STRING(MAX),
-			  CONSTRAINT FK1 FOREIGN KEY (T2_I1) REFERENCES T1 (T1_I1),
-			) PRIMARY KEY(T2_I1)`,
+			  CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1),
+			) PRIMARY KEY(T1_I1)`,
 			`
 			CREATE TABLE T1 (
 			  T1_I1 INT64 NOT NULL,
 			  T1_S1 STRING(MAX),
-			) PRIMARY KEY(T1_I1);
-			CREATE TABLE T2 (
-			  T2_I1 INT64 NOT NULL,
-			  T2_S1 STRING(MAX),
-			  CONSTRAINT FK1 FOREIGN KEY (T2_S1) REFERENCES T1 (T1_S1),
-			) PRIMARY KEY(T2_I1)`,
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
 			`
-			ALTER TABLE T2 DROP CONSTRAINT FK1;
-			ALTER TABLE T2 ADD CONSTRAINT FK1 FOREIGN KEY (T2_S1) REFERENCES T1(T1_S1);`,
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2(T2_S1);`,
 			false,
 		},
 		"add check constraint": {
@@ -156,7 +138,8 @@ func TestDiff(t *testing.T) {
 			  T1_I1 INT64 NOT NULL,
 			  CONSTRAINT CHK1 CHECK (T1_I1 > 0)
 			) PRIMARY KEY(T1_I1)`,
-			`ALTER TABLE T1 ADD CONSTRAINT CHK1 CHECK (T1_I1 > 0);`,
+			`
+			ALTER TABLE T1 ADD CONSTRAINT CHK1 CHECK (T1_I1 > 0);`,
 			false,
 		},
 		"drop check constraint": {
@@ -169,7 +152,8 @@ func TestDiff(t *testing.T) {
 			CREATE TABLE T1 (
 			  T1_I1 INT64 NOT NULL,
 			) PRIMARY KEY(T1_I1)`,
-			`ALTER TABLE T1 DROP CONSTRAINT CHK1;`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT CHK1;`,
 			false,
 		},
 		"recreate check constraint": {
@@ -199,7 +183,8 @@ func TestDiff(t *testing.T) {
 			  T1_I1 INT64 NOT NULL,
 			  T1_TS1 TIMESTAMP NOT NULL,
 			) PRIMARY KEY(T1_I1), ROW DELETION POLICY (OLDER_THAN(T1_TS1, INTERVAL 1 DAY));`,
-			`ALTER TABLE T1 ADD ROW DELETION POLICY (OLDER_THAN(T1_TS1, INTERVAL 1 DAY));`,
+			`
+			ALTER TABLE T1 ADD ROW DELETION POLICY (OLDER_THAN(T1_TS1, INTERVAL 1 DAY));`,
 			false,
 		},
 		"drop row deletion policy": {
@@ -213,7 +198,8 @@ func TestDiff(t *testing.T) {
 			  T1_I1 INT64 NOT NULL,
 			  T1_TS1 TIMESTAMP NOT NULL,
 			) PRIMARY KEY(T1_I1)`,
-			`ALTER TABLE T1 DROP ROW DELETION POLICY;`,
+			`
+			ALTER TABLE T1 DROP ROW DELETION POLICY;`,
 			false,
 		},
 		"replace row deletion policy": {
@@ -241,7 +227,8 @@ func TestDiff(t *testing.T) {
 			  T1_I1 INT64 NOT NULL,
 			  SYNONYM(T2)
 			) PRIMARY KEY (T1_I1)`,
-			`ALTER TABLE T1 ADD SYNONYM T2;`,
+			`
+			ALTER TABLE T1 ADD SYNONYM T2;`,
 			false,
 		},
 		"drop synonym": {
@@ -254,7 +241,8 @@ func TestDiff(t *testing.T) {
 			CREATE TABLE T1 (
 			  T1_I1 INT64 NOT NULL,
 			) PRIMARY KEY (T1_I1)`,
-			`ALTER TABLE T1 DROP SYNONYM T2;`,
+			`
+			ALTER TABLE T1 DROP SYNONYM T2;`,
 			false,
 		},
 		"recreate synonym": {
@@ -284,7 +272,9 @@ func TestDiff(t *testing.T) {
 			CREATE SEARCH INDEX IDX2 ON T1(T1_S1);
 			CREATE CHANGE STREAM S1 FOR ALL;
 			CREATE CHANGE STREAM S2 FOR T1;
-			CREATE VECTOR INDEX IDX3 ON T1(T1_AF1) OPTIONS (distance_type = 'COSINE');`,
+			CREATE VECTOR INDEX IDX3 ON T1(T1_AF1) OPTIONS (distance_type = 'COSINE');
+			GRANT SELECT ON TABLE T1 TO ROLE R1;
+			`,
 			`
 			CREATE TABLE T1 (
 			  T1_I1 INT64 NOT NULL,
@@ -295,11 +285,13 @@ func TestDiff(t *testing.T) {
 			CREATE SEARCH INDEX IDX2 ON T1(T1_S1);
 			CREATE CHANGE STREAM S1 FOR ALL;
 			CREATE CHANGE STREAM S2 FOR T1;
-			CREATE VECTOR INDEX IDX3 ON T1(T1_AF1) OPTIONS (distance_type = 'COSINE');`,
+			CREATE VECTOR INDEX IDX3 ON T1(T1_AF1) OPTIONS (distance_type = 'COSINE');
+			GRANT SELECT ON TABLE T1 TO ROLE R1;`,
 			`
 			DROP VECTOR INDEX IDX3;
 			DROP SEARCH INDEX IDX2;
 			DROP INDEX IDX1;
+			REVOKE SELECT ON TABLE T1 FROM ROLE R1;
 			ALTER CHANGE STREAM S2 DROP FOR ALL;
 			DROP TABLE T1;
 			CREATE TABLE T1 (
@@ -308,6 +300,7 @@ func TestDiff(t *testing.T) {
 			  T1_AF1 ARRAY<FLOAT64> NOT NULL,
 			) PRIMARY KEY (T1_S1);
 			ALTER CHANGE STREAM S2 SET FOR T1;
+			GRANT SELECT ON TABLE T1 TO ROLE R1;
 			CREATE INDEX IDX1 ON T1(T1_I1);
 			CREATE SEARCH INDEX IDX2 ON T1(T1_S1);
 			CREATE VECTOR INDEX IDX3 ON T1(T1_AF1) OPTIONS (distance_type = 'COSINE');`,
@@ -323,7 +316,8 @@ func TestDiff(t *testing.T) {
 			  T1_I1 INT64 NOT NULL,
 			  T1_S1 STRING(MAX),
 			) PRIMARY KEY(T1_I1)`,
-			`ALTER TABLE T1 ADD COLUMN T1_S1 STRING(MAX);`,
+			`
+			ALTER TABLE T1 ADD COLUMN T1_S1 STRING(MAX);`,
 			false,
 		},
 		"drop column": {
@@ -336,7 +330,8 @@ func TestDiff(t *testing.T) {
 			CREATE TABLE T1 (
 			  T1_I1 INT64 NOT NULL,
 			) PRIMARY KEY(T1_I1)`,
-			`ALTER TABLE T1 DROP COLUMN T1_S1;`,
+			`
+			ALTER TABLE T1 DROP COLUMN T1_S1;`,
 			false,
 		},
 		"alter column": {
@@ -350,7 +345,8 @@ func TestDiff(t *testing.T) {
 			  T1_I1 INT64 NOT NULL,
 			  T1_S1 STRING(100),
 			) PRIMARY KEY(T1_I1)`,
-			`ALTER TABLE T1 ALTER COLUMN T1_S1 STRING(100);`,
+			`
+			ALTER TABLE T1 ALTER COLUMN T1_S1 STRING(100);`,
 			false,
 		},
 		"recreate column": {
@@ -370,47 +366,25 @@ func TestDiff(t *testing.T) {
 			false,
 		},
 		"add index": {
+			``,
 			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX)
-			) PRIMARY KEY(T1_I1)`,
-			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX)
-			) PRIMARY KEY(T1_I1);
 			CREATE INDEX IDX1 ON T1(T1_S1)`,
-			`CREATE INDEX IDX1 ON T1(T1_S1);`,
+			`
+			CREATE INDEX IDX1 ON T1(T1_S1);`,
 			false,
 		},
 		"drop index": {
 			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX)
-			) PRIMARY KEY(T1_I1);
 			CREATE INDEX IDX1 ON T1(T1_S1)`,
+			``,
 			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX)
-			) PRIMARY KEY(T1_I1)`,
-			`DROP INDEX IDX1;`,
+			DROP INDEX IDX1;`,
 			false,
 		},
 		"recreate index": {
 			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX)
-			) PRIMARY KEY(T1_I1);
 			CREATE INDEX IDX1 ON T1(T1_I1)`,
 			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX)
-			) PRIMARY KEY(T1_I1);
 			CREATE INDEX IDX1 ON T1(T1_I1, T1_S1)`,
 			`
 			DROP INDEX IDX1;
@@ -419,78 +393,42 @@ func TestDiff(t *testing.T) {
 		},
 		"add index storing": {
 			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX)
-			) PRIMARY KEY(T1_I1);
 			CREATE INDEX IDX1 ON T1(T1_S1);`,
 			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX)
-			) PRIMARY KEY(T1_I1);
 			CREATE INDEX IDX1 ON T1(T1_S1) STORING (T1_I1);`,
-			`ALTER INDEX IDX1 ADD STORED COLUMN T1_I1;`,
+			`
+			ALTER INDEX IDX1 ADD STORED COLUMN T1_I1;`,
 			false,
 		},
 		"drop index storing": {
 			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX)
-			) PRIMARY KEY(T1_I1);
 			CREATE INDEX IDX1 ON T1(T1_S1) STORING (T1_I1);`,
 			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX)
-			) PRIMARY KEY(T1_I1);
 			CREATE INDEX IDX1 ON T1(T1_S1);`,
-			`ALTER INDEX IDX1 DROP STORED COLUMN T1_I1;`,
+			`
+			ALTER INDEX IDX1 DROP STORED COLUMN T1_I1;`,
 			false,
 		},
 		"add search index": {
+			``,
 			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX)
-			) PRIMARY KEY(T1_I1)`,
-			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX)
-			) PRIMARY KEY(T1_I1);
 			CREATE SEARCH INDEX IDX1 ON T1(T1_S1)`,
-			`CREATE SEARCH INDEX IDX1 ON T1(T1_S1);`,
+			`
+			CREATE SEARCH INDEX IDX1 ON T1(T1_S1);`,
 			false,
 		},
 		"drop search index": {
 			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX)
-			) PRIMARY KEY(T1_I1);
 			CREATE SEARCH INDEX IDX1 ON T1(T1_S1)`,
+			``,
 			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX)
-			) PRIMARY KEY(T1_I1)`,
-			`DROP SEARCH INDEX IDX1;`,
+			DROP SEARCH INDEX IDX1;`,
 			false,
 		},
 		"recreate search index": {
 			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX)
-			) PRIMARY KEY(T1_I1);
 			CREATE SEARCH INDEX IDX1 ON T1(T1_I1)`,
 			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX)
-			) PRIMARY KEY(T1_I1);
 			CREATE SEARCH INDEX IDX1 ON T1(T1_I1, T1_S1)`,
 			`
 			DROP SEARCH INDEX IDX1;
@@ -499,80 +437,42 @@ func TestDiff(t *testing.T) {
 		},
 		"add search index storing": {
 			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX)
-			) PRIMARY KEY(T1_I1);
 			CREATE SEARCH INDEX IDX1 ON T1(T1_S1);`,
 			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX)
-			) PRIMARY KEY(T1_I1);
 			CREATE SEARCH INDEX IDX1 ON T1(T1_S1) STORING (T1_I1);`,
-			`ALTER SEARCH INDEX IDX1 ADD STORED COLUMN T1_I1;`,
+			`
+			ALTER SEARCH INDEX IDX1 ADD STORED COLUMN T1_I1;`,
 			false,
 		},
 		"drop search index storing": {
 			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX)
-			) PRIMARY KEY(T1_I1);
 			CREATE SEARCH INDEX IDX1 ON T1(T1_S1) STORING (T1_I1);`,
 			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			  T1_S1 STRING(MAX)
-			) PRIMARY KEY(T1_I1);
 			CREATE SEARCH INDEX IDX1 ON T1(T1_S1);`,
-			`ALTER SEARCH INDEX IDX1 DROP STORED COLUMN T1_I1;`,
+			`
+			ALTER SEARCH INDEX IDX1 DROP STORED COLUMN T1_I1;`,
 			false,
 		},
 		"add vector index": {
+			``,
 			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			  T1_AF1 ARRAY<FLOAT64> NOT NULL,
-			) PRIMARY KEY(T1_I1);
-			`,
-			`
-			CREATE TABLE T1 (
-			T1_I1 INT64 NOT NULL,
-			T1_AF1 ARRAY<FLOAT64> NOT NULL,
-			) PRIMARY KEY(T1_I1);
 			CREATE VECTOR INDEX IDX1 ON T1(T1_AF1) OPTIONS (distance_type = 'COSINE');`,
-			`CREATE VECTOR INDEX IDX1 ON T1(T1_AF1) OPTIONS (distance_type = 'COSINE');`,
+			`
+			CREATE VECTOR INDEX IDX1 ON T1(T1_AF1) OPTIONS (distance_type = 'COSINE');`,
 			false,
 		},
 		"drop vector index": {
 			`
-			CREATE TABLE T1 (
-			T1_I1 INT64 NOT NULL,
-			T1_AF1 ARRAY<FLOAT64> NOT NULL,
-			) PRIMARY KEY(T1_I1);
 			CREATE VECTOR INDEX IDX1 ON T1(T1_AF1) OPTIONS (distance_type = 'COSINE');`,
+			``,
 			`
-			CREATE TABLE T1 (
-			T1_I1 INT64 NOT NULL,
-			T1_AF1 ARRAY<FLOAT64> NOT NULL,
-			) PRIMARY KEY(T1_I1);
-			`,
-			`DROP VECTOR INDEX IDX1;`,
+			DROP VECTOR INDEX IDX1;`,
 			false,
 		},
 		"recreate vector index": {
 			`
-			CREATE TABLE T1 (
-			T1_I1 INT64 NOT NULL,
-			T1_AF1 ARRAY<FLOAT64> NOT NULL,
-			) PRIMARY KEY(T1_I1);
 			CREATE VECTOR INDEX IDX1 ON T1(T1_AF1) OPTIONS (distance_type = 'COSINE');`,
 			`
-			CREATE TABLE T1 (
-			T1_I1 INT64 NOT NULL,
-			T1_AF1 ARRAY<FLOAT64> NOT NULL,
-			) PRIMARY KEY(T1_I1);
 			CREATE VECTOR INDEX IDX1 ON T1(T1_AF1) OPTIONS (distance_type = 'EUCLIDEAN');`,
 			`
 			DROP VECTOR INDEX IDX1;
@@ -580,20 +480,8 @@ func TestDiff(t *testing.T) {
 			false,
 		},
 		"add property graph": {
+			``,
 			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			) PRIMARY KEY (T1_I1);
-			CREATE TABLE T2 (
-			  T2_I1 INT64 NOT NULL,
-			) PRIMARY KEY (T2_I1);`,
-			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			) PRIMARY KEY (T1_I1);
-			CREATE TABLE T2 (
-			  T2_I1 INT64 NOT NULL,
-			) PRIMARY KEY (T2_I1);
 			CREATE PROPERTY GRAPH G1 NODE TABLES (T1, T2);
 			`,
 			`
@@ -602,81 +490,41 @@ func TestDiff(t *testing.T) {
 		},
 		"drop property graph": {
 			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			) PRIMARY KEY (T1_I1);
-			CREATE TABLE T2 (
-			  T2_I1 INT64 NOT NULL,
-			) PRIMARY KEY (T2_I1);
 			CREATE PROPERTY GRAPH G1 NODE TABLES (T1, T2);`,
-			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			) PRIMARY KEY (T1_I1);
-			CREATE TABLE T2 (
-			  T2_I1 INT64 NOT NULL,
-			) PRIMARY KEY (T2_I1);`,
+			``,
 			`
 			DROP PROPERTY GRAPH G1;`,
 			false,
 		},
 		"recreate property graph": {
 			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			) PRIMARY KEY (T1_I1);
-			CREATE TABLE T2 (
-			  T2_I1 INT64 NOT NULL,
-			) PRIMARY KEY (T2_I1);
 			CREATE PROPERTY GRAPH G1 NODE TABLES (T1, T2);`,
 			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			) PRIMARY KEY (T1_I1);
-			CREATE TABLE T2 (
-			  T2_I1 INT64 NOT NULL,
-			) PRIMARY KEY (T2_I1);
 			CREATE PROPERTY GRAPH G1 NODE TABLES (T1);`,
 			`
 			CREATE OR REPLACE PROPERTY GRAPH G1 NODE TABLES (T1);`,
 			false,
 		},
 		"create view": {
+			``,
 			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			) PRIMARY KEY (T1_I1);`,
-			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			) PRIMARY KEY (T1_I1);
 			CREATE VIEW V1 SQL SECURITY DEFINER AS SELECT * FROM T1;`,
-			`CREATE VIEW V1 SQL SECURITY DEFINER AS SELECT * FROM T1;`,
+			`
+			CREATE VIEW V1 SQL SECURITY DEFINER AS SELECT * FROM T1;`,
 			false,
 		},
 		"drop view": {
 			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			) PRIMARY KEY (T1_I1);
 			CREATE VIEW V1 SQL SECURITY DEFINER AS SELECT * FROM T1;`,
+			``,
 			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			) PRIMARY KEY (T1_I1);`,
-			`DROP VIEW V1;`,
+			DROP VIEW V1;`,
 			false,
 		},
 		"recreate view": {
 			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			) PRIMARY KEY (T1_I1);
 			CREATE VIEW V1 SQL SECURITY DEFINER AS SELECT * FROM T1;`,
 			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			) PRIMARY KEY (T1_I1);
 			CREATE VIEW V1 SQL SECURITY DEFINER AS SELECT * FROM T1 WHERE T1_I1 > 0;`,
 			`
 			CREATE OR REPLACE VIEW V1 SQL SECURITY DEFINER AS SELECT * FROM T1 WHERE T1_I1 > 0;`,
@@ -686,26 +534,22 @@ func TestDiff(t *testing.T) {
 			``,
 			`
 			CREATE CHANGE STREAM S1 FOR ALL;`,
-			`CREATE CHANGE STREAM S1 FOR ALL;`,
+			`
+			CREATE CHANGE STREAM S1 FOR ALL;`,
 			false,
 		},
 		"drop change stream": {
 			`
 			CREATE CHANGE STREAM S1 FOR ALL;`,
 			``,
-			`DROP CHANGE STREAM S1;`,
+			`
+			DROP CHANGE STREAM S1;`,
 			false,
 		},
 		"alter change stream": {
 			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			) PRIMARY KEY (T1_I1);
 			CREATE CHANGE STREAM S1 FOR ALL OPTIONS ( retention_period = '36h' );`,
 			`
-			CREATE TABLE T1 (
-			  T1_I1 INT64 NOT NULL,
-			) PRIMARY KEY (T1_I1);
 			CREATE CHANGE STREAM S1 FOR T1(T1_I1) OPTIONS ( retention_period = '72h' );`,
 			`
 			ALTER CHANGE STREAM S1 SET FOR T1(T1_I1);
@@ -716,14 +560,16 @@ func TestDiff(t *testing.T) {
 			``,
 			`
 			CREATE SEQUENCE S1 OPTIONS (sequence_kind = 'bit_reversed_positive');`,
-			`CREATE SEQUENCE S1 OPTIONS (sequence_kind = 'bit_reversed_positive');`,
+			`
+			CREATE SEQUENCE S1 OPTIONS (sequence_kind = 'bit_reversed_positive');`,
 			false,
 		},
 		"drop sequence": {
 			`
 			CREATE SEQUENCE S1 OPTIONS (sequence_kind = 'bit_reversed_positive');`,
 			``,
-			`DROP SEQUENCE S1;`,
+			`
+			DROP SEQUENCE S1;`,
 			false,
 		},
 		"alter sequence": {
