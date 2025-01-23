@@ -26,6 +26,7 @@ var _ = []identifier{
 	protoBundleID{},
 	roleID{},
 	grantID{},
+	databaseID{},
 }
 
 var _ = []struct{}{
@@ -42,6 +43,8 @@ var _ = []struct{}{
 	isComparable(modelID{}),
 	isComparable(protoBundleID{}),
 	isComparable(roleID{}),
+	isComparable(grantID{}),
+	isComparable(databaseID{}),
 }
 
 func isComparable[C comparable](_ C) struct{} { return struct{}{} }
@@ -339,5 +342,21 @@ func (i changeStreamReadFunctionID) ID() string {
 }
 
 func (i changeStreamReadFunctionID) String() string {
+	return i.ID()
+}
+
+type databaseID struct {
+	name string
+}
+
+func newDatabaseID(ident *ast.Ident) databaseID {
+	return databaseID{ident.Name}
+}
+
+func (i databaseID) ID() string {
+	return fmt.Sprintf("Database(%s)", i.name)
+}
+
+func (i databaseID) String() string {
 	return i.ID()
 }

@@ -123,12 +123,17 @@ func (ms migrationState) operations() []operation {
 	case migrationKindAlter:
 		return ms.alters
 	case migrationKindDrop:
-		return []operation{newOperation(ms.base.mustGet(), operationKindDrop, ms.base.mustGet().drop())}
-	case migrationKindDropAndAdd:
-		return []operation{
-			newOperation(ms.base.mustGet(), operationKindDrop, ms.base.mustGet().drop()),
-			newOperation(ms.target.mustGet(), operationKindAdd, ms.target.mustGet().add()),
+		if ddl, ok := ms.base.mustGet().drop().get(); ok {
+			return []operation{newOperation(ms.base.mustGet(), operationKindDrop, ddl)}
 		}
+		return nil
+	case migrationKindDropAndAdd:
+		var alters []operation
+		if ddl, ok := ms.base.mustGet().drop().get(); ok {
+			alters = append(alters, newOperation(ms.base.mustGet(), operationKindDrop, ddl))
+		}
+		alters = append(alters, newOperation(ms.target.mustGet(), operationKindAdd, ms.target.mustGet().add()))
+		return alters
 	case migrationKindNone, migrationKindUndefined:
 		return nil
 	default:

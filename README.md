@@ -25,6 +25,7 @@ $ go install github.com/morikuni/spannerdiff/cmd/spannerdiff
 - `CREATE PROTO BUNDLE`
 - `CREATE ROLE`
 - `GRANT`
+- `ALTER DATABASE`
 
 ## Colored Output
 

@@ -13,7 +13,7 @@ type definition interface {
 	id() identifier
 	astNode() ast.Node
 	add() ast.DDL
-	drop() ast.DDL
+	drop() optional[ast.DDL]
 	alter(target definition, m *migration)
 	dependsOn() []identifier
 	onDependencyChange(me, dependency migrationState, m *migration)
@@ -33,6 +33,7 @@ var _ = []definition{
 	&protoBundle{},
 	&role{},
 	&grant{},
+	&database{},
 }
 
 type merger interface {
@@ -102,6 +103,8 @@ func newDefinitions(ddls []ast.DDL, errorOnUnsupported bool) (*definitions, erro
 			for _, g := range newGrant(ddl) {
 				add(g)
 			}
+		case *ast.AlterDatabase:
+			add(newDatabase(ddl))
 		default:
 			if errorOnUnsupported {
 				return nil, fmt.Errorf("unsupported DDL: %s", ddl.SQL())
@@ -146,10 +149,10 @@ func (s *schema) add() ast.DDL {
 	return s.node
 }
 
-func (s *schema) drop() ast.DDL {
-	return &ast.DropSchema{
+func (s *schema) drop() optional[ast.DDL] {
+	return some[ast.DDL](&ast.DropSchema{
 		Name: s.node.Name,
-	}
+	})
 }
 
 func (s *schema) alter(tgt definition, m *migration) {
@@ -190,10 +193,10 @@ func (t *table) add() ast.DDL {
 	return t.node
 }
 
-func (t *table) drop() ast.DDL {
-	return &ast.DropTable{
+func (t *table) drop() optional[ast.DDL] {
+	return some[ast.DDL](&ast.DropTable{
 		Name: t.node.Name,
-	}
+	})
 }
 
 func (t *table) alter(tgt definition, m *migration) {
@@ -339,13 +342,13 @@ func (c *column) add() ast.DDL {
 	}
 }
 
-func (c *column) drop() ast.DDL {
-	return &ast.AlterTable{
+func (c *column) drop() optional[ast.DDL] {
+	return some[ast.DDL](&ast.AlterTable{
 		Name: c.table.node.Name,
 		TableAlteration: &ast.DropColumn{
 			Name: c.node.Name,
 		},
-	}
+	})
 }
 
 func (c *column) alter(tgt definition, m *migration) {
@@ -482,10 +485,10 @@ func (i *index) add() ast.DDL {
 	return i.node
 }
 
-func (i *index) drop() ast.DDL {
-	return &ast.DropIndex{
+func (i *index) drop() optional[ast.DDL] {
+	return some[ast.DDL](&ast.DropIndex{
 		Name: i.node.Name,
-	}
+	})
 }
 
 func (i *index) alter(tgt definition, m *migration) {
@@ -589,10 +592,10 @@ func (si *searchIndex) add() ast.DDL {
 	return si.node
 }
 
-func (si *searchIndex) drop() ast.DDL {
-	return &ast.DropSearchIndex{
+func (si *searchIndex) drop() optional[ast.DDL] {
+	return some[ast.DDL](&ast.DropSearchIndex{
 		Name: si.node.Name,
-	}
+	})
 }
 
 func (si *searchIndex) alter(tgt definition, m *migration) {
@@ -688,10 +691,10 @@ func (vi *vectorIndex) add() ast.DDL {
 	return vi.node
 }
 
-func (vi *vectorIndex) drop() ast.DDL {
-	return &ast.DropVectorIndex{
+func (vi *vectorIndex) drop() optional[ast.DDL] {
+	return some[ast.DDL](&ast.DropVectorIndex{
 		Name: vi.node.Name,
-	}
+	})
 }
 
 func (vi *vectorIndex) alter(tgt definition, m *migration) {
@@ -738,10 +741,10 @@ func (pg *propertyGraph) add() ast.DDL {
 	return pg.node
 }
 
-func (pg *propertyGraph) drop() ast.DDL {
-	return &ast.DropPropertyGraph{
+func (pg *propertyGraph) drop() optional[ast.DDL] {
+	return some[ast.DDL](&ast.DropPropertyGraph{
 		Name: pg.node.Name,
-	}
+	})
 }
 
 func (pg *propertyGraph) alter(tgt definition, m *migration) {
@@ -844,10 +847,10 @@ func (v *view) add() ast.DDL {
 	return v.node
 }
 
-func (v *view) drop() ast.DDL {
-	return &ast.DropView{
+func (v *view) drop() optional[ast.DDL] {
+	return some[ast.DDL](&ast.DropView{
 		Name: v.node.Name,
-	}
+	})
 }
 
 func (v *view) alter(tgt definition, m *migration) {
@@ -886,10 +889,10 @@ func (cs *changeStream) add() ast.DDL {
 	return cs.node
 }
 
-func (cs *changeStream) drop() ast.DDL {
-	return &ast.DropChangeStream{
+func (cs *changeStream) drop() optional[ast.DDL] {
+	return some[ast.DDL](&ast.DropChangeStream{
 		Name: cs.node.Name,
-	}
+	})
 }
 
 func (cs *changeStream) alter(tgt definition, m *migration) {
@@ -982,10 +985,10 @@ func (s *sequence) add() ast.DDL {
 	return s.node
 }
 
-func (s *sequence) drop() ast.DDL {
-	return &ast.DropSequence{
+func (s *sequence) drop() optional[ast.DDL] {
+	return some[ast.DDL](&ast.DropSequence{
 		Name: s.node.Name,
-	}
+	})
 }
 
 func (s *sequence) alter(tgt definition, m *migration) {
@@ -1029,10 +1032,10 @@ func (m *model) add() ast.DDL {
 	return m.node
 }
 
-func (m *model) drop() ast.DDL {
-	return &ast.DropModel{
+func (m *model) drop() optional[ast.DDL] {
+	return some[ast.DDL](&ast.DropModel{
 		Name: m.node.Name,
-	}
+	})
 }
 
 func (m *model) alter(tgt definition, migration *migration) {
@@ -1080,8 +1083,8 @@ func (pb *protoBundle) add() ast.DDL {
 	return pb.node
 }
 
-func (pb *protoBundle) drop() ast.DDL {
-	return &ast.DropProtoBundle{}
+func (pb *protoBundle) drop() optional[ast.DDL] {
+	return some[ast.DDL](&ast.DropProtoBundle{})
 }
 
 func (pb *protoBundle) alter(tgt definition, migration *migration) {
@@ -1144,10 +1147,10 @@ func (r *role) add() ast.DDL {
 	return r.node
 }
 
-func (r *role) drop() ast.DDL {
-	return &ast.DropRole{
+func (r *role) drop() optional[ast.DDL] {
+	return some[ast.DDL](&ast.DropRole{
 		Name: r.node.Name,
-	}
+	})
 }
 
 func (r *role) alter(tgt definition, m *migration) {
@@ -1329,11 +1332,11 @@ func (g *grant) add() ast.DDL {
 	return g.node
 }
 
-func (g *grant) drop() ast.DDL {
-	return &ast.Revoke{
+func (g *grant) drop() optional[ast.DDL] {
+	return some[ast.DDL](&ast.Revoke{
 		Roles:     g.node.Roles,
 		Privilege: g.node.Privilege,
-	}
+	})
 }
 
 func (g *grant) alter(tgt definition, m *migration) {
@@ -1551,6 +1554,7 @@ func (g *grant) dependsOn() []identifier {
 	}
 	return ids
 }
+
 func (g *grant) onDependencyChange(me, dependency migrationState, m *migration) {
 	switch dep := dependency.definition().(type) {
 	case *role, *table, *column, *view, *changeStream:
@@ -1562,3 +1566,40 @@ func (g *grant) onDependencyChange(me, dependency migrationState, m *migration) 
 		panic(fmt.Sprintf("unexpected dependOn type on grant: %T", dep))
 	}
 }
+
+type database struct {
+	node *ast.AlterDatabase
+}
+
+func newDatabase(ad *ast.AlterDatabase) *database {
+	return &database{ad}
+}
+
+func (d *database) id() identifier {
+	return newDatabaseID(d.node.Name)
+}
+
+func (d *database) astNode() ast.Node {
+	return d.node
+}
+
+func (d *database) add() ast.DDL {
+	return d.node
+}
+
+func (d *database) drop() optional[ast.DDL] {
+	return none[ast.DDL]()
+}
+
+func (d *database) alter(tgt definition, m *migration) {
+	base := d
+	target := tgt.(*database)
+
+	m.updateStateIfUndefined(newAlterState(base, target, &ast.AlterDatabase{Name: target.node.Name, Options: target.node.Options}))
+}
+
+func (d *database) dependsOn() []identifier {
+	return nil
+}
+
+func (d *database) onDependencyChange(me, dependency migrationState, m *migration) {}
