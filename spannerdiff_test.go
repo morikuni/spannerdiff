@@ -902,6 +902,30 @@ func TestDiff(t *testing.T) {
 			REVOKE ROLE R2 FROM ROLE R1;`,
 			false,
 		},
+		"add alter database": {
+			``,
+			`
+			ALTER DATABASE D1 SET OPTIONS (version_retention_period = '1d');`,
+			`
+			ALTER DATABASE D1 SET OPTIONS (version_retention_period = '1d');`,
+			false,
+		},
+		"no drop alter database": {
+			`
+			ALTER DATABASE D1 SET OPTIONS (version_retention_period = '1d');`,
+			``,
+			``,
+			false,
+		},
+		"alter alter database": {
+			`
+			ALTER DATABASE D1 SET OPTIONS (version_retention_period = '1d', optimizer_version = 1);`,
+			`
+			ALTER DATABASE D1 SET OPTIONS (version_retention_period = '2d');`,
+			`
+			ALTER DATABASE D1 SET OPTIONS (version_retention_period = '2d');`,
+			false,
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			var buf bytes.Buffer
