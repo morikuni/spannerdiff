@@ -17,10 +17,13 @@ func main() {
 	os.Exit(realMain(os.Args, os.Stdin, os.Stdout, os.Stderr))
 }
 
+var version = "(dev)"
+
 func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer) int {
 	globalFlags := pflag.NewFlagSet("", pflag.ContinueOnError)
 	globalFlags.SortFlags = false
-	color := globalFlags.StringP("color", "", "auto", "colorize output. [auto, always, never]")
+	color := globalFlags.StringP("color", "", "auto", "color mode [auto, always, never] (default: auto)")
+	versionFlag := globalFlags.BoolP("version", "", false, "print version")
 
 	baseFlags := pflag.NewFlagSet("", pflag.ContinueOnError)
 	baseFlags.SortFlags = false
@@ -71,6 +74,11 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 		}
 		fmt.Fprintln(stderr, aec.RedF.Apply(err.Error()))
 		return 2
+	}
+
+	if *versionFlag {
+		fmt.Fprintln(stdout, version)
+		return 0
 	}
 
 	if *baseFromStdin && *targetFromStdin {
