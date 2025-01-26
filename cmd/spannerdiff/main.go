@@ -1,13 +1,14 @@
 package main
 
 import (
-	"flag"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 
 	"github.com/morikuni/aec"
+	"github.com/spf13/pflag"
 
 	"github.com/morikuni/spannerdiff"
 )
@@ -17,16 +18,57 @@ func main() {
 }
 
 func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer) int {
-	fs := flag.NewFlagSet(args[0], flag.ContinueOnError)
-	baseDDLFile := fs.String("base-ddl-file", "", "read base schema from file")
-	baseFromStdin := fs.Bool("base-from-stdin", false, "read base schema from stdin")
-	baseDDL := fs.String("base-ddl", "", "base schema DDL")
-	targetDDLFile := fs.String("target-ddl-file", "", "read target schema from file")
-	targetFromStdin := fs.Bool("target-from-stdin", false, "read target schema from stdin")
-	targetDDL := fs.String("target-ddl", "", "target schema DDL")
-	color := fs.String("color", "auto", "colorize output. [auto, always, never]")
+	globalFlags := pflag.NewFlagSet("", pflag.ContinueOnError)
+	globalFlags.SortFlags = false
+	color := globalFlags.StringP("color", "", "auto", "colorize output. [auto, always, never]")
 
-	if err := fs.Parse(args[1:]); err != nil {
+	baseFlags := pflag.NewFlagSet("", pflag.ContinueOnError)
+	baseFlags.SortFlags = false
+	baseDDLFile := baseFlags.StringP("base-ddl-file", "", "", "read base schema from file")
+	baseFromStdin := baseFlags.BoolP("base-from-stdin", "", false, "read base schema from stdin")
+	baseDDL := baseFlags.StringP("base-ddl", "", "", "base schema")
+
+	targetFlags := pflag.NewFlagSet("", pflag.ContinueOnError)
+	targetFlags.SortFlags = false
+	targetDDLFile := targetFlags.StringP("target-ddl-file", "", "", "read target schema from file")
+	targetFromStdin := targetFlags.BoolP("target-from-stdin", "", false, "read target schema from stdin")
+	targetDDL := targetFlags.StringP("target-ddl", "", "", "target schema")
+
+	rootFlags := pflag.NewFlagSet(args[0], pflag.ContinueOnError)
+	rootFlags.SortFlags = false
+	rootFlags.AddFlagSet(globalFlags)
+	rootFlags.AddFlagSet(baseFlags)
+	rootFlags.AddFlagSet(targetFlags)
+
+	rootFlags.Usage = func() {
+		fmt.Fprintf(stderr, `%s:
+      spannerdiff [flags] [base-flags] [target-flags]
+
+%s:
+%s
+%s:
+%s
+%s:
+%s
+%s:		
+      > $ spanerdiff --base-ddl "CREATE TABLE t1 (c1 INT64) PRIMARY KEY(c1)" --target-ddl "CREATE TABLE t1 (c1 INT64, c2 INT64) PRIMARY KEY (c1)"
+      > ALTER TABLE t1 ADD COLUMN c2 INT64;
+`,
+			aec.Bold.Apply("Usage"),
+			aec.Bold.Apply("Flags"),
+			globalFlags.FlagUsages(),
+			aec.Bold.Apply("Base Flags"),
+			baseFlags.FlagUsages(),
+			aec.Bold.Apply("Target Flags"),
+			targetFlags.FlagUsages(),
+			aec.Bold.Apply("Example"),
+		)
+	}
+
+	if err := rootFlags.Parse(args[1:]); err != nil {
+		if errors.Is(err, pflag.ErrHelp) {
+			return 0
+		}
 		fmt.Fprintln(stderr, aec.RedF.Apply(err.Error()))
 		return 2
 	}
