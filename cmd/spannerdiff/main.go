@@ -1,13 +1,18 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/blang/semver"
 	"github.com/morikuni/aec"
+	"github.com/rhysd/go-github-selfupdate/selfupdate"
 	"github.com/spf13/pflag"
 
 	"github.com/morikuni/spannerdiff"
@@ -17,13 +22,17 @@ func main() {
 	os.Exit(realMain(os.Args, os.Stdin, os.Stdout, os.Stderr))
 }
 
-var version = "(dev)"
+const devVersion = "dev"
+
+var version = devVersion
 
 func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer) int {
 	globalFlags := pflag.NewFlagSet("", pflag.ContinueOnError)
 	globalFlags.SortFlags = false
 	color := globalFlags.StringP("color", "", "auto", "color mode [auto, always, never] (default: auto)")
 	versionFlag := globalFlags.BoolP("version", "", false, "print version")
+	updateFlag := globalFlags.BoolP("update", "", false, "update spannerdiff")
+	noUpdate := globalFlags.BoolP("no-update", "", false, "disable check for updates")
 
 	baseFlags := pflag.NewFlagSet("", pflag.ContinueOnError)
 	baseFlags.SortFlags = false
@@ -81,6 +90,11 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 		return 0
 	}
 
+	if *updateFlag {
+		update(stderr)
+		return 0
+	}
+
 	if *baseFromStdin && *targetFromStdin {
 		fmt.Fprintln(stderr, aec.RedF.Apply("cannot specify both --base-from-stdin and --target-from-stdin"))
 		return 1
@@ -129,5 +143,143 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 		fmt.Fprintln(stderr, aec.RedF.Apply(err.Error()))
 		return 1
 	}
+
+	if !*noUpdate {
+		checkUpdate(stderr)
+	}
+
 	return 0
+}
+
+func checkUpdate(stderr io.Writer) {
+	if version == devVersion {
+		return
+	}
+
+	c, err := readCache()
+	if err != nil {
+		fmt.Fprintln(stderr, aec.RedF.Apply(fmt.Sprintf("cache error: %v", err)))
+		return
+	}
+
+	showUpdateFound := func() {
+		fmt.Fprintln(stderr, "A new version of spannerdiff is available!\nTo update run:\n $ spannerdiff --update")
+	}
+
+	if c.UpdateFound {
+		showUpdateFound()
+		return
+	}
+
+	lastCheck := time.Unix(c.LastCheck, 0)
+	if time.Since(lastCheck) < 24*time.Hour {
+		return
+	}
+
+	v, err := semver.Parse(version)
+	if err != nil {
+		fmt.Fprintln(stderr, aec.RedF.Apply(fmt.Sprintf("failed to parse version: %v", err)))
+		return
+	}
+
+	latest, found, err := selfupdate.DetectLatest("morikuni/spannerdiff")
+	if err != nil {
+		fmt.Fprintln(stderr, aec.RedF.Apply(fmt.Sprintf("failed to check for updates: %v", err)))
+		return
+	}
+
+	c.LastCheck = time.Now().Unix()
+
+	if !found || latest.Version.LTE(v) {
+		if err := writeCache(c); err != nil {
+			fmt.Fprintln(stderr, aec.RedF.Apply(fmt.Sprintf("cache error: %v", err)))
+			return
+		}
+		return
+	}
+
+	c.UpdateFound = true
+	if err := writeCache(c); err != nil {
+		fmt.Fprintln(stderr, aec.RedF.Apply(fmt.Sprintf("cache error: %v", err)))
+		return
+	}
+	showUpdateFound()
+}
+
+func update(stderr io.Writer) {
+	if version == devVersion {
+		fmt.Fprintln(stderr, aec.RedF.Apply("cannot update dev version"))
+		return
+	}
+
+	v, err := semver.Parse(version)
+	if err != nil {
+		fmt.Fprintln(stderr, aec.RedF.Apply(fmt.Sprintf("failed to parse version: %v", err)))
+		return
+	}
+
+	r, err := selfupdate.UpdateSelf(v, "morikuni/spannerdiff")
+	if err != nil {
+		fmt.Fprintln(stderr, aec.RedF.Apply(fmt.Sprintf("failed to update: %v", err)))
+		return
+	}
+	if r.Version.EQ(v) {
+		fmt.Fprintln(stderr, "Already up to date.")
+		return
+	}
+
+	fmt.Fprintln(stderr, "Successfully updated to the latest version!")
+}
+
+type cache struct {
+	UpdateFound bool  `json:"update_found"`
+	LastCheck   int64 `json:"last_check"`
+}
+
+func cachePath() (string, error) {
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(cacheDir, "spannerdiff", "cache.json"), nil
+}
+
+func readCache() (*cache, error) {
+	cachePath, err := cachePath()
+	if err != nil {
+		return nil, err
+	}
+	f, err := os.Open(cachePath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return &cache{}, nil
+		}
+		return nil, err
+	}
+	defer f.Close()
+
+	var c cache
+	if err := json.NewDecoder(f).Decode(&c); err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+func writeCache(c *cache) error {
+	cachePath, err := cachePath()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(cachePath), 0755); err != nil {
+		return err
+
+	}
+
+	f, err := os.Create(cachePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	return json.NewEncoder(f).Encode(c)
 }
