@@ -29,7 +29,7 @@ var version = devVersion
 func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer) int {
 	globalFlags := pflag.NewFlagSet("", pflag.ContinueOnError)
 	globalFlags.SortFlags = false
-	color := globalFlags.StringP("color", "", "auto", "color mode [auto, always, never] (default: auto)")
+	color := globalFlags.StringP("color", "", "auto", "color mode [auto, always, never]")
 	versionFlag := globalFlags.BoolP("version", "", false, "print version")
 	updateFlag := globalFlags.BoolP("update", "", false, "update spannerdiff")
 	noUpdate := globalFlags.BoolP("no-update", "", false, "disable check for updates")
@@ -123,6 +123,9 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 		}
 		defer f.Close()
 		target = f
+	}
+	if base == nil && *baseDDL == "" && target == nil && *targetDDL == "" {
+		fmt.Fprintln(stderr, aec.YellowF.Apply("both base and target schema are not specified"))
 	}
 	if base == nil {
 		base = strings.NewReader(*baseDDL)
