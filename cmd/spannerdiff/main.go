@@ -91,8 +91,7 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 	}
 
 	if *updateFlag {
-		update(stderr)
-		return 0
+		return update(stderr)
 	}
 
 	if *baseFromStdin && *targetFromStdin {
@@ -206,29 +205,30 @@ func checkUpdate(stderr io.Writer) {
 	showUpdateFound()
 }
 
-func update(stderr io.Writer) {
+func update(stderr io.Writer) int {
 	if version == devVersion {
 		fmt.Fprintln(stderr, aec.RedF.Apply("cannot update dev version"))
-		return
+		return 1
 	}
 
 	v, err := semver.Parse(version)
 	if err != nil {
 		fmt.Fprintln(stderr, aec.RedF.Apply(fmt.Sprintf("failed to parse version: %v", err)))
-		return
+		return 1
 	}
 
 	r, err := selfupdate.UpdateSelf(v, "morikuni/spannerdiff")
 	if err != nil {
 		fmt.Fprintln(stderr, aec.RedF.Apply(fmt.Sprintf("failed to update: %v", err)))
-		return
+		return 1
 	}
 	if r.Version.EQ(v) {
 		fmt.Fprintln(stderr, "Already up to date.")
-		return
+		return 0
 	}
 
 	fmt.Fprintln(stderr, "Successfully updated to the latest version!")
+	return 0
 }
 
 type cache struct {
