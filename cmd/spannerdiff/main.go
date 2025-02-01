@@ -138,6 +138,12 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 	if !ok {
 		fmt.Fprintln(stderr, aec.RedF.Apply(fmt.Sprintf("invalid color mode: %s", *color)))
 	}
+
+	var wait <-chan struct{}
+	if !*noUpdate {
+		wait = checkUpdateBackground(stderr)
+	}
+
 	err := spannerdiff.Diff(base, target, stdout, spannerdiff.DiffOption{
 		Printer: spannerdiff.DetectTerminalPrinter(cm, stdout),
 	})
@@ -146,11 +152,20 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 		return 1
 	}
 
-	if !*noUpdate {
-		checkUpdate(stderr)
+	if wait != nil {
+		<-wait
 	}
 
 	return 0
+}
+
+func checkUpdateBackground(stderr io.Writer) <-chan struct{} {
+	c := make(chan struct{})
+	go func() {
+		defer close(c)
+		checkUpdate(stderr)
+	}()
+	return c
 }
 
 func checkUpdate(stderr io.Writer) {
