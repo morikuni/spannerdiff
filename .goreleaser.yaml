@@ -29,5 +29,5 @@ changelog:
 brews:
 - repository:
     owner: morikuni
-    name: homebrew-taps
+    name: homebrew-tap
     token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
