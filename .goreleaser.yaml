@@ -27,7 +27,7 @@ changelog:
   sort: asc
 
 brews:
-- tap:
+- repository:
     owner: morikuni
     name: homebrew-taps
     token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
