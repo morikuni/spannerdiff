@@ -180,7 +180,7 @@ func checkUpdate(stderr io.Writer) {
 	}
 
 	showUpdateFound := func() {
-		fmt.Fprintln(stderr, "A new version of spannerdiff is available!\nTo update run:\n $ spannerdiff --update")
+		fmt.Fprintln(stderr, "A new version of spannerdiff is available!\nTo update run:\n  $ spannerdiff --update")
 	}
 
 	if c.UpdateFound {

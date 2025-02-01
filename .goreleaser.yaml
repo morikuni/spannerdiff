@@ -26,9 +26,8 @@ archives:
 changelog:
   sort: asc
 
-release:
-  footer: >-
-
-    ---
-
-    Released by [GoReleaser](https://github.com/goreleaser/goreleaser).
+brews:
+- tap:
+    owner: morikuni
+    name: homebrew-taps
+    token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
