@@ -235,6 +235,11 @@ func update(stderr io.Writer) int {
 		return 1
 	}
 
+	if err := deleteCache(); err != nil {
+		fmt.Fprintln(stderr, aec.RedF.Apply(fmt.Sprintf("failed to delete cache: %v", err)))
+		return 1
+	}
+
 	r, err := selfupdate.UpdateSelf(v, "morikuni/spannerdiff")
 	if err != nil {
 		fmt.Fprintln(stderr, aec.RedF.Apply(fmt.Sprintf("failed to update: %v", err)))
@@ -300,4 +305,12 @@ func writeCache(c *cache) error {
 	defer f.Close()
 
 	return json.NewEncoder(f).Encode(c)
+}
+
+func deleteCache() error {
+	cachePath, err := cachePath()
+	if err != nil {
+		return err
+	}
+	return os.Remove(cachePath)
 }
