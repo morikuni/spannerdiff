@@ -7,7 +7,7 @@ Note: This tool is currently under development. The interface may change.
 ## Installation
 
 ```sh
-$ go install github.com/morikuni/spannerdiff/cmd/spannerdiff
+$ brew install morikuni/tap/spannerdiff 
 ```
 
 ## Supported DDL
