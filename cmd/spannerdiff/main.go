@@ -29,15 +29,15 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 
 	baseFlags := pflag.NewFlagSet("", pflag.ContinueOnError)
 	baseFlags.SortFlags = false
-	baseDDLFile := baseFlags.StringP("base-ddl-file", "", "", "read base schema from file")
-	baseFromStdin := baseFlags.BoolP("base-from-stdin", "", false, "read base schema from stdin")
-	baseDDL := baseFlags.StringP("base-ddl", "", "", "base schema")
+	baseDDL := baseFlags.StringP("base", "", "", "base schema")
+	baseFile := baseFlags.StringP("base-file", "", "", "read base schema from file")
+	baseStdin := baseFlags.BoolP("base-stdin", "", false, "read base schema from stdin")
 
 	targetFlags := pflag.NewFlagSet("", pflag.ContinueOnError)
 	targetFlags.SortFlags = false
-	targetDDLFile := targetFlags.StringP("target-ddl-file", "", "", "read target schema from file")
-	targetFromStdin := targetFlags.BoolP("target-from-stdin", "", false, "read target schema from stdin")
-	targetDDL := targetFlags.StringP("target-ddl", "", "", "target schema")
+	targetDDL := targetFlags.StringP("target", "", "", "target schema")
+	targetFile := targetFlags.StringP("target-file", "", "", "read target schema from file")
+	targetStdin := targetFlags.BoolP("target-stdin", "", false, "read target schema from stdin")
 
 	rootFlags := pflag.NewFlagSet(args[0], pflag.ContinueOnError)
 	rootFlags.SortFlags = false
@@ -56,7 +56,7 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 %s:
 %s
 %s:
-      > $ spanerdiff --base-ddl "CREATE TABLE t1 (c1 INT64) PRIMARY KEY(c1)" --target-ddl "CREATE TABLE t1 (c1 INT64, c2 INT64) PRIMARY KEY (c1)"
+      > $ spanerdiff --base "CREATE TABLE t1 (c1 INT64) PRIMARY KEY(c1)" --target "CREATE TABLE t1 (c1 INT64, c2 INT64) PRIMARY KEY (c1)"
       > ALTER TABLE t1 ADD COLUMN c2 INT64;
 `,
 			aec.Bold.Apply("Usage"),
@@ -83,20 +83,20 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 		return 0
 	}
 
-	if *baseFromStdin && *targetFromStdin {
-		fmt.Fprintln(stderr, aec.RedF.Apply("cannot specify both --base-from-stdin and --target-from-stdin"))
+	if *baseStdin && *targetStdin {
+		fmt.Fprintln(stderr, aec.RedF.Apply("cannot specify both --base-stdin and --target-stdin"))
 		return 1
 	}
 
 	var base, target io.Reader
-	if *baseFromStdin {
+	if *baseStdin {
 		base = stdin
 	}
-	if *targetFromStdin {
+	if *targetStdin {
 		target = stdin
 	}
-	if *baseDDLFile != "" {
-		f, err := os.Open(*baseDDLFile)
+	if *baseFile != "" {
+		f, err := os.Open(*baseFile)
 		if err != nil {
 			fmt.Fprintln(stderr, aec.RedF.Apply(fmt.Sprintf("failed to open base DDL file: %v", err)))
 			return 2
@@ -104,8 +104,8 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 		defer f.Close()
 		base = f
 	}
-	if *targetDDLFile != "" {
-		f, err := os.Open(*targetDDLFile)
+	if *targetFile != "" {
+		f, err := os.Open(*targetFile)
 		if err != nil {
 			fmt.Fprintln(stderr, aec.RedF.Apply(fmt.Sprintf("failed to open target DDL file: %v", err)))
 			return 2
