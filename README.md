@@ -61,7 +61,7 @@ CREATE INDEX Test_Name_CreatedAt ON Test (Name, CreatedAt DESC);
 ```
 
 ```sh
-$ gcloud spanner databases ddl describe test | spannerdiff -base-from-stdin -target-ddl-file=schema.sql | tee tmp.sql
+$ gcloud spanner databases ddl describe test | spannerdiff --base-stdin --target-file=schema.sql | tee tmp.sql
 ```
 
 ```sql
