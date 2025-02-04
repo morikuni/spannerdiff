@@ -134,7 +134,7 @@ const defaultStyle = `
   <entry type="LiteralString" style="#6dbf6d"/>
   <entry type="LiteralNumber" style="#d1aa44"/>
   <entry type="GenericInserted" style="bold #4caf50"/> <!-- CREATE -->
-  <entry type="GenericHeading" style="bold #ffa726"/> <!-- ALTER -->
+  <entry type="GenericEmph" style="bold #ffa726"/> <!-- ALTER -->
   <entry type="GenericDeleted" style="bold #f44336"/> <!-- DROP -->
 </style>
 `
@@ -145,11 +145,11 @@ func wrapIterator(iter chroma.Iterator) chroma.Iterator {
 		switch strings.ToUpper(t.Value) {
 		case "BOOL", "INT64", "FLOAT32", "FLOAT64", "STRING", "BYTES", "DATE", "TIMESTAMP", "NUMERIC", "JSON", "TOKENLIST", "ARRAY", "STRUCT":
 			t.Type = chroma.KeywordType
-		case "CREATE":
+		case "CREATE", "ADD":
 			t.Type = chroma.GenericInserted // fake type for colorize
 		case "ALTER", "REPLACE":
-			t.Type = chroma.GenericHeading // fake type for colorize
-		case "DROP":
+			t.Type = chroma.GenericEmph // fake type for colorize
+		case "DROP", "DELETE":
 			t.Type = chroma.GenericDeleted // fake type for colorize
 		default:
 			if token.IsKeyword(t.Value) {
