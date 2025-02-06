@@ -530,6 +530,26 @@ func TestDiff(t *testing.T) {
 			CREATE OR REPLACE VIEW V1 SQL SECURITY DEFINER AS SELECT * FROM T1 WHERE T1_I1 > 0;`,
 			false,
 		},
+		"drop and create view": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);
+			CREATE VIEW V1 SQL SECURITY DEFINER AS SELECT * FROM T1;`,
+			`
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_S1);
+			CREATE VIEW V1 SQL SECURITY DEFINER AS SELECT * FROM T1;`,
+			`
+			DROP VIEW V1;
+			DROP TABLE T1;
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_S1);
+			CREATE VIEW V1 SQL SECURITY DEFINER AS SELECT * FROM T1;`,
+			false,
+		},
 		"add change stream": {
 			``,
 			`
@@ -770,6 +790,16 @@ func TestDiff(t *testing.T) {
 			ALTER DATABASE D1 SET OPTIONS (version_retention_period = '2d');`,
 			`
 			ALTER DATABASE D1 SET OPTIONS (version_retention_period = '2d');`,
+			false,
+		},
+		"issue #35": {
+			``,
+			`
+			CREATE OR REPLACE VIEW V2 SQL SECURITY INVOKER AS SELECT * FROM T1;
+			CREATE OR REPLACE VIEW V1 SQL SECURITY INVOKER AS SELECT * FROM V2;`,
+			`
+			CREATE OR REPLACE VIEW V2 SQL SECURITY INVOKER AS SELECT * FROM T1;
+			CREATE OR REPLACE VIEW V1 SQL SECURITY INVOKER AS SELECT * FROM V2;`,
 			false,
 		},
 	} {

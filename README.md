@@ -76,3 +76,7 @@ CREATE INDEX Test_Name_CreatedAt ON Test(Name, CreatedAt DESC);
 $ gcloud spanner databases ddl update test --ddl-file=tmp.sql
 Schema updating...done.
 ```
+
+## Known Issues & Limitations
+
+- View DDL generation may be incorrect or out of order due to unresolved column names in the view query.

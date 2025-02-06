@@ -156,3 +156,19 @@ func uniqueIdent(is []*ast.Ident) []*ast.Ident {
 		return i.Name
 	})
 }
+
+func tablesOrViewsInQueryExpr(expr ast.QueryExpr) ([]*ast.Path, []*ast.Ident) {
+	var idents []*ast.Ident
+	var paths []*ast.Path
+
+	ast.Inspect(expr, func(n ast.Node) bool {
+		switch t := n.(type) {
+		case *ast.TableName:
+			idents = append(idents, t.Table)
+		case *ast.PathTableExpr:
+			paths = append(paths, t.Path)
+		}
+		return true
+	})
+	return paths, idents
+}
