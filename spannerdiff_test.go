@@ -792,7 +792,7 @@ func TestDiff(t *testing.T) {
 			ALTER DATABASE D1 SET OPTIONS (version_retention_period = '2d');`,
 			false,
 		},
-		"issue #35": {
+		"issue #35": { // https://github.com/morikuni/spannerdiff/issues/35
 			``,
 			`
 			CREATE OR REPLACE VIEW V2 SQL SECURITY INVOKER AS SELECT * FROM T1;
@@ -800,6 +800,14 @@ func TestDiff(t *testing.T) {
 			`
 			CREATE OR REPLACE VIEW V2 SQL SECURITY INVOKER AS SELECT * FROM T1;
 			CREATE OR REPLACE VIEW V1 SQL SECURITY INVOKER AS SELECT * FROM V2;`,
+			false,
+		},
+		"issue #37": { // https://github.com/morikuni/spannerdiff/issues/37
+			`
+			CREATE INDEX IDX1 ON T1 (T1_I1)`,
+			`
+			CREATE INDEX IDX1 ON T1 (T1_I1 ASC)`,
+			``,
 			false,
 		},
 	} {

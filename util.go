@@ -61,6 +61,17 @@ func equalNode(a, b ast.Node) bool {
 			}
 			return cmp.Equal(ma, mb, cmpopts.IgnoreTypes(token.Pos(0)))
 		}),
+		cmp.Comparer(func(a, b *ast.IndexKey) bool {
+			aVal := *a
+			bVal := *b
+			if aVal.Dir == "" {
+				aVal.Dir = ast.DirectionAsc
+			}
+			if bVal.Dir == "" {
+				bVal.Dir = ast.DirectionAsc
+			}
+			return cmp.Equal(aVal, bVal, cmpopts.IgnoreTypes(token.Pos(0)))
+		}),
 	)
 }
 
