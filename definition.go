@@ -863,11 +863,37 @@ func (v *view) alter(tgt definition, m *migration) {
 }
 
 func (v *view) dependsOn() []identifier {
-	// TODO: process query to find dependencies
-	return nil
+	var ids []identifier
+	paths, idents := tablesOrViewsInQueryExpr(v.node.Query)
+	// Can't distinguish between tables and views, so add both.
+	for _, ident := range idents {
+		ids = append(ids,
+			newTableIDFromIdent(ident),
+			newViewIDFromIdent(ident),
+		)
+	}
+	for _, path := range paths {
+		ids = append(ids,
+			newTableIDFromPath(path),
+			newViewIDFromPath(path),
+		)
+	}
+	// TODO: Add dependencies on columns.
+	// But it's difficult to extract column names from the query!
+	return ids
 }
 
-func (v *view) onDependencyChange(me, dependency migrationState, m *migration) {}
+func (v *view) onDependencyChange(me, dependency migrationState, m *migration) {
+	switch dep := dependency.definition().(type) {
+	case *column, *table, *view:
+		switch dependency.kind {
+		case migrationKindDropAndAdd:
+			m.updateState(me.updateKind(migrationKindDropAndAdd))
+		}
+	default:
+		panic(fmt.Sprintf("unexpected dependOn type on view: %T", dep))
+	}
+}
 
 type changeStream struct {
 	node *ast.CreateChangeStream

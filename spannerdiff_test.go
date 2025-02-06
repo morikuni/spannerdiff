@@ -772,6 +772,16 @@ func TestDiff(t *testing.T) {
 			ALTER DATABASE D1 SET OPTIONS (version_retention_period = '2d');`,
 			false,
 		},
+		"issue #35": {
+			``,
+			`
+			CREATE OR REPLACE VIEW V2 SQL SECURITY INVOKER AS SELECT * FROM T1;
+			CREATE OR REPLACE VIEW V1 SQL SECURITY INVOKER AS SELECT * FROM V2;`,
+			`
+			CREATE OR REPLACE VIEW V2 SQL SECURITY INVOKER AS SELECT * FROM T1;
+			CREATE OR REPLACE VIEW V1 SQL SECURITY INVOKER AS SELECT * FROM V2;`,
+			false,
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			var buf bytes.Buffer
