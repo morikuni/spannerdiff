@@ -101,7 +101,9 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 			_, _ = fmt.Fprintln(stderr, aec.RedF.Apply(fmt.Sprintf("failed to open base DDL file: %v", err)))
 			return 2
 		}
-		defer f.Close()
+		defer func() {
+			_ = f.Close()
+		}()
 		base = f
 	}
 	if *targetFile != "" {
@@ -110,7 +112,9 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 			_, _ = fmt.Fprintln(stderr, aec.RedF.Apply(fmt.Sprintf("failed to open target DDL file: %v", err)))
 			return 2
 		}
-		defer f.Close()
+		defer func() {
+			_ = f.Close()
+		}()
 		target = f
 	}
 	if base == nil && *baseDDL == "" && target == nil && *targetDDL == "" {
