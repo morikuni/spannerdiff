@@ -557,6 +557,10 @@ func (i *index) dependsOn() []identifier {
 }
 
 func (i *index) onDependencyChange(me, dependency migrationState, m *migration) {
+	switch me.kind {
+	case migrationKindDrop:
+		return
+	}
 	switch dep := dependency.definition().(type) {
 	case *column, *table, *schema:
 		switch dependency.kind {
@@ -656,6 +660,10 @@ func (si *searchIndex) dependsOn() []identifier {
 }
 
 func (si *searchIndex) onDependencyChange(me, dependency migrationState, m *migration) {
+	switch me.kind {
+	case migrationKindDrop:
+		return
+	}
 	switch dep := dependency.definition().(type) {
 	case *column, *table:
 		switch dependency.kind {
@@ -710,6 +718,10 @@ func (vi *vectorIndex) dependsOn() []identifier {
 }
 
 func (vi *vectorIndex) onDependencyChange(me, dependency migrationState, m *migration) {
+	switch me.kind {
+	case migrationKindDrop:
+		return
+	}
 	switch dep := dependency.definition().(type) {
 	case *column, *table:
 		switch dependency.kind {
@@ -816,6 +828,10 @@ func (pg *propertyGraph) dependsOn() []identifier {
 }
 
 func (pg *propertyGraph) onDependencyChange(me, dependency migrationState, m *migration) {
+	switch me.kind {
+	case migrationKindDrop:
+		return
+	}
 	switch dep := dependency.definition().(type) {
 	case *column, *table:
 		switch dependency.kind {
@@ -884,6 +900,10 @@ func (v *view) dependsOn() []identifier {
 }
 
 func (v *view) onDependencyChange(me, dependency migrationState, m *migration) {
+	switch me.kind {
+	case migrationKindDrop:
+		return
+	}
 	switch dep := dependency.definition().(type) {
 	case *column, *table, *view:
 		switch dependency.kind {
@@ -964,6 +984,10 @@ func (cs *changeStream) dependsOn() []identifier {
 }
 
 func (cs *changeStream) onDependencyChange(me, dependency migrationState, m *migration) {
+	switch me.kind {
+	case migrationKindDrop:
+		return
+	}
 	switch dep := dependency.definition().(type) {
 	case *column, *table:
 		switch dependency.kind {
@@ -1582,6 +1606,10 @@ func (g *grant) dependsOn() []identifier {
 }
 
 func (g *grant) onDependencyChange(me, dependency migrationState, m *migration) {
+	switch me.kind {
+	case migrationKindDrop:
+		return
+	}
 	switch dep := dependency.definition().(type) {
 	case *role, *table, *column, *view, *changeStream:
 		switch dependency.kind {

@@ -834,6 +834,7 @@ func TestDiff(t *testing.T) {
 }
 
 func equalDDLs(t *testing.T, a, b string) {
+	t.Helper()
 	ddlsA, err := memefish.ParseDDLs("a", a)
 	if err != nil {
 		t.Fatalf("failed to parse ddl a: %v", err)
