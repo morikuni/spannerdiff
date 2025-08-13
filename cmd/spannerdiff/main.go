@@ -46,7 +46,7 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 	rootFlags.AddFlagSet(targetFlags)
 
 	rootFlags.Usage = func() {
-		fmt.Fprintf(stderr, `%s:
+		_, _ = fmt.Fprintf(stderr, `%s:
       spannerdiff [flags] [base-flags] [target-flags]
 
 %s:
@@ -74,17 +74,17 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 		if errors.Is(err, pflag.ErrHelp) {
 			return 0
 		}
-		fmt.Fprintln(stderr, aec.RedF.Apply(err.Error()))
+		_, _ = fmt.Fprintln(stderr, aec.RedF.Apply(err.Error()))
 		return 2
 	}
 
 	if *versionFlag {
-		fmt.Fprintln(stdout, version)
+		_, _ = fmt.Fprintln(stdout, version)
 		return 0
 	}
 
 	if *baseStdin && *targetStdin {
-		fmt.Fprintln(stderr, aec.RedF.Apply("cannot specify both --base-stdin and --target-stdin"))
+		_, _ = fmt.Fprintln(stderr, aec.RedF.Apply("cannot specify both --base-stdin and --target-stdin"))
 		return 1
 	}
 
@@ -98,23 +98,27 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 	if *baseFile != "" {
 		f, err := os.Open(*baseFile)
 		if err != nil {
-			fmt.Fprintln(stderr, aec.RedF.Apply(fmt.Sprintf("failed to open base DDL file: %v", err)))
+			_, _ = fmt.Fprintln(stderr, aec.RedF.Apply(fmt.Sprintf("failed to open base DDL file: %v", err)))
 			return 2
 		}
-		defer f.Close()
+		defer func() {
+			_ = f.Close()
+		}()
 		base = f
 	}
 	if *targetFile != "" {
 		f, err := os.Open(*targetFile)
 		if err != nil {
-			fmt.Fprintln(stderr, aec.RedF.Apply(fmt.Sprintf("failed to open target DDL file: %v", err)))
+			_, _ = fmt.Fprintln(stderr, aec.RedF.Apply(fmt.Sprintf("failed to open target DDL file: %v", err)))
 			return 2
 		}
-		defer f.Close()
+		defer func() {
+			_ = f.Close()
+		}()
 		target = f
 	}
 	if base == nil && *baseDDL == "" && target == nil && *targetDDL == "" {
-		fmt.Fprintln(stderr, aec.YellowF.Apply("both base and target schema are not specified"))
+		_, _ = fmt.Fprintln(stderr, aec.YellowF.Apply("both base and target schema are not specified"))
 	}
 	if base == nil {
 		base = strings.NewReader(*baseDDL)
@@ -125,14 +129,14 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 
 	cm, ok := spannerdiff.NewColorMode(*color)
 	if !ok {
-		fmt.Fprintln(stderr, aec.RedF.Apply(fmt.Sprintf("invalid color mode: %s", *color)))
+		_, _ = fmt.Fprintln(stderr, aec.RedF.Apply(fmt.Sprintf("invalid color mode: %s", *color)))
 	}
 
 	err := spannerdiff.Diff(base, target, stdout, spannerdiff.DiffOption{
 		Printer: spannerdiff.DetectTerminalPrinter(cm, stdout),
 	})
 	if err != nil {
-		fmt.Fprintln(stderr, aec.RedF.Apply(err.Error()))
+		_, _ = fmt.Fprintln(stderr, aec.RedF.Apply(err.Error()))
 		return 1
 	}
 
