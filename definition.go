@@ -300,13 +300,31 @@ func (t *table) alter(tgt definition, m *migration) {
 }
 
 func (t *table) dependsOn() []identifier {
+	var ids []identifier
 	if schemaID, ok := t.schemaID().get(); ok {
-		return []identifier{schemaID}
+		ids = append(ids, schemaID)
 	}
-	return nil
+	if t.node.Cluster != nil {
+		ids = append(ids, newTableIDFromPath(t.node.Cluster.TableName))
+	}
+	return ids
 }
 
-func (t *table) onDependencyChange(me, dependency migrationState, m *migration) {}
+func (t *table) onDependencyChange(me, dependency migrationState, m *migration) {
+	switch me.kind {
+	case migrationKindDrop:
+		return
+	}
+	switch dep := dependency.definition().(type) {
+	case *table, *schema:
+		switch dependency.kind {
+		case migrationKindDropAndAdd:
+			m.updateState(me.updateKind(migrationKindDropAndAdd))
+		}
+	default:
+		panic(fmt.Sprintf("unexpected dependOn type on table: %T", dep))
+	}
+}
 
 func (t *table) columns() map[columnID]*ast.ColumnDef {
 	m := make(map[columnID]*ast.ColumnDef)

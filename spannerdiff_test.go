@@ -810,6 +810,72 @@ func TestDiff(t *testing.T) {
 			``,
 			false,
 		},
+		"drop interleaved tables": {
+			`
+			CREATE TABLE Parent (
+			  ID INT64 NOT NULL,
+			) PRIMARY KEY(ID);
+			CREATE TABLE Child (
+			  ID INT64 NOT NULL,
+			  ChildID INT64 NOT NULL,
+			) PRIMARY KEY(ID, ChildID), INTERLEAVE IN PARENT Parent ON DELETE CASCADE;`,
+			``,
+			`
+			DROP TABLE Child;
+			DROP TABLE Parent;`,
+			false,
+		},
+		"add interleaved tables": {
+			``,
+			`
+			CREATE TABLE Parent (
+			  ID INT64 NOT NULL,
+			) PRIMARY KEY(ID);
+			CREATE TABLE Child (
+			  ID INT64 NOT NULL,
+			  ChildID INT64 NOT NULL,
+			) PRIMARY KEY(ID, ChildID), INTERLEAVE IN PARENT Parent ON DELETE CASCADE;`,
+			`
+			CREATE TABLE Parent (
+			  ID INT64 NOT NULL,
+			) PRIMARY KEY(ID);
+			CREATE TABLE Child (
+			  ID INT64 NOT NULL,
+			  ChildID INT64 NOT NULL,
+			) PRIMARY KEY(ID, ChildID), INTERLEAVE IN PARENT Parent ON DELETE CASCADE;`,
+			false,
+		},
+		"recreate interleaved parent table": {
+			`
+			CREATE TABLE Parent (
+			  ID INT64 NOT NULL,
+			) PRIMARY KEY(ID);
+			CREATE TABLE Child (
+			  ID INT64 NOT NULL,
+			  ChildID INT64 NOT NULL,
+			) PRIMARY KEY(ID, ChildID), INTERLEAVE IN PARENT Parent ON DELETE CASCADE;`,
+			`
+			CREATE TABLE Parent (
+			  ID INT64 NOT NULL,
+			  ID2 INT64 NOT NULL,
+			) PRIMARY KEY(ID, ID2);
+			CREATE TABLE Child (
+			  ID INT64 NOT NULL,
+			  ChildID INT64 NOT NULL,
+			) PRIMARY KEY(ID, ChildID), INTERLEAVE IN PARENT Parent ON DELETE CASCADE;`,
+			`
+			DROP TABLE Child;
+			DROP TABLE Parent;
+			CREATE TABLE Parent (
+			  ID INT64 NOT NULL,
+			  ID2 INT64 NOT NULL,
+			) PRIMARY KEY(ID, ID2);
+			CREATE TABLE Child (
+			  ID INT64 NOT NULL,
+			  ChildID INT64 NOT NULL,
+			) PRIMARY KEY(ID, ChildID), INTERLEAVE IN PARENT Parent ON DELETE CASCADE;`,
+			false,
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			var buf bytes.Buffer
