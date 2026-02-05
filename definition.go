@@ -322,7 +322,7 @@ func (t *table) onDependencyChange(me, dependency migrationState, m *migration) 
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
 		}
 	default:
-		panic(fmt.Sprintf("unexpected dependOn type on table: %T", dep))
+		panic(fmt.Sprintf("unexpected dependency type on table: %T", dep))
 	}
 }
 
@@ -468,7 +468,7 @@ func (c *column) onDependencyChange(me, dependency migrationState, m *migration)
 			m.updateState(me.updateKind(migrationKindNone))
 		}
 	default:
-		panic(fmt.Sprintf("unexpected dependOn type on column: %T", dep))
+		panic(fmt.Sprintf("unexpected dependency type on column: %T", dep))
 	}
 }
 
@@ -586,7 +586,7 @@ func (i *index) onDependencyChange(me, dependency migrationState, m *migration) 
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
 		}
 	default:
-		panic(fmt.Sprintf("unexpected dependOn type on index: %T", dep))
+		panic(fmt.Sprintf("unexpected dependency type on index: %T", dep))
 	}
 }
 
@@ -689,7 +689,7 @@ func (si *searchIndex) onDependencyChange(me, dependency migrationState, m *migr
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
 		}
 	default:
-		panic(fmt.Sprintf("unexpected dependOn type on search index: %T", dep))
+		panic(fmt.Sprintf("unexpected dependency type on search index: %T", dep))
 	}
 }
 
@@ -747,7 +747,7 @@ func (vi *vectorIndex) onDependencyChange(me, dependency migrationState, m *migr
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
 		}
 	default:
-		panic(fmt.Sprintf("unexpected dependOn type on vector index: %T", dep))
+		panic(fmt.Sprintf("unexpected dependency type on vector index: %T", dep))
 	}
 }
 
@@ -857,7 +857,7 @@ func (pg *propertyGraph) onDependencyChange(me, dependency migrationState, m *mi
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
 		}
 	default:
-		panic(fmt.Sprintf("unexpected dependOn type on property graph: %T", dep))
+		panic(fmt.Sprintf("unexpected dependency type on property graph: %T", dep))
 	}
 }
 
@@ -929,7 +929,7 @@ func (v *view) onDependencyChange(me, dependency migrationState, m *migration) {
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
 		}
 	default:
-		panic(fmt.Sprintf("unexpected dependOn type on view: %T", dep))
+		panic(fmt.Sprintf("unexpected dependency type on view: %T", dep))
 	}
 }
 
@@ -1021,7 +1021,7 @@ func (cs *changeStream) onDependencyChange(me, dependency migrationState, m *mig
 			))
 		}
 	default:
-		panic(fmt.Sprintf("unexpected dependOn type on property graph: %T", dep))
+		panic(fmt.Sprintf("unexpected dependency type on property graph: %T", dep))
 	}
 }
 
@@ -1635,7 +1635,7 @@ func (g *grant) onDependencyChange(me, dependency migrationState, m *migration) 
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
 		}
 	default:
-		panic(fmt.Sprintf("unexpected dependOn type on grant: %T", dep))
+		panic(fmt.Sprintf("unexpected dependency type on grant: %T", dep))
 	}
 }
 
