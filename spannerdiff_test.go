@@ -453,6 +453,24 @@ func TestDiff(t *testing.T) {
 			ALTER SEARCH INDEX IDX1 DROP STORED COLUMN T1_I1;`,
 			false,
 		},
+		"add search index in named schema": {
+			``,
+			`
+			CREATE SEARCH INDEX S1.IDX1 ON S1.T1(T1_S1)`,
+			`
+			CREATE SEARCH INDEX S1.IDX1 ON S1.T1(T1_S1);`,
+			false,
+		},
+		"move search index to named schema": {
+			`
+			CREATE SEARCH INDEX IDX1 ON T1(T1_S1)`,
+			`
+			CREATE SEARCH INDEX S1.IDX1 ON S1.T1(T1_S1)`,
+			`
+			DROP SEARCH INDEX IDX1;
+			CREATE SEARCH INDEX S1.IDX1 ON S1.T1(T1_S1);`,
+			false,
+		},
 		"add vector index": {
 			``,
 			`
