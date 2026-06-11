@@ -140,14 +140,25 @@ func (i indexID) String() string {
 }
 
 type searchIndexID struct {
-	name string
+	schemaID optional[schemaID]
+	name     string
 }
 
-func newSearchIndexID(ident *ast.Ident) searchIndexID {
-	return searchIndexID{ident.Name}
+func newSearchIndexID(path *ast.Path) searchIndexID {
+	switch len(path.Idents) {
+	case 1:
+		return searchIndexID{none[schemaID](), path.Idents[0].Name}
+	case 2:
+		return searchIndexID{some(newSchemaID(path.Idents[0])), path.Idents[1].Name}
+	default:
+		panic(fmt.Sprintf("unexpected search index name: %s", path.SQL()))
+	}
 }
 
 func (i searchIndexID) ID() string {
+	if schemaID, ok := i.schemaID.get(); ok {
+		return fmt.Sprintf("SearchIndex(%s.%s)", schemaID.name, i.name)
+	}
 	return fmt.Sprintf("SearchIndex(%s)", i.name)
 }
 
@@ -224,6 +235,14 @@ type changeStreamID struct {
 
 func newChangeStreamID(ident *ast.Ident) changeStreamID {
 	return changeStreamID{ident.Name}
+}
+
+// Change streams cannot belong to a named schema, so only a single identifier is accepted.
+func newChangeStreamIDFromPath(path *ast.Path) changeStreamID {
+	if len(path.Idents) != 1 {
+		panic(fmt.Sprintf("unexpected change stream name: %s", path.SQL()))
+	}
+	return newChangeStreamID(path.Idents[0])
 }
 
 func (i changeStreamID) ID() string {
@@ -335,6 +354,14 @@ type changeStreamReadFunctionID struct {
 
 func newChangeStreamReadFunctionID(name *ast.Ident) changeStreamReadFunctionID {
 	return changeStreamReadFunctionID{name.Name}
+}
+
+// Change stream read functions cannot belong to a named schema, so only a single identifier is accepted.
+func newChangeStreamReadFunctionIDFromPath(path *ast.Path) changeStreamReadFunctionID {
+	if len(path.Idents) != 1 {
+		panic(fmt.Sprintf("unexpected change stream read function name: %s", path.SQL()))
+	}
+	return newChangeStreamReadFunctionID(path.Idents[0])
 }
 
 func (i changeStreamReadFunctionID) ID() string {

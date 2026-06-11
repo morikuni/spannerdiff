@@ -453,6 +453,24 @@ func TestDiff(t *testing.T) {
 			ALTER SEARCH INDEX IDX1 DROP STORED COLUMN T1_I1;`,
 			false,
 		},
+		"add search index in named schema": {
+			``,
+			`
+			CREATE SEARCH INDEX S1.IDX1 ON S1.T1(T1_S1)`,
+			`
+			CREATE SEARCH INDEX S1.IDX1 ON S1.T1(T1_S1);`,
+			false,
+		},
+		"move search index to named schema": {
+			`
+			CREATE SEARCH INDEX IDX1 ON T1(T1_S1)`,
+			`
+			CREATE SEARCH INDEX S1.IDX1 ON S1.T1(T1_S1)`,
+			`
+			DROP SEARCH INDEX IDX1;
+			CREATE SEARCH INDEX S1.IDX1 ON S1.T1(T1_S1);`,
+			false,
+		},
 		"add vector index": {
 			``,
 			`
@@ -808,6 +826,72 @@ func TestDiff(t *testing.T) {
 			`
 			CREATE INDEX IDX1 ON T1 (T1_I1 ASC)`,
 			``,
+			false,
+		},
+		"drop interleaved tables": {
+			`
+			CREATE TABLE Parent (
+			  ID INT64 NOT NULL,
+			) PRIMARY KEY(ID);
+			CREATE TABLE Child (
+			  ID INT64 NOT NULL,
+			  ChildID INT64 NOT NULL,
+			) PRIMARY KEY(ID, ChildID), INTERLEAVE IN PARENT Parent ON DELETE CASCADE;`,
+			``,
+			`
+			DROP TABLE Child;
+			DROP TABLE Parent;`,
+			false,
+		},
+		"add interleaved tables": {
+			``,
+			`
+			CREATE TABLE Parent (
+			  ID INT64 NOT NULL,
+			) PRIMARY KEY(ID);
+			CREATE TABLE Child (
+			  ID INT64 NOT NULL,
+			  ChildID INT64 NOT NULL,
+			) PRIMARY KEY(ID, ChildID), INTERLEAVE IN PARENT Parent ON DELETE CASCADE;`,
+			`
+			CREATE TABLE Parent (
+			  ID INT64 NOT NULL,
+			) PRIMARY KEY(ID);
+			CREATE TABLE Child (
+			  ID INT64 NOT NULL,
+			  ChildID INT64 NOT NULL,
+			) PRIMARY KEY(ID, ChildID), INTERLEAVE IN PARENT Parent ON DELETE CASCADE;`,
+			false,
+		},
+		"recreate interleaved parent table": {
+			`
+			CREATE TABLE Parent (
+			  ID INT64 NOT NULL,
+			) PRIMARY KEY(ID);
+			CREATE TABLE Child (
+			  ID INT64 NOT NULL,
+			  ChildID INT64 NOT NULL,
+			) PRIMARY KEY(ID, ChildID), INTERLEAVE IN PARENT Parent ON DELETE CASCADE;`,
+			`
+			CREATE TABLE Parent (
+			  ID INT64 NOT NULL,
+			  ID2 INT64 NOT NULL,
+			) PRIMARY KEY(ID, ID2);
+			CREATE TABLE Child (
+			  ID INT64 NOT NULL,
+			  ChildID INT64 NOT NULL,
+			) PRIMARY KEY(ID, ChildID), INTERLEAVE IN PARENT Parent ON DELETE CASCADE;`,
+			`
+			DROP TABLE Child;
+			DROP TABLE Parent;
+			CREATE TABLE Parent (
+			  ID INT64 NOT NULL,
+			  ID2 INT64 NOT NULL,
+			) PRIMARY KEY(ID, ID2);
+			CREATE TABLE Child (
+			  ID INT64 NOT NULL,
+			  ChildID INT64 NOT NULL,
+			) PRIMARY KEY(ID, ChildID), INTERLEAVE IN PARENT Parent ON DELETE CASCADE;`,
 			false,
 		},
 	} {

@@ -300,13 +300,31 @@ func (t *table) alter(tgt definition, m *migration) {
 }
 
 func (t *table) dependsOn() []identifier {
+	var ids []identifier
 	if schemaID, ok := t.schemaID().get(); ok {
-		return []identifier{schemaID}
+		ids = append(ids, schemaID)
 	}
-	return nil
+	if t.node.Cluster != nil {
+		ids = append(ids, newTableIDFromPath(t.node.Cluster.TableName))
+	}
+	return ids
 }
 
-func (t *table) onDependencyChange(me, dependency migrationState, m *migration) {}
+func (t *table) onDependencyChange(me, dependency migrationState, m *migration) {
+	switch me.kind {
+	case migrationKindDrop:
+		return
+	}
+	switch dep := dependency.definition().(type) {
+	case *table, *schema:
+		switch dependency.kind {
+		case migrationKindDropAndAdd:
+			m.updateState(me.updateKind(migrationKindDropAndAdd))
+		}
+	default:
+		panic(fmt.Sprintf("unexpected dependency type on table: %T", dep))
+	}
+}
 
 func (t *table) columns() map[columnID]*ast.ColumnDef {
 	m := make(map[columnID]*ast.ColumnDef)
@@ -450,7 +468,7 @@ func (c *column) onDependencyChange(me, dependency migrationState, m *migration)
 			m.updateState(me.updateKind(migrationKindNone))
 		}
 	default:
-		panic(fmt.Sprintf("unexpected dependOn type on column: %T", dep))
+		panic(fmt.Sprintf("unexpected dependency type on column: %T", dep))
 	}
 }
 
@@ -568,7 +586,7 @@ func (i *index) onDependencyChange(me, dependency migrationState, m *migration) 
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
 		}
 	default:
-		panic(fmt.Sprintf("unexpected dependOn type on index: %T", dep))
+		panic(fmt.Sprintf("unexpected dependency type on index: %T", dep))
 	}
 }
 
@@ -585,7 +603,7 @@ func (si *searchIndex) id() identifier {
 }
 
 func (si *searchIndex) tableID() tableID {
-	return newTableIDFromIdent(si.node.TableName)
+	return newTableIDFromPath(si.node.TableName)
 }
 
 func (si *searchIndex) astNode() ast.Node {
@@ -653,7 +671,7 @@ func (si *searchIndex) alter(tgt definition, m *migration) {
 func (si *searchIndex) dependsOn() []identifier {
 	var ids []identifier
 	for _, col := range si.node.TokenListPart {
-		ids = append(ids, newColumnID(newTableIDFromIdent(si.node.TableName), col))
+		ids = append(ids, newColumnID(newTableIDFromPath(si.node.TableName), col))
 	}
 	ids = append(ids, si.tableID())
 	return ids
@@ -671,7 +689,7 @@ func (si *searchIndex) onDependencyChange(me, dependency migrationState, m *migr
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
 		}
 	default:
-		panic(fmt.Sprintf("unexpected dependOn type on search index: %T", dep))
+		panic(fmt.Sprintf("unexpected dependency type on search index: %T", dep))
 	}
 }
 
@@ -729,7 +747,7 @@ func (vi *vectorIndex) onDependencyChange(me, dependency migrationState, m *migr
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
 		}
 	default:
-		panic(fmt.Sprintf("unexpected dependOn type on vector index: %T", dep))
+		panic(fmt.Sprintf("unexpected dependency type on vector index: %T", dep))
 	}
 }
 
@@ -839,7 +857,7 @@ func (pg *propertyGraph) onDependencyChange(me, dependency migrationState, m *mi
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
 		}
 	default:
-		panic(fmt.Sprintf("unexpected dependOn type on property graph: %T", dep))
+		panic(fmt.Sprintf("unexpected dependency type on property graph: %T", dep))
 	}
 }
 
@@ -911,7 +929,7 @@ func (v *view) onDependencyChange(me, dependency migrationState, m *migration) {
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
 		}
 	default:
-		panic(fmt.Sprintf("unexpected dependOn type on view: %T", dep))
+		panic(fmt.Sprintf("unexpected dependency type on view: %T", dep))
 	}
 }
 
@@ -1003,7 +1021,7 @@ func (cs *changeStream) onDependencyChange(me, dependency migrationState, m *mig
 			))
 		}
 	default:
-		panic(fmt.Sprintf("unexpected dependOn type on property graph: %T", dep))
+		panic(fmt.Sprintf("unexpected dependency type on property graph: %T", dep))
 	}
 }
 
@@ -1234,10 +1252,10 @@ func newGrant(g *ast.Grant) []definition {
 							Roles: []*ast.Ident{r},
 							Privilege: &ast.PrivilegeOnTable{
 								Privileges: t.Privileges,
-								Names:      []*ast.Ident{tableName},
+								Names:      []*ast.Path{tableName},
 							},
 						},
-						newGrantID(newRoleID(r), newTableIDFromIdent(tableName)),
+						newGrantID(newRoleID(r), newTableIDFromPath(tableName)),
 					},
 				)
 			}
@@ -1249,10 +1267,10 @@ func newGrant(g *ast.Grant) []definition {
 					&ast.Grant{
 						Roles: []*ast.Ident{r},
 						Privilege: &ast.SelectPrivilegeOnView{
-							Names: []*ast.Ident{viewName},
+							Names: []*ast.Path{viewName},
 						},
 					},
-					newGrantID(newRoleID(r), newViewIDFromIdent(viewName)),
+					newGrantID(newRoleID(r), newViewIDFromPath(viewName)),
 				})
 			}
 		}
@@ -1263,10 +1281,10 @@ func newGrant(g *ast.Grant) []definition {
 					&ast.Grant{
 						Roles: []*ast.Ident{r},
 						Privilege: &ast.SelectPrivilegeOnChangeStream{
-							Names: []*ast.Ident{csName},
+							Names: []*ast.Path{csName},
 						},
 					},
-					newGrantID(newRoleID(r), newChangeStreamID(csName)),
+					newGrantID(newRoleID(r), newChangeStreamIDFromPath(csName)),
 				})
 			}
 		}
@@ -1277,10 +1295,10 @@ func newGrant(g *ast.Grant) []definition {
 					&ast.Grant{
 						Roles: []*ast.Ident{r},
 						Privilege: &ast.ExecutePrivilegeOnTableFunction{
-							Names: []*ast.Ident{csrfName},
+							Names: []*ast.Path{csrfName},
 						},
 					},
-					newGrantID(newRoleID(r), newChangeStreamReadFunctionID(csrfName)),
+					newGrantID(newRoleID(r), newChangeStreamReadFunctionIDFromPath(csrfName)),
 				})
 			}
 		}
@@ -1408,7 +1426,7 @@ func (g *grant) alter(tgt definition, m *migration) {
 						hasSelect = true
 					} else {
 						for _, col := range t.Columns {
-							colID := newColumnID(newTableIDFromIdent(baseP.Names[0]), col)
+							colID := newColumnID(newTableIDFromPath(baseP.Names[0]), col)
 							if _, ok := selectWithColumn[colID]; !ok {
 								selectWithColumn[colID] = col
 								selectColumnIDs = append(selectColumnIDs, colID)
@@ -1420,7 +1438,7 @@ func (g *grant) alter(tgt definition, m *migration) {
 						hasUpdate = true
 					} else {
 						for _, col := range t.Columns {
-							colID := newColumnID(newTableIDFromIdent(baseP.Names[0]), col)
+							colID := newColumnID(newTableIDFromPath(baseP.Names[0]), col)
 							if _, ok := updateWithColumn[colID]; !ok {
 								updateWithColumn[colID] = col
 								updateColumnIDs = append(updateColumnIDs, colID)
@@ -1432,7 +1450,7 @@ func (g *grant) alter(tgt definition, m *migration) {
 						hasInsert = true
 					} else {
 						for _, col := range t.Columns {
-							colID := newColumnID(newTableIDFromIdent(baseP.Names[0]), col)
+							colID := newColumnID(newTableIDFromPath(baseP.Names[0]), col)
 							if _, ok := insertWithColumn[colID]; !ok {
 								insertWithColumn[colID] = col
 								insertColumnIDs = append(insertColumnIDs, colID)
@@ -1565,21 +1583,21 @@ func (g *grant) dependsOn() []identifier {
 	switch p := g.node.Privilege.(type) {
 	case *ast.PrivilegeOnTable:
 		for _, tableName := range p.Names {
-			ids = append(ids, newTableIDFromIdent(tableName))
+			ids = append(ids, newTableIDFromPath(tableName))
 		}
 		for _, tp := range p.Privileges {
 			switch t := tp.(type) {
 			case *ast.SelectPrivilege:
 				for _, col := range t.Columns {
-					ids = append(ids, newColumnID(newTableIDFromIdent(p.Names[0]), col))
+					ids = append(ids, newColumnID(newTableIDFromPath(p.Names[0]), col))
 				}
 			case *ast.UpdatePrivilege:
 				for _, col := range t.Columns {
-					ids = append(ids, newColumnID(newTableIDFromIdent(p.Names[0]), col))
+					ids = append(ids, newColumnID(newTableIDFromPath(p.Names[0]), col))
 				}
 			case *ast.InsertPrivilege:
 				for _, col := range t.Columns {
-					ids = append(ids, newColumnID(newTableIDFromIdent(p.Names[0]), col))
+					ids = append(ids, newColumnID(newTableIDFromPath(p.Names[0]), col))
 				}
 			case *ast.DeletePrivilege:
 				// none
@@ -1589,11 +1607,11 @@ func (g *grant) dependsOn() []identifier {
 		}
 	case *ast.SelectPrivilegeOnView:
 		for _, viewName := range p.Names {
-			ids = append(ids, newViewIDFromIdent(viewName))
+			ids = append(ids, newViewIDFromPath(viewName))
 		}
 	case *ast.SelectPrivilegeOnChangeStream:
 		for _, csName := range p.Names {
-			ids = append(ids, newChangeStreamID(csName))
+			ids = append(ids, newChangeStreamIDFromPath(csName))
 		}
 	case *ast.ExecutePrivilegeOnTableFunction:
 		// none
@@ -1617,7 +1635,7 @@ func (g *grant) onDependencyChange(me, dependency migrationState, m *migration) 
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
 		}
 	default:
-		panic(fmt.Sprintf("unexpected dependOn type on grant: %T", dep))
+		panic(fmt.Sprintf("unexpected dependency type on grant: %T", dep))
 	}
 }
 
