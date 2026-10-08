@@ -1129,14 +1129,25 @@ func (pg *propertyGraph) dependsOn() []identifier {
 					ids = append(ids, newColumnID(tableID, key))
 				}
 			}
-			for _, key := range keys.Source.Keys.ColumnNameList {
-				ids = append(ids, newColumnID(tableID, key))
-			}
-			for _, key := range keys.Source.ReferenceColumns.ColumnNameList {
-				ids = append(ids, newColumnID(newTableIDFromIdent(keys.Source.ElementReference), key))
-			}
+			ids = append(ids, edgeKeyDependencies(tableID, keys.Source.Keys, keys.Source.ElementReference, keys.Source.ReferenceColumns)...)
+			ids = append(ids, edgeKeyDependencies(tableID, keys.Destination.Keys, keys.Destination.ElementReference, keys.Destination.ReferenceColumns)...)
 		default:
 			panic(fmt.Sprintf("unexpected property graph type: %T", keys))
+		}
+	}
+	return ids
+}
+
+func edgeKeyDependencies(tableID tableID, keys *ast.PropertyGraphColumnNameList, ref *ast.Ident, refColumns *ast.PropertyGraphColumnNameList) []identifier {
+	var ids []identifier
+	for _, key := range keys.ColumnNameList {
+		ids = append(ids, newColumnID(tableID, key))
+	}
+	refTableID := newTableIDFromIdent(ref)
+	ids = append(ids, refTableID)
+	if refColumns != nil {
+		for _, key := range refColumns.ColumnNameList {
+			ids = append(ids, newColumnID(refTableID, key))
 		}
 	}
 	return ids
