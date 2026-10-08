@@ -200,25 +200,33 @@ func (t *table) alter(tgt definition, m *migration) {
 	// https://cloud.google.com/spanner/docs/schema-updates?t#supported-updates
 	// - Add or remove a foreign key from an existing table.
 	// - Add or remove a check constraint from an existing table.
+	// - Change the ON DELETE action of an interleaved table.
+	// - Convert between INTERLEAVE IN and INTERLEAVE IN PARENT.
 	// --- not documented ---
 	// - Add or remove a synonym from an existing table.
 	// - Add, replace or remove a row deletion policy from an existing table.
+	// - Set table options.
 
 	if !equalNodes(base.node.PrimaryKeys, target.node.PrimaryKeys) {
 		m.updateStateIfUndefined(newDropAndAddState(base, target))
 		return
 	}
 
-	baseCopy := *base.node
-	targetCopy := *target.node
-	baseCopy.Columns = nil
-	targetCopy.Columns = nil
-	if equalNode(&baseCopy, &targetCopy) {
-		// If only the columns are different, the migration is done by altering the columns.
-		return
-	}
+	// Columns are migrated by column definitions.
+	// Other fields are cleared once they are handled, and the remaining differences require recreating the table.
+	baseRest := *base.node
+	targetRest := *target.node
+	baseRest.Columns = nil
+	targetRest.Columns = nil
 
 	var ddls []ast.DDL
+	if alteration, ok := alterCluster(base.node.Cluster, target.node.Cluster); ok {
+		if alteration != nil {
+			ddls = append(ddls, &ast.AlterTable{Name: target.node.Name, TableAlteration: alteration})
+		}
+		baseRest.Cluster = nil
+		targetRest.Cluster = nil
+	}
 	if !equalNode(base.node.RowDeletionPolicy, target.node.RowDeletionPolicy) {
 		switch {
 		case base.node.RowDeletionPolicy == nil && target.node.RowDeletionPolicy != nil:
@@ -229,6 +237,8 @@ func (t *table) alter(tgt definition, m *migration) {
 			ddls = append(ddls, &ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.ReplaceRowDeletionPolicy{RowDeletionPolicy: target.node.RowDeletionPolicy.RowDeletionPolicy}})
 		}
 	}
+	baseRest.RowDeletionPolicy = nil
+	targetRest.RowDeletionPolicy = nil
 	if !equalNodes(base.node.Synonyms, target.node.Synonyms) {
 		baseSynonyms := make(map[string]struct{}, len(base.node.Synonyms))
 		for _, syn := range base.node.Synonyms {
@@ -249,6 +259,8 @@ func (t *table) alter(tgt definition, m *migration) {
 			}
 		}
 	}
+	baseRest.Synonyms = nil
+	targetRest.Synonyms = nil
 	if !equalNodes(base.node.TableConstraints, target.node.TableConstraints) {
 		baseConstraints := make(map[string]*ast.TableConstraint, len(base.node.TableConstraints))
 		for _, tc := range base.node.TableConstraints {
@@ -287,13 +299,59 @@ func (t *table) alter(tgt definition, m *migration) {
 		}
 	}
 
-	if len(ddls) == 0 {
-		// If there are no DDLs, the table was changed but could not alter. Therefore, drop and create.
+	if allConstraintsNamed(base.node.TableConstraints) && allConstraintsNamed(target.node.TableConstraints) {
+		baseRest.TableConstraints = nil
+		targetRest.TableConstraints = nil
+	}
+	if options := diffOptions(base.node.Options, target.node.Options); options != nil {
+		ddls = append(ddls, &ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.AlterTableSetOptions{Options: options}})
+	}
+	baseRest.Options = nil
+	targetRest.Options = nil
+
+	if !equalNode(&baseRest, &targetRest) {
 		m.updateStateIfUndefined(newDropAndAddState(base, target))
+		return
+	}
+	if len(ddls) == 0 {
 		return
 	}
 
 	m.updateStateIfUndefined(newAlterState(base, target, ddls...))
+}
+
+func allConstraintsNamed(tcs []*ast.TableConstraint) bool {
+	for _, tc := range tcs {
+		if tc.Name == nil {
+			return false
+		}
+	}
+	return true
+}
+
+// alterCluster returns the alteration to change the INTERLEAVE IN clause of a table.
+// It returns false if the change requires recreating the table, and a nil alteration if nothing changes.
+func alterCluster(base, target *ast.Cluster) (ast.TableAlteration, bool) {
+	onDelete := func(c *ast.Cluster) ast.OnDeleteAction {
+		if c.OnDelete == "" {
+			return ast.OnDeleteNoAction
+		}
+		return c.OnDelete
+	}
+	switch {
+	case base == nil && target == nil:
+		return nil, true
+	case base == nil || target == nil:
+		return nil, false
+	case !equalNode(base.TableName, target.TableName):
+		return nil, false
+	case base.Enforced != target.Enforced:
+		return &ast.SetInterleaveIn{TableName: target.TableName, Enforced: target.Enforced, OnDelete: target.OnDelete}, true
+	case onDelete(base) != onDelete(target):
+		return &ast.SetOnDelete{OnDelete: onDelete(target)}, true
+	default:
+		return nil, true
+	}
 }
 
 func (t *table) dependsOn() []identifier {
