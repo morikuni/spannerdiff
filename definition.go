@@ -1063,12 +1063,16 @@ func (s *sequence) alter(tgt definition, m *migration) {
 	base := s
 	target := tgt.(*sequence)
 
-	if !equalNode(base.node.Options, target.node.Options) {
+	baseCopy := *base.node
+	targetCopy := *target.node
+	baseCopy.Options = nil
+	targetCopy.Options = nil
+	if equalNode(&baseCopy, &targetCopy) {
 		m.updateStateIfUndefined(newAlterState(base, target, &ast.AlterSequence{Name: target.node.Name, Options: target.node.Options}))
 		return
 	}
 
-	panic(fmt.Sprintf("unsupported sequence alternation on: %s", target.node.SQL()))
+	m.updateStateIfUndefined(newDropAndAddState(base, target))
 }
 
 func (s *sequence) dependsOn() []identifier {

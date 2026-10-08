@@ -32,16 +32,7 @@ func Diff(baseSQL, targetSQL io.Reader, output io.Writer, option DiffOption) err
 		return fmt.Errorf("failed to parse target SQL: %w", err)
 	}
 
-	baseDefs, err := newDefinitions(baseDDLs, option.ErrorOnUnsupportedDDL)
-	if err != nil {
-		return err
-	}
-	targetDefs, err := newDefinitions(targetDDLs, option.ErrorOnUnsupportedDDL)
-	if err != nil {
-		return err
-	}
-
-	stmts, err := diffDefinitions(baseDefs, targetDefs)
+	stmts, err := diff(baseDDLs, targetDDLs, option)
 	if err != nil {
 		return err
 	}
@@ -59,6 +50,27 @@ func Diff(baseSQL, targetSQL io.Reader, output io.Writer, option DiffOption) err
 	}
 
 	return nil
+}
+
+// diff recovers from panics so that library users get an error instead of a crash
+// when the schema contains a construct this package does not handle yet.
+func diff(baseDDLs, targetDDLs []ast.DDL, option DiffOption) (_ []ast.DDL, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("unexpected error, please report this issue at https://github.com/morikuni/spannerdiff/issues: %v", r)
+		}
+	}()
+
+	baseDefs, err := newDefinitions(baseDDLs, option.ErrorOnUnsupportedDDL)
+	if err != nil {
+		return nil, err
+	}
+	targetDefs, err := newDefinitions(targetDDLs, option.ErrorOnUnsupportedDDL)
+	if err != nil {
+		return nil, err
+	}
+
+	return diffDefinitions(baseDefs, targetDefs)
 }
 
 type migrationKind string
