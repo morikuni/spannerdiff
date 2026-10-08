@@ -2,6 +2,7 @@ package spannerdiff
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cloudspannerecosystem/memefish/ast"
 	"github.com/cloudspannerecosystem/memefish/token"
@@ -41,8 +42,26 @@ func (o optional[T]) or(a optional[T]) optional[T] {
 }
 
 func equalNode(a, b ast.Node) bool {
-	return cmp.Equal(a, b,
+	return cmp.Equal(a, b, equalOptions()...)
+}
+
+func equalOptions() []cmp.Option {
+	return []cmp.Option{
 		cmpopts.IgnoreTypes(token.Pos(0)),
+		// Identifiers are case-insensitive in Spanner.
+		cmp.Comparer(func(a, b *ast.Ident) bool {
+			if a == nil || b == nil {
+				return a == b
+			}
+			return strings.EqualFold(a.Name, b.Name)
+		}),
+		// Proto and enum type names are case-sensitive.
+		cmp.Comparer(func(a, b *ast.NamedType) bool {
+			if a == nil || b == nil {
+				return a == b
+			}
+			return a.SQL() == b.SQL()
+		}),
 		cmp.Comparer(func(a, b *ast.Options) bool {
 			if a == nil && b == nil {
 				return true
@@ -54,14 +73,17 @@ func equalNode(a, b ast.Node) bool {
 			ma := make(map[string]ast.Expr)
 			mb := make(map[string]ast.Expr)
 			for _, o := range a.Records {
-				ma[o.Name.Name] = o.Value
+				ma[nameOf(o.Name)] = o.Value
 			}
 			for _, o := range b.Records {
-				mb[o.Name.Name] = o.Value
+				mb[nameOf(o.Name)] = o.Value
 			}
-			return cmp.Equal(ma, mb, cmpopts.IgnoreTypes(token.Pos(0)))
+			return cmp.Equal(ma, mb, equalOptions()...)
 		}),
 		cmp.Comparer(func(a, b *ast.IndexKey) bool {
+			if a == nil || b == nil {
+				return a == b
+			}
 			aVal := *a
 			bVal := *b
 			if aVal.Dir == "" {
@@ -70,9 +92,9 @@ func equalNode(a, b ast.Node) bool {
 			if bVal.Dir == "" {
 				bVal.Dir = ast.DirectionAsc
 			}
-			return cmp.Equal(aVal, bVal, cmpopts.IgnoreTypes(token.Pos(0)))
+			return cmp.Equal(aVal, bVal, equalOptions()...)
 		}),
-	)
+	}
 }
 
 func equalNodes[T ast.Node](a, b []T) bool {
@@ -163,9 +185,7 @@ func uniqueByFunc[A any, B comparable](is []A, f func(A) B) []A {
 }
 
 func uniqueIdent(is []*ast.Ident) []*ast.Ident {
-	return uniqueByFunc(is, func(i *ast.Ident) string {
-		return i.Name
-	})
+	return uniqueByFunc(is, nameOf)
 }
 
 func tablesOrViewsInQueryExpr(expr ast.QueryExpr) ([]*ast.Path, []*ast.Ident) {

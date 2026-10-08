@@ -810,6 +810,46 @@ func TestDiff(t *testing.T) {
 			ALTER DATABASE D1 SET OPTIONS (version_retention_period = '2d');`,
 			false,
 		},
+		"identifiers are case-insensitive": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX) OPTIONS (allow_commit_timestamp = false),
+			  CONSTRAINT C1 CHECK (T1_I1 > 0),
+			  SYNONYM(S1),
+			) PRIMARY KEY(T1_I1);
+			CREATE INDEX IDX1 ON T1(T1_S1) STORING (T1_I1);
+			CREATE VIEW V1 SQL SECURITY INVOKER AS SELECT T1.T1_I1 FROM T1;
+			GRANT SELECT(T1_S1) ON TABLE T1 TO ROLE R1;`,
+			`
+			create table t1 (
+			  t1_i1 int64 not null,
+			  t1_s1 string(max) options (ALLOW_COMMIT_TIMESTAMP = false),
+			  constraint c1 check (t1_i1 > 0),
+			  synonym(s1),
+			) primary key(t1_i1);
+			create index idx1 on t1(t1_s1) storing (t1_i1);
+			create view v1 sql security invoker as select t1.t1_i1 from t1;
+			grant select(t1_s1) on table t1 to role r1;`,
+			``,
+			false,
+		},
+		"proto type names are case-sensitive": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_P1 examples.Message,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_P1 examples.message,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 DROP COLUMN T1_P1;
+			ALTER TABLE T1 ADD COLUMN T1_P1 examples.message;`,
+			false,
+		},
 		"issue #35": { // https://github.com/morikuni/spannerdiff/issues/35
 			``,
 			`

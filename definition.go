@@ -232,19 +232,19 @@ func (t *table) alter(tgt definition, m *migration) {
 	if !equalNodes(base.node.Synonyms, target.node.Synonyms) {
 		baseSynonyms := make(map[string]struct{}, len(base.node.Synonyms))
 		for _, syn := range base.node.Synonyms {
-			baseSynonyms[syn.Name.Name] = struct{}{}
+			baseSynonyms[nameOf(syn.Name)] = struct{}{}
 		}
 		targetSynonyms := make(map[string]struct{}, len(target.node.Synonyms))
 		for _, syn := range target.node.Synonyms {
-			targetSynonyms[syn.Name.Name] = struct{}{}
+			targetSynonyms[nameOf(syn.Name)] = struct{}{}
 		}
 		for _, syn := range base.node.Synonyms {
-			if _, ok := targetSynonyms[syn.Name.Name]; !ok {
+			if _, ok := targetSynonyms[nameOf(syn.Name)]; !ok {
 				ddls = append(ddls, &ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.DropSynonym{Name: syn.Name}})
 			}
 		}
 		for _, syn := range target.node.Synonyms {
-			if _, ok := baseSynonyms[syn.Name.Name]; !ok {
+			if _, ok := baseSynonyms[nameOf(syn.Name)]; !ok {
 				ddls = append(ddls, &ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.AddSynonym{Name: syn.Name}})
 			}
 		}
@@ -253,20 +253,20 @@ func (t *table) alter(tgt definition, m *migration) {
 		baseConstraints := make(map[string]*ast.TableConstraint, len(base.node.TableConstraints))
 		for _, tc := range base.node.TableConstraints {
 			if tc.Name != nil {
-				baseConstraints[tc.Name.Name] = tc
+				baseConstraints[nameOf(tc.Name)] = tc
 			}
 		}
 		targetConstraints := make(map[string]*ast.TableConstraint, len(target.node.TableConstraints))
 		for _, tc := range target.node.TableConstraints {
 			if tc.Name != nil {
-				targetConstraints[tc.Name.Name] = tc
+				targetConstraints[nameOf(tc.Name)] = tc
 			}
 		}
 		for _, baseTC := range base.node.TableConstraints {
 			if baseTC.Name == nil {
 				continue
 			}
-			targetTC, ok := targetConstraints[baseTC.Name.Name]
+			targetTC, ok := targetConstraints[nameOf(baseTC.Name)]
 			switch {
 			case !ok:
 				ddls = append(ddls, &ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.DropConstraint{Name: baseTC.Name}})
@@ -281,7 +281,7 @@ func (t *table) alter(tgt definition, m *migration) {
 			if tc.Name == nil {
 				continue
 			}
-			if _, ok := baseConstraints[tc.Name.Name]; !ok {
+			if _, ok := baseConstraints[nameOf(tc.Name)]; !ok {
 				ddls = append(ddls, &ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.AddTableConstraint{TableConstraint: tc}})
 			}
 		}
