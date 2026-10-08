@@ -308,6 +308,10 @@ func (t *table) dependsOn() []identifier {
 	if t.node.Cluster != nil {
 		ids = append(ids, newTableIDFromPath(t.node.Cluster.TableName))
 	}
+	// CREATE TABLE contains default values, so sequences used by them must exist before the table is created.
+	for _, col := range t.node.Columns {
+		ids = append(ids, sequencesInColumn(col)...)
+	}
 	// CREATE TABLE contains foreign keys, so referenced tables must exist before the table is created.
 	for _, tc := range t.node.TableConstraints {
 		if fk, ok := tc.Constraint.(*ast.ForeignKey); ok {
@@ -330,6 +334,8 @@ func (t *table) onDependencyChange(me, dependency migrationState, m *migration) 
 		case migrationKindDropAndAdd:
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
 		}
+	case *sequence:
+		// The sequence is only used for ordering operations.
 	case *table:
 		// A table referenced by foreign keys is handled by constraint definitions,
 		// so only an interleaved table is recreated along with its parent.
@@ -501,7 +507,29 @@ func isIdentityColumn(col *ast.ColumnDef) bool {
 }
 
 func (c *column) dependsOn() []identifier {
-	return []identifier{c.table.id()}
+	return append([]identifier{c.table.id()}, sequencesInColumn(c.node)...)
+}
+
+// sequencesInColumn returns sequences used by GET_NEXT_SEQUENCE_VALUE in the default value of the column.
+func sequencesInColumn(col *ast.ColumnDef) []identifier {
+	if col.DefaultSemantics == nil {
+		return nil
+	}
+	var ids []identifier
+	ast.Inspect(col.DefaultSemantics, func(n ast.Node) bool {
+		arg, ok := n.(*ast.SequenceArg)
+		if !ok {
+			return true
+		}
+		switch e := arg.Expr.(type) {
+		case *ast.Ident:
+			ids = append(ids, newSequenceID(&ast.Path{Idents: []*ast.Ident{e}}))
+		case *ast.Path:
+			ids = append(ids, newSequenceID(e))
+		}
+		return true
+	})
+	return ids
 }
 
 func (c *column) onDependencyChange(me, dependency migrationState, m *migration) {
@@ -512,6 +540,8 @@ func (c *column) onDependencyChange(me, dependency migrationState, m *migration)
 			// If the table is being added or dropped, the column is also being added or dropped.
 			m.updateState(me.updateKind(migrationKindNone))
 		}
+	case *sequence:
+		// The sequence is only used for ordering operations.
 	default:
 		panic(fmt.Sprintf("unexpected dependency type on column: %T", dep))
 	}
@@ -817,6 +847,9 @@ func (i *index) dependsOn() []identifier {
 		ids = append(ids, schemaID)
 	}
 	ids = append(ids, i.tableID())
+	if i.node.InterleaveIn != nil {
+		ids = append(ids, newTableIDFromIdent(i.node.InterleaveIn.TableName))
+	}
 	return ids
 }
 
@@ -929,10 +962,26 @@ func (si *searchIndex) alter(tgt definition, m *migration) {
 
 func (si *searchIndex) dependsOn() []identifier {
 	var ids []identifier
-	for _, col := range si.node.TokenListPart {
-		ids = append(ids, newColumnID(newTableIDFromPath(si.node.TableName), col))
+	columns := slices.Clone(si.node.TokenListPart)
+	if si.node.Storing != nil {
+		columns = append(columns, si.node.Storing.Columns...)
+	}
+	columns = append(columns, si.node.PartitionColumns...)
+	if si.node.OrderBy != nil {
+		ast.Inspect(si.node.OrderBy, func(n ast.Node) bool {
+			if ident, ok := n.(*ast.Ident); ok {
+				columns = append(columns, ident)
+			}
+			return true
+		})
+	}
+	for _, col := range columns {
+		ids = append(ids, newColumnID(si.tableID(), col))
 	}
 	ids = append(ids, si.tableID())
+	if si.node.Interleave != nil {
+		ids = append(ids, newTableIDFromIdent(si.node.Interleave.TableName))
+	}
 	return ids
 }
 

@@ -750,6 +750,25 @@ func TestDiff(t *testing.T) {
 			ALTER SEARCH INDEX IDX1 DROP STORED COLUMN T1_I1;`,
 			false,
 		},
+		"drop search index storing before column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TOKENLIST,
+			  T1_S1 STRING(MAX),
+			) PRIMARY KEY(T1_I1);
+			CREATE SEARCH INDEX SIDX1 ON T1(T1_T1) STORING (T1_S1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TOKENLIST,
+			) PRIMARY KEY(T1_I1);
+			CREATE SEARCH INDEX SIDX1 ON T1(T1_T1);`,
+			`
+			ALTER SEARCH INDEX SIDX1 DROP STORED COLUMN T1_S1;
+			ALTER TABLE T1 DROP COLUMN T1_S1;`,
+			false,
+		},
 		"add search index in named schema": {
 			``,
 			`
@@ -985,6 +1004,22 @@ func TestDiff(t *testing.T) {
 			CREATE SEQUENCE S1 OPTIONS (start_counter_with = 10);`,
 			`
 			ALTER SEQUENCE S1 SET OPTIONS (start_counter_with = 10, skip_range_min = null, skip_range_max = null);`,
+			false,
+		},
+		"create sequence before column using it": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 DEFAULT (GET_NEXT_SEQUENCE_VALUE(SEQUENCE U1)),
+			) PRIMARY KEY(T1_I1);
+			CREATE SEQUENCE U1 OPTIONS (sequence_kind = 'bit_reversed_positive');`,
+			`
+			CREATE SEQUENCE U1 OPTIONS (sequence_kind = 'bit_reversed_positive');
+			ALTER TABLE T1 ADD COLUMN T1_I2 INT64 DEFAULT (GET_NEXT_SEQUENCE_VALUE(SEQUENCE U1));`,
 			false,
 		},
 		"add model": {
