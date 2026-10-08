@@ -899,6 +899,24 @@ func TestDiff(t *testing.T) {
 			ALTER TABLE T1 ALTER COLUMN T1_P1 examples.message;`,
 			false,
 		},
+		"ignore IF NOT EXISTS and OR REPLACE": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);
+			CREATE INDEX IDX1 ON T1(T1_I1);
+			CREATE SEQUENCE S1 OPTIONS (sequence_kind = 'bit_reversed_positive');
+			CREATE VIEW V1 SQL SECURITY INVOKER AS SELECT T1.T1_I1 FROM T1;`,
+			`
+			CREATE TABLE IF NOT EXISTS T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);
+			CREATE INDEX IF NOT EXISTS IDX1 ON T1(T1_I1);
+			CREATE SEQUENCE IF NOT EXISTS S1 OPTIONS (sequence_kind = 'bit_reversed_positive');
+			CREATE OR REPLACE VIEW V1 SQL SECURITY INVOKER AS SELECT T1.T1_I1 FROM T1;`,
+			``,
+			false,
+		},
 		"issue #35": { // https://github.com/morikuni/spannerdiff/issues/35
 			``,
 			`

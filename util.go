@@ -48,6 +48,11 @@ func equalNode(a, b ast.Node) bool {
 func equalOptions() []cmp.Option {
 	return []cmp.Option{
 		cmpopts.IgnoreTypes(token.Pos(0)),
+		// IF NOT EXISTS and OR REPLACE do not affect the resulting schema.
+		cmp.FilterPath(func(p cmp.Path) bool {
+			sf, ok := p.Last().(cmp.StructField)
+			return ok && (sf.Name() == "IfNotExists" || sf.Name() == "OrReplace")
+		}, cmp.Ignore()),
 		// Identifiers are case-insensitive in Spanner.
 		cmp.Comparer(func(a, b *ast.Ident) bool {
 			if a == nil || b == nil {
