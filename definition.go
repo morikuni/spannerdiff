@@ -81,6 +81,9 @@ func newDefinitions(ddls []ast.DDL, errorOnUnsupported bool) (*definitions, erro
 			for _, tc := range ddl.TableConstraints {
 				add(newConstraint(table, tc))
 			}
+			if ddl.RowDeletionPolicy != nil {
+				add(newRowDeletionPolicy(table, ddl.RowDeletionPolicy.RowDeletionPolicy))
+			}
 		case *ast.CreateIndex:
 			add(newIndex(ddl))
 		case *ast.CreateSearchIndex:
@@ -205,7 +208,6 @@ func (t *table) alter(tgt definition, m *migration) {
 	// - Convert between INTERLEAVE IN and INTERLEAVE IN PARENT.
 	// --- not documented ---
 	// - Add or remove a synonym from an existing table.
-	// - Add, replace or remove a row deletion policy from an existing table.
 	// - Set table options.
 
 	if !equalNodes(base.node.PrimaryKeys, target.node.PrimaryKeys) {
@@ -228,16 +230,7 @@ func (t *table) alter(tgt definition, m *migration) {
 		baseRest.Cluster = nil
 		targetRest.Cluster = nil
 	}
-	if !equalNode(base.node.RowDeletionPolicy, target.node.RowDeletionPolicy) {
-		switch {
-		case base.node.RowDeletionPolicy == nil && target.node.RowDeletionPolicy != nil:
-			ddls = append(ddls, &ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.AddRowDeletionPolicy{RowDeletionPolicy: target.node.RowDeletionPolicy.RowDeletionPolicy}})
-		case base.node.RowDeletionPolicy != nil && target.node.RowDeletionPolicy == nil:
-			ddls = append(ddls, &ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.DropRowDeletionPolicy{}})
-		default:
-			ddls = append(ddls, &ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.ReplaceRowDeletionPolicy{RowDeletionPolicy: target.node.RowDeletionPolicy.RowDeletionPolicy}})
-		}
-	}
+	// Row deletion policies are migrated by row deletion policy definitions.
 	baseRest.RowDeletionPolicy = nil
 	targetRest.RowDeletionPolicy = nil
 	if !equalNodes(base.node.Synonyms, target.node.Synonyms) {
@@ -622,6 +615,81 @@ func (c *constraint) onDependencyChange(me, dependency migrationState, m *migrat
 	}
 }
 
+type rowDeletionPolicy struct {
+	node  *ast.RowDeletionPolicy
+	table *table
+}
+
+func newRowDeletionPolicy(table *table, rdp *ast.RowDeletionPolicy) *rowDeletionPolicy {
+	return &rowDeletionPolicy{rdp, table}
+}
+
+func (r *rowDeletionPolicy) id() identifier {
+	return newRowDeletionPolicyID(r.table.tableID())
+}
+
+func (r *rowDeletionPolicy) astNode() ast.Node {
+	return r.node
+}
+
+func (r *rowDeletionPolicy) add() ast.DDL {
+	return &ast.AlterTable{
+		Name:            r.table.node.Name,
+		TableAlteration: &ast.AddRowDeletionPolicy{RowDeletionPolicy: r.node},
+	}
+}
+
+func (r *rowDeletionPolicy) drop() optional[ast.DDL] {
+	return some[ast.DDL](&ast.AlterTable{
+		Name:            r.table.node.Name,
+		TableAlteration: &ast.DropRowDeletionPolicy{},
+	})
+}
+
+func (r *rowDeletionPolicy) alter(tgt definition, m *migration) {
+	base := r
+	target := tgt.(*rowDeletionPolicy)
+
+	if m.kind(base.id()) == migrationKindNone {
+		// The table is added or recreated, so the policy is also added or recreated.
+		return
+	}
+
+	if !equalNode(base.node.ColumnName, target.node.ColumnName) {
+		// The policy must be dropped before the column of the base policy is dropped.
+		m.updateStateIfUndefined(newDropAndAddState(base, target))
+		return
+	}
+	m.updateStateIfUndefined(newAlterState(base, target, &ast.AlterTable{
+		Name:            target.table.node.Name,
+		TableAlteration: &ast.ReplaceRowDeletionPolicy{RowDeletionPolicy: target.node},
+	}))
+}
+
+func (r *rowDeletionPolicy) dependsOn() []identifier {
+	return []identifier{r.table.tableID(), newColumnID(r.table.tableID(), r.node.ColumnName)}
+}
+
+func (r *rowDeletionPolicy) onDependencyChange(me, dependency migrationState, m *migration) {
+	if me.kind == migrationKindNone {
+		return
+	}
+	switch dep := dependency.definition().(type) {
+	case *table:
+		switch dependency.kind {
+		case migrationKindAdd, migrationKindDropAndAdd, migrationKindDrop:
+			// CREATE TABLE and DROP TABLE also add and drop the policy.
+			m.updateState(me.updateKind(migrationKindNone))
+		}
+	case *column:
+		if me.kind != migrationKindDrop && dependency.kind == migrationKindDropAndAdd {
+			m.updateState(me.updateKind(migrationKindDropAndAdd))
+		}
+	default:
+		panic(fmt.Sprintf("unexpected dependency type on row deletion policy: %T", dep))
+	}
+}
+
 // resolveUnnamedConstraints matches unnamed constraints in target with constraints in base that have
 // the same definition, so that a constraint named by Spanner is not recreated.
 func resolveUnnamedConstraints(base, target *definitions) {
@@ -721,14 +789,15 @@ func (i *index) alter(tgt definition, m *migration) {
 
 	if equalNode(&baseCopy, &targetCopy) {
 		added, dropped := diffStoring(base.tableID(), base.node.Storing, target.node.Storing)
-		var ddls []ast.DDL
+		var ops []operation
 		for _, col := range dropped {
-			ddls = append(ddls, &ast.AlterIndex{Name: target.node.Name, IndexAlteration: &ast.DropStoredColumn{Name: col}})
+			// Stored columns must be dropped from the index before the columns are dropped.
+			ops = append(ops, newDropPhaseOperation(base, &ast.AlterIndex{Name: target.node.Name, IndexAlteration: &ast.DropStoredColumn{Name: col}}))
 		}
 		for _, col := range added {
-			ddls = append(ddls, &ast.AlterIndex{Name: target.node.Name, IndexAlteration: &ast.AddStoredColumn{Name: col}})
+			ops = append(ops, newAddPhaseOperation(target, &ast.AlterIndex{Name: target.node.Name, IndexAlteration: &ast.AddStoredColumn{Name: col}}))
 		}
-		m.updateStateIfUndefined(newAlterState(base, target, ddls...))
+		m.updateStateIfUndefined(newAlterStateWithOperations(base, target, ops...))
 		return
 	}
 	m.updateStateIfUndefined(newDropAndAddState(base, target))
@@ -844,14 +913,15 @@ func (si *searchIndex) alter(tgt definition, m *migration) {
 
 	if equalNode(&baseCopy, &targetCopy) {
 		added, dropped := diffStoring(base.tableID(), base.node.Storing, target.node.Storing)
-		var ddls []ast.DDL
+		var ops []operation
 		for _, col := range dropped {
-			ddls = append(ddls, &ast.AlterSearchIndex{Name: target.node.Name, IndexAlteration: &ast.DropStoredColumn{Name: col}})
+			// Stored columns must be dropped from the index before the columns are dropped.
+			ops = append(ops, newDropPhaseOperation(base, &ast.AlterSearchIndex{Name: target.node.Name, IndexAlteration: &ast.DropStoredColumn{Name: col}}))
 		}
 		for _, col := range added {
-			ddls = append(ddls, &ast.AlterSearchIndex{Name: target.node.Name, IndexAlteration: &ast.AddStoredColumn{Name: col}})
+			ops = append(ops, newAddPhaseOperation(target, &ast.AlterSearchIndex{Name: target.node.Name, IndexAlteration: &ast.AddStoredColumn{Name: col}}))
 		}
-		m.updateStateIfUndefined(newAlterState(base, target, ddls...))
+		m.updateStateIfUndefined(newAlterStateWithOperations(base, target, ops...))
 		return
 	}
 	m.updateStateIfUndefined(newDropAndAddState(base, target))
@@ -970,6 +1040,12 @@ func (pg *propertyGraph) alter(tgt definition, m *migration) {
 	base := pg
 	target := tgt.(*propertyGraph)
 
+	if m.dropsAnyOf(base.dependsOn()) {
+		// The property graph must stop referencing the dropped objects before they are dropped.
+		m.updateStateIfUndefined(newDropAndAddState(base, target))
+		return
+	}
+
 	targetCopy := *target.node
 	targetCopy.OrReplace = true
 	m.updateStateIfUndefined(newAlterState(base, target, &targetCopy))
@@ -1080,6 +1156,12 @@ func (v *view) alter(tgt definition, m *migration) {
 	base := v
 	target := tgt.(*view)
 
+	if m.dropsAnyOf(base.dependsOn()) {
+		// The view must stop referencing the dropped objects before they are dropped.
+		m.updateStateIfUndefined(newDropAndAddState(base, target))
+		return
+	}
+
 	targetCopy := *target.node
 	targetCopy.OrReplace = true
 	m.updateStateIfUndefined(newAlterState(base, target, &targetCopy))
@@ -1152,21 +1234,69 @@ func (cs *changeStream) alter(tgt definition, m *migration) {
 	base := cs
 	target := tgt.(*changeStream)
 
-	var ddls []ast.DDL
+	var ops []operation
 	if !equalNode(base.node.For, target.node.For) {
-		if target.node.For == nil {
-			ddls = append(ddls, &ast.AlterChangeStream{Name: base.node.Name, ChangeStreamAlteration: &ast.ChangeStreamDropForAll{}})
-		} else {
-			ddls = append(ddls, &ast.AlterChangeStream{Name: target.node.Name, ChangeStreamAlteration: &ast.ChangeStreamSetFor{For: target.node.For}})
-		}
+		ops = append(ops, base.alterFor(target, m)...)
 	}
 	if options := diffOptions(base.node.Options, target.node.Options); options != nil {
-		ddls = append(ddls, &ast.AlterChangeStream{Name: target.node.Name, ChangeStreamAlteration: &ast.ChangeStreamSetOptions{Options: options}})
+		ops = append(ops, newAddPhaseOperation(target, &ast.AlterChangeStream{Name: target.node.Name, ChangeStreamAlteration: &ast.ChangeStreamSetOptions{Options: options}}))
 	}
-	if len(ddls) == 0 {
+	if len(ops) == 0 {
 		return
 	}
-	m.updateStateIfUndefined(newAlterState(base, target, ddls...))
+	m.updateStateIfUndefined(newAlterStateWithOperations(base, target, ops...))
+}
+
+// alterFor returns operations to change the FOR clause.
+// Tables and columns watched by a change stream can't be dropped, so they are removed from the
+// change stream in the drop phase, and new tables and columns are added in the add phase.
+func (cs *changeStream) alterFor(target *changeStream, m *migration) []operation {
+	alter := func(a ast.ChangeStreamAlteration) *ast.AlterChangeStream {
+		return &ast.AlterChangeStream{Name: target.node.Name, ChangeStreamAlteration: a}
+	}
+
+	targetTables, ok := target.node.For.(*ast.ChangeStreamForTables)
+	if !ok {
+		if target.node.For == nil {
+			return []operation{newDropPhaseOperation(cs, alter(&ast.ChangeStreamDropForAll{}))}
+		}
+		return []operation{newAddPhaseOperation(target, alter(&ast.ChangeStreamSetFor{For: target.node.For}))}
+	}
+	if _, ok := cs.node.For.(*ast.ChangeStreamForTables); !ok {
+		return []operation{newAddPhaseOperation(target, alter(&ast.ChangeStreamSetFor{For: target.node.For}))}
+	}
+
+	// existing keeps the tables and columns in the target that already exist in the base schema.
+	existing := &ast.ChangeStreamForTables{}
+	for _, t := range targetTables.Tables {
+		tableID := newTableIDFromIdent(t.TableName)
+		if _, ok := m.baseDefs.all[tableID]; !ok {
+			continue
+		}
+		var columns []*ast.Ident
+		for _, col := range t.Columns {
+			if _, ok := m.baseDefs.all[newColumnID(tableID, col)]; ok {
+				columns = append(columns, col)
+			}
+		}
+		if len(t.Columns) > 0 && len(columns) == 0 {
+			continue
+		}
+		table := *t
+		table.Columns = columns
+		existing.Tables = append(existing.Tables, &table)
+	}
+
+	var ops []operation
+	if len(existing.Tables) == 0 {
+		ops = append(ops, newDropPhaseOperation(cs, alter(&ast.ChangeStreamDropForAll{})))
+	} else {
+		ops = append(ops, newDropPhaseOperation(cs, alter(&ast.ChangeStreamSetFor{For: existing})))
+	}
+	if !equalNode(existing, targetTables) {
+		ops = append(ops, newAddPhaseOperation(target, alter(&ast.ChangeStreamSetFor{For: target.node.For})))
+	}
+	return ops
 }
 
 func (cs *changeStream) dependsOn() []identifier {
@@ -1747,21 +1877,22 @@ func (g *grant) alter(tgt definition, m *migration) {
 				dropped = append(dropped, &ast.DeletePrivilege{})
 			}
 		}
-		var ddls []ast.DDL
+		var ops []operation
 		if len(dropped) > 0 {
-			ddls = append(ddls, &ast.Revoke{
+			// Privileges must be revoked before the columns are dropped.
+			ops = append(ops, newDropPhaseOperation(base, &ast.Revoke{
 				Roles:     target.node.Roles,
 				Privilege: &ast.PrivilegeOnTable{Privileges: dropped, Names: targetP.Names},
-			})
+			}))
 		}
 		if len(added) > 0 {
-			ddls = append(ddls, &ast.Grant{
+			ops = append(ops, newAddPhaseOperation(target, &ast.Grant{
 				Roles:     target.node.Roles,
 				Privilege: &ast.PrivilegeOnTable{Privileges: added, Names: targetP.Names},
-			})
+			}))
 		}
 
-		m.updateStateIfUndefined(newAlterState(base, target, ddls...))
+		m.updateStateIfUndefined(newAlterStateWithOperations(base, target, ops...))
 	case *ast.SelectPrivilegeOnView, *ast.SelectPrivilegeOnChangeStream, *ast.ExecutePrivilegeOnTableFunction, *ast.RolePrivilege:
 		// never come here, because grant type handles only single target name (1 view, change stream, table function or role per grant type)
 		panic(fmt.Sprintf("unsupported GRANT alteration on: %s", target.node.SQL()))

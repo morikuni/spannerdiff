@@ -118,6 +118,20 @@ func newAlterState(base, target definition, alters ...ast.DDL) migrationState {
 	return migrationState{base.id(), some(base), some(target), migrationKindAlter, operations}
 }
 
+func newAlterStateWithOperations(base, target definition, operations ...operation) migrationState {
+	return migrationState{base.id(), some(base), some(target), migrationKindAlter, operations}
+}
+
+// newAddPhaseOperation returns an alteration executed with additions, after drops.
+func newAddPhaseOperation(target definition, ddl ast.DDL) operation {
+	return newOperation(target, operationKindAlter, ddl)
+}
+
+// newDropPhaseOperation returns an alteration executed with drops, before the dependencies of the base definition are dropped.
+func newDropPhaseOperation(base definition, ddl ast.DDL) operation {
+	return newOperation(base, operationKindDrop, ddl)
+}
+
 func newDropState(base definition) migrationState {
 	return migrationState{base.id(), some(base), none[definition](), migrationKindDrop, nil}
 }
@@ -224,6 +238,18 @@ func (m *migration) updateState(s migrationState) {
 
 func (m *migration) addError(err error) {
 	m.errs = append(m.errs, err)
+}
+
+// dropsAnyOf reports whether any of the definitions exists in base but not in target.
+func (m *migration) dropsAnyOf(ids []identifier) bool {
+	for _, id := range ids {
+		_, inBase := m.baseDefs.all[id]
+		_, inTarget := m.targetDefs.all[id]
+		if inBase && !inTarget {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *migration) kind(id identifier) migrationKind {

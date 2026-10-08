@@ -17,6 +17,7 @@ var _ = []identifier{
 	tableID{},
 	columnID{},
 	constraintID{},
+	rowDeletionPolicyID{},
 	indexID{},
 	searchIndexID{},
 	vectorIndexID{},
@@ -36,6 +37,7 @@ var _ = []struct{}{
 	isComparable(tableID{}),
 	isComparable(columnID{}),
 	isComparable(constraintID{}),
+	isComparable(rowDeletionPolicyID{}),
 	isComparable(indexID{}),
 	isComparable(searchIndexID{}),
 	isComparable(vectorIndexID{}),
@@ -139,6 +141,23 @@ func (c constraintID) ID() string {
 
 func (c constraintID) String() string {
 	return c.ID()
+}
+
+// Only one row deletion policy can be defined in a table.
+type rowDeletionPolicyID struct {
+	tableID tableID
+}
+
+func newRowDeletionPolicyID(tableID tableID) rowDeletionPolicyID {
+	return rowDeletionPolicyID{tableID}
+}
+
+func (r rowDeletionPolicyID) ID() string {
+	return fmt.Sprintf("%s:RowDeletionPolicy", r.tableID.ID())
+}
+
+func (r rowDeletionPolicyID) String() string {
+	return r.ID()
 }
 
 type indexID struct {

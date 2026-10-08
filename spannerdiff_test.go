@@ -342,6 +342,24 @@ func TestDiff(t *testing.T) {
 			ALTER TABLE T1 REPLACE ROW DELETION POLICY (OLDER_THAN(T1_TS1, INTERVAL 2 DAY));`,
 			false,
 		},
+		"drop row deletion policy before column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP,
+			  T1_T2 TIMESTAMP,
+			) PRIMARY KEY(T1_I1), ROW DELETION POLICY (OLDER_THAN(T1_T1, INTERVAL 1 DAY));`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T2 TIMESTAMP,
+			) PRIMARY KEY(T1_I1), ROW DELETION POLICY (OLDER_THAN(T1_T2, INTERVAL 1 DAY));`,
+			`
+			ALTER TABLE T1 DROP ROW DELETION POLICY;
+			ALTER TABLE T1 DROP COLUMN T1_T1;
+			ALTER TABLE T1 ADD ROW DELETION POLICY (OLDER_THAN(T1_T2, INTERVAL 1 DAY));`,
+			false,
+		},
 		"add synonym": {
 			`
 			CREATE TABLE T1 (
@@ -669,6 +687,25 @@ func TestDiff(t *testing.T) {
 			ALTER INDEX IDX1 DROP STORED COLUMN T1_I1;`,
 			false,
 		},
+		"drop index storing before column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  T1_S2 STRING(MAX),
+			) PRIMARY KEY(T1_I1);
+			CREATE INDEX IDX1 ON T1(T1_S1) STORING (T1_S2);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			) PRIMARY KEY(T1_I1);
+			CREATE INDEX IDX1 ON T1(T1_S1);`,
+			`
+			ALTER INDEX IDX1 DROP STORED COLUMN T1_S2;
+			ALTER TABLE T1 DROP COLUMN T1_S2;`,
+			false,
+		},
 		"add search index": {
 			``,
 			`
@@ -828,6 +865,26 @@ func TestDiff(t *testing.T) {
 			CREATE VIEW V1 SQL SECURITY DEFINER AS SELECT * FROM T1;`,
 			false,
 		},
+		"recreate view referencing dropped table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			CREATE VIEW V1 SQL SECURITY INVOKER AS SELECT T1.T1_I1 FROM T1;`,
+			`
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			CREATE VIEW V1 SQL SECURITY INVOKER AS SELECT T2.T2_I1 FROM T2;`,
+			`
+			DROP VIEW V1;
+			DROP TABLE T1;
+			CREATE VIEW V1 SQL SECURITY INVOKER AS SELECT T2.T2_I1 FROM T2;`,
+			false,
+		},
 		"add change stream": {
 			``,
 			`
@@ -852,6 +909,57 @@ func TestDiff(t *testing.T) {
 			`
 			ALTER CHANGE STREAM S1 SET FOR T1(T1_I1);
 			ALTER CHANGE STREAM S1 SET OPTIONS ( retention_period = '72h' );`,
+			false,
+		},
+		"remove table from change stream before dropping table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			CREATE CHANGE STREAM CS1 FOR T1, T2;`,
+			`
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			CREATE TABLE T3 (
+			  T3_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T3_I1);
+			CREATE CHANGE STREAM CS1 FOR T2, T3;`,
+			`
+			ALTER CHANGE STREAM CS1 SET FOR T2;
+			DROP TABLE T1;
+			CREATE TABLE T3 (
+			  T3_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T3_I1);
+			ALTER CHANGE STREAM CS1 SET FOR T2, T3;`,
+			false,
+		},
+		"drop change stream for": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);
+			CREATE CHANGE STREAM CS1 FOR T1;`,
+			``,
+			`
+			DROP CHANGE STREAM CS1;
+			DROP TABLE T1;`,
+			false,
+		},
+		"remove all tables from change stream": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);
+			CREATE CHANGE STREAM CS1 FOR T1;`,
+			`
+			CREATE CHANGE STREAM CS1;`,
+			`
+			ALTER CHANGE STREAM CS1 DROP FOR ALL;
+			DROP TABLE T1;`,
 			false,
 		},
 		"add sequence": {
@@ -976,10 +1084,29 @@ func TestDiff(t *testing.T) {
 			GRANT SELECT(T1_C2), DELETE ON TABLE T1 TO ROLE R1;
 			GRANT SELECT, UPDATE(T1_C1, T1_C2), UPDATE, INSERT ON TABLE T1 TO ROLE R2;`,
 			`
+			REVOKE DELETE ON TABLE T1 FROM ROLE R2;
 			REVOKE SELECT, SELECT(T1_C1), UPDATE, INSERT(T1_C1, T1_C2) ON TABLE T1 FROM ROLE R1;
 			GRANT SELECT(T1_C2), DELETE ON TABLE T1 TO ROLE R1;
-			REVOKE DELETE ON TABLE T1 FROM ROLE R2;
 			GRANT SELECT, UPDATE(T1_C1, T1_C2), INSERT ON TABLE T1 TO ROLE R2;`,
+			false,
+		},
+		"revoke column privilege before dropping column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_C1 STRING(MAX),
+			) PRIMARY KEY(T1_I1);
+			CREATE ROLE R1;
+			GRANT SELECT(T1_I1, T1_C1) ON TABLE T1 TO ROLE R1;`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);
+			CREATE ROLE R1;
+			GRANT SELECT(T1_I1) ON TABLE T1 TO ROLE R1;`,
+			`
+			REVOKE SELECT(T1_C1) ON TABLE T1 FROM ROLE R1;
+			ALTER TABLE T1 DROP COLUMN T1_C1;`,
 			false,
 		},
 		"add view grant": {
