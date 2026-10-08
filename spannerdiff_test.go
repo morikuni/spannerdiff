@@ -349,6 +349,21 @@ func TestDiff(t *testing.T) {
 			ALTER TABLE T1 ALTER COLUMN T1_S1 STRING(100);`,
 			false,
 		},
+		"remove column options": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP OPTIONS (allow_commit_timestamp = true),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 ALTER COLUMN T1_T1 SET OPTIONS (allow_commit_timestamp = null);`,
+			false,
+		},
 		"recreate column": {
 			`
 			CREATE TABLE T1 (
@@ -666,7 +681,7 @@ func TestDiff(t *testing.T) {
 			`
 			CREATE SEQUENCE S1 OPTIONS (start_counter_with = 10);`,
 			`
-			ALTER SEQUENCE S1 SET OPTIONS (start_counter_with = 10);`,
+			ALTER SEQUENCE S1 SET OPTIONS (start_counter_with = 10, skip_range_min = null, skip_range_max = null);`,
 			false,
 		},
 		"add model": {
@@ -857,7 +872,7 @@ func TestDiff(t *testing.T) {
 			`
 			ALTER DATABASE D1 SET OPTIONS (version_retention_period = '2d');`,
 			`
-			ALTER DATABASE D1 SET OPTIONS (version_retention_period = '2d');`,
+			ALTER DATABASE D1 SET OPTIONS (version_retention_period = '2d', optimizer_version = null);`,
 			false,
 		},
 		"identifiers are case-insensitive": {

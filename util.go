@@ -102,6 +102,40 @@ func equalOptions() []cmp.Option {
 	}
 }
 
+// diffOptions returns the options to set to change base options into target options.
+// SET OPTIONS keeps options that are not specified, so options only in base are reset to null.
+func diffOptions(base, target *ast.Options) *ast.Options {
+	records := func(o *ast.Options) []*ast.OptionsDef {
+		if o == nil {
+			return nil
+		}
+		return o.Records
+	}
+
+	baseValues := make(map[string]ast.Expr)
+	for _, r := range records(base) {
+		baseValues[nameOf(r.Name)] = r.Value
+	}
+	targetNames := make(map[string]struct{})
+	var result []*ast.OptionsDef
+	for _, r := range records(target) {
+		targetNames[nameOf(r.Name)] = struct{}{}
+		if v, ok := baseValues[nameOf(r.Name)]; ok && cmp.Equal(v, r.Value, equalOptions()...) {
+			continue
+		}
+		result = append(result, r)
+	}
+	for _, r := range records(base) {
+		if _, ok := targetNames[nameOf(r.Name)]; !ok {
+			result = append(result, &ast.OptionsDef{Name: r.Name, Value: &ast.NullLiteral{}})
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return &ast.Options{Records: result}
+}
+
 func equalNodes[T ast.Node](a, b []T) bool {
 	if len(a) != len(b) {
 		return false

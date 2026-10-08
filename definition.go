@@ -418,9 +418,8 @@ func (c *column) alter(tgt definition, m *migration) {
 			}
 		}
 
-		if !equalNode(base.node.Options, target.node.Options) {
-			// Need to unset options that are not in the target?
-			ddls = append(ddls, &ast.AlterTable{Name: target.table.node.Name, TableAlteration: &ast.AlterColumn{Name: target.node.Name, Alteration: &ast.AlterColumnSetOptions{Options: target.node.Options}}})
+		if options := diffOptions(base.node.Options, target.node.Options); options != nil {
+			ddls = append(ddls, &ast.AlterTable{Name: target.table.node.Name, TableAlteration: &ast.AlterColumn{Name: target.node.Name, Alteration: &ast.AlterColumnSetOptions{Options: options}}})
 		}
 
 		if !defaultSet && !equalNode(base.node.DefaultSemantics, target.node.DefaultSemantics) {
@@ -991,8 +990,8 @@ func (cs *changeStream) alter(tgt definition, m *migration) {
 			ddls = append(ddls, &ast.AlterChangeStream{Name: target.node.Name, ChangeStreamAlteration: &ast.ChangeStreamSetFor{For: target.node.For}})
 		}
 	}
-	if !equalNode(base.node.Options, target.node.Options) {
-		ddls = append(ddls, &ast.AlterChangeStream{Name: target.node.Name, ChangeStreamAlteration: &ast.ChangeStreamSetOptions{Options: target.node.Options}})
+	if options := diffOptions(base.node.Options, target.node.Options); options != nil {
+		ddls = append(ddls, &ast.AlterChangeStream{Name: target.node.Name, ChangeStreamAlteration: &ast.ChangeStreamSetOptions{Options: options}})
 	}
 	if len(ddls) == 0 {
 		return
@@ -1088,7 +1087,7 @@ func (s *sequence) alter(tgt definition, m *migration) {
 	baseCopy.Options = nil
 	targetCopy.Options = nil
 	if equalNode(&baseCopy, &targetCopy) {
-		m.updateStateIfUndefined(newAlterState(base, target, &ast.AlterSequence{Name: target.node.Name, Options: target.node.Options}))
+		m.updateStateIfUndefined(newAlterState(base, target, &ast.AlterSequence{Name: target.node.Name, Options: diffOptions(base.node.Options, target.node.Options)}))
 		return
 	}
 
@@ -1139,7 +1138,7 @@ func (m *model) alter(tgt definition, migration *migration) {
 	baseCopy.Options = nil
 	targetCopy.Options = nil
 	if equalNode(&baseCopy, &targetCopy) {
-		migration.updateStateIfUndefined(newAlterState(base, target, &ast.AlterModel{Name: target.node.Name, Options: target.node.Options}))
+		migration.updateStateIfUndefined(newAlterState(base, target, &ast.AlterModel{Name: target.node.Name, Options: diffOptions(base.node.Options, target.node.Options)}))
 		return
 	}
 
@@ -1691,7 +1690,7 @@ func (d *database) alter(tgt definition, m *migration) {
 	base := d
 	target := tgt.(*database)
 
-	m.updateStateIfUndefined(newAlterState(base, target, &ast.AlterDatabase{Name: target.node.Name, Options: target.node.Options}))
+	m.updateStateIfUndefined(newAlterState(base, target, &ast.AlterDatabase{Name: target.node.Name, Options: diffOptions(base.node.Options, target.node.Options)}))
 }
 
 func (d *database) dependsOn() []identifier {
