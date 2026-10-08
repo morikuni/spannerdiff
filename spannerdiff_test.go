@@ -128,6 +128,131 @@ func TestDiff(t *testing.T) {
 			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2(T2_S1);`,
 			false,
 		},
+		"create referenced table first": {
+			``,
+			`
+			CREATE TABLE B1 (
+			  B1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(B1_I1);
+			CREATE TABLE A1 (
+			  A1_I1 INT64 NOT NULL,
+			  B1_I1 INT64,
+			  CONSTRAINT FK1 FOREIGN KEY (B1_I1) REFERENCES B1 (B1_I1),
+			) PRIMARY KEY(A1_I1);`,
+			`
+			CREATE TABLE B1 (
+			  B1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(B1_I1);
+			CREATE TABLE A1 (
+			  A1_I1 INT64 NOT NULL,
+			  B1_I1 INT64,
+			  CONSTRAINT FK1 FOREIGN KEY (B1_I1) REFERENCES B1 (B1_I1),
+			) PRIMARY KEY(A1_I1);`,
+			false,
+		},
+		"drop referencing table first": {
+			`
+			CREATE TABLE B1 (
+			  B1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(B1_I1);
+			CREATE TABLE A1 (
+			  A1_I1 INT64 NOT NULL,
+			  B1_I1 INT64,
+			  CONSTRAINT FK1 FOREIGN KEY (B1_I1) REFERENCES B1 (B1_I1),
+			) PRIMARY KEY(A1_I1);`,
+			``,
+			`
+			DROP TABLE A1;
+			DROP TABLE B1;`,
+			false,
+		},
+		"recreate foreign key by recreating referenced table": {
+			`
+			CREATE TABLE B1 (
+			  B1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(B1_I1);
+			CREATE TABLE A1 (
+			  A1_I1 INT64 NOT NULL,
+			  B1_I1 INT64,
+			  CONSTRAINT FK1 FOREIGN KEY (B1_I1) REFERENCES B1 (B1_I1),
+			) PRIMARY KEY(A1_I1);`,
+			`
+			CREATE TABLE B1 (
+			  B1_I1 INT64 NOT NULL,
+			  B1_I2 INT64 NOT NULL,
+			) PRIMARY KEY(B1_I1, B1_I2);
+			CREATE TABLE A1 (
+			  A1_I1 INT64 NOT NULL,
+			  B1_I1 INT64,
+			  CONSTRAINT FK1 FOREIGN KEY (B1_I1) REFERENCES B1 (B1_I1),
+			) PRIMARY KEY(A1_I1);`,
+			`
+			ALTER TABLE A1 DROP CONSTRAINT FK1;
+			DROP TABLE B1;
+			CREATE TABLE B1 (
+			  B1_I1 INT64 NOT NULL,
+			  B1_I2 INT64 NOT NULL,
+			) PRIMARY KEY(B1_I1, B1_I2);
+			ALTER TABLE A1 ADD CONSTRAINT FK1 FOREIGN KEY (B1_I1) REFERENCES B1 (B1_I1);`,
+			false,
+		},
+		"match unnamed constraint with named constraint": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  CONSTRAINT CK_GENERATED CHECK (T1_I1 > 0),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  CHECK (T1_I1 > 0),
+			) PRIMARY KEY(T1_I1);`,
+			``,
+			false,
+		},
+		"add unnamed constraint": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  CHECK (T1_I1 > 0),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 ADD CHECK (T1_I1 > 0);`,
+			false,
+		},
+		"error on dropping unnamed constraint": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  CHECK (T1_I1 > 0),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);`,
+			``,
+			true,
+		},
+		"drop check constraint before column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			  CONSTRAINT C1 CHECK (T1_I2 > 0),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT C1;
+			ALTER TABLE T1 DROP COLUMN T1_I2;`,
+			false,
+		},
 		"add check constraint": {
 			`
 			CREATE TABLE T1 (

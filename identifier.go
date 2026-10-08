@@ -16,6 +16,7 @@ var _ = []identifier{
 	schemaID{},
 	tableID{},
 	columnID{},
+	constraintID{},
 	indexID{},
 	searchIndexID{},
 	vectorIndexID{},
@@ -34,6 +35,7 @@ var _ = []struct{}{
 	isComparable(schemaID{}),
 	isComparable(tableID{}),
 	isComparable(columnID{}),
+	isComparable(constraintID{}),
 	isComparable(indexID{}),
 	isComparable(searchIndexID{}),
 	isComparable(vectorIndexID{}),
@@ -115,6 +117,27 @@ func (c columnID) ID() string {
 }
 
 func (c columnID) String() string {
+	return c.ID()
+}
+
+type constraintID struct {
+	tableID tableID
+	name    string
+}
+
+func newConstraintID(tableID tableID, tc *ast.TableConstraint) constraintID {
+	if tc.Name == nil {
+		// Unnamed constraints are identified by their definitions.
+		return constraintID{tableID, "#" + strings.ToLower(tc.Constraint.SQL())}
+	}
+	return constraintID{tableID, nameOf(tc.Name)}
+}
+
+func (c constraintID) ID() string {
+	return fmt.Sprintf("%s:Constraint(%s)", c.tableID.ID(), c.name)
+}
+
+func (c constraintID) String() string {
 	return c.ID()
 }
 

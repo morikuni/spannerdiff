@@ -4,6 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
+	"slices"
+	"strings"
 
 	"github.com/cloudspannerecosystem/memefish"
 	"github.com/cloudspannerecosystem/memefish/ast"
@@ -228,12 +231,14 @@ func (m *migration) kind(id identifier) migrationKind {
 }
 
 func diffDefinitions(base, target *definitions) ([]ast.DDL, error) {
+	resolveUnnamedConstraints(base, target)
 	m := newMigration(base, target)
 
 	// Supported schema update: https://cloud.google.com/spanner/docs/schema-updates?t#supported-updates
 	m.drops(base, target)
 	m.alters(base, target)
 	m.adds(base, target)
+	m.validate()
 	if len(m.errs) > 0 {
 		return nil, errors.Join(m.errs...)
 	}
@@ -253,6 +258,18 @@ func diffDefinitions(base, target *definitions) ([]ast.DDL, error) {
 		ddls = append(ddls, op.ddl)
 	}
 	return ddls, nil
+}
+
+func (m *migration) validate() {
+	for _, id := range slices.SortedFunc(maps.Keys(m.states), func(a, b identifier) int { return strings.Compare(a.ID(), b.ID()) }) {
+		state := m.states[id]
+		switch state.kind {
+		case migrationKindDrop, migrationKindDropAndAdd:
+			if c, ok := state.base.mustGet().(*constraint); ok && c.node.Name == nil {
+				m.addError(fmt.Errorf("unnamed constraint can't be dropped, name the constraint in the base schema: %s", c.node.SQL()))
+			}
+		}
+	}
 }
 
 func (m *migration) drops(baseDefs, targetDefs *definitions) {

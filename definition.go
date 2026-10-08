@@ -78,6 +78,9 @@ func newDefinitions(ddls []ast.DDL, errorOnUnsupported bool) (*definitions, erro
 			for _, col := range table.columns() {
 				add(newColumn(table, col))
 			}
+			for _, tc := range ddl.TableConstraints {
+				add(newConstraint(table, tc))
+			}
 		case *ast.CreateIndex:
 			add(newIndex(ddl))
 		case *ast.CreateSearchIndex:
@@ -198,8 +201,6 @@ func (t *table) alter(tgt definition, m *migration) {
 	target := tgt.(*table)
 
 	// https://cloud.google.com/spanner/docs/schema-updates?t#supported-updates
-	// - Add or remove a foreign key from an existing table.
-	// - Add or remove a check constraint from an existing table.
 	// - Change the ON DELETE action of an interleaved table.
 	// - Convert between INTERLEAVE IN and INTERLEAVE IN PARENT.
 	// --- not documented ---
@@ -261,48 +262,9 @@ func (t *table) alter(tgt definition, m *migration) {
 	}
 	baseRest.Synonyms = nil
 	targetRest.Synonyms = nil
-	if !equalNodes(base.node.TableConstraints, target.node.TableConstraints) {
-		baseConstraints := make(map[string]*ast.TableConstraint, len(base.node.TableConstraints))
-		for _, tc := range base.node.TableConstraints {
-			if tc.Name != nil {
-				baseConstraints[nameOf(tc.Name)] = tc
-			}
-		}
-		targetConstraints := make(map[string]*ast.TableConstraint, len(target.node.TableConstraints))
-		for _, tc := range target.node.TableConstraints {
-			if tc.Name != nil {
-				targetConstraints[nameOf(tc.Name)] = tc
-			}
-		}
-		for _, baseTC := range base.node.TableConstraints {
-			if baseTC.Name == nil {
-				continue
-			}
-			targetTC, ok := targetConstraints[nameOf(baseTC.Name)]
-			switch {
-			case !ok:
-				ddls = append(ddls, &ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.DropConstraint{Name: baseTC.Name}})
-			case !equalNode(baseTC, targetTC):
-				ddls = append(ddls,
-					&ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.DropConstraint{Name: targetTC.Name}},
-					&ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.AddTableConstraint{TableConstraint: targetTC}},
-				)
-			}
-		}
-		for _, tc := range target.node.TableConstraints {
-			if tc.Name == nil {
-				continue
-			}
-			if _, ok := baseConstraints[nameOf(tc.Name)]; !ok {
-				ddls = append(ddls, &ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.AddTableConstraint{TableConstraint: tc}})
-			}
-		}
-	}
-
-	if allConstraintsNamed(base.node.TableConstraints) && allConstraintsNamed(target.node.TableConstraints) {
-		baseRest.TableConstraints = nil
-		targetRest.TableConstraints = nil
-	}
+	// Constraints are migrated by constraint definitions.
+	baseRest.TableConstraints = nil
+	targetRest.TableConstraints = nil
 	if options := diffOptions(base.node.Options, target.node.Options); options != nil {
 		ddls = append(ddls, &ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.AlterTableSetOptions{Options: options}})
 	}
@@ -318,15 +280,6 @@ func (t *table) alter(tgt definition, m *migration) {
 	}
 
 	m.updateStateIfUndefined(newAlterState(base, target, ddls...))
-}
-
-func allConstraintsNamed(tcs []*ast.TableConstraint) bool {
-	for _, tc := range tcs {
-		if tc.Name == nil {
-			return false
-		}
-	}
-	return true
 }
 
 // alterCluster returns the alteration to change the INTERLEAVE IN clause of a table.
@@ -362,6 +315,14 @@ func (t *table) dependsOn() []identifier {
 	if t.node.Cluster != nil {
 		ids = append(ids, newTableIDFromPath(t.node.Cluster.TableName))
 	}
+	// CREATE TABLE contains foreign keys, so referenced tables must exist before the table is created.
+	for _, tc := range t.node.TableConstraints {
+		if fk, ok := tc.Constraint.(*ast.ForeignKey); ok {
+			if refID := newTableIDFromPath(fk.ReferenceTable); refID != t.tableID() {
+				ids = append(ids, refID)
+			}
+		}
+	}
 	return ids
 }
 
@@ -371,7 +332,17 @@ func (t *table) onDependencyChange(me, dependency migrationState, m *migration) 
 		return
 	}
 	switch dep := dependency.definition().(type) {
-	case *table, *schema:
+	case *schema:
+		switch dependency.kind {
+		case migrationKindDropAndAdd:
+			m.updateState(me.updateKind(migrationKindDropAndAdd))
+		}
+	case *table:
+		// A table referenced by foreign keys is handled by constraint definitions,
+		// so only an interleaved table is recreated along with its parent.
+		if t.node.Cluster == nil || newTableIDFromPath(t.node.Cluster.TableName) != dep.tableID() {
+			return
+		}
 		switch dependency.kind {
 		case migrationKindDropAndAdd:
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
@@ -550,6 +521,147 @@ func (c *column) onDependencyChange(me, dependency migrationState, m *migration)
 		}
 	default:
 		panic(fmt.Sprintf("unexpected dependency type on column: %T", dep))
+	}
+}
+
+type constraint struct {
+	node  *ast.TableConstraint
+	table *table
+	cid   constraintID
+}
+
+func newConstraint(table *table, tc *ast.TableConstraint) *constraint {
+	return &constraint{tc, table, newConstraintID(table.tableID(), tc)}
+}
+
+func (c *constraint) id() identifier {
+	return c.cid
+}
+
+// astNode returns the constraint without its name because the name is a part of the identifier.
+func (c *constraint) astNode() ast.Node {
+	return c.node.Constraint
+}
+
+func (c *constraint) add() ast.DDL {
+	return &ast.AlterTable{
+		Name:            c.table.node.Name,
+		TableAlteration: &ast.AddTableConstraint{TableConstraint: c.node},
+	}
+}
+
+func (c *constraint) drop() optional[ast.DDL] {
+	if c.node.Name == nil {
+		// An unnamed constraint can't be dropped by DDL. This is reported as an error by the migration.
+		return none[ast.DDL]()
+	}
+	return some[ast.DDL](&ast.AlterTable{
+		Name:            c.table.node.Name,
+		TableAlteration: &ast.DropConstraint{Name: c.node.Name},
+	})
+}
+
+func (c *constraint) alter(tgt definition, m *migration) {
+	if m.kind(c.id()) == migrationKindNone {
+		// The table is added or recreated, so the constraint is also added or recreated.
+		return
+	}
+	m.updateStateIfUndefined(newDropAndAddState(c, tgt))
+}
+
+func (c *constraint) dependsOn() []identifier {
+	tableID := c.table.tableID()
+	ids := []identifier{tableID}
+	switch con := c.node.Constraint.(type) {
+	case *ast.ForeignKey:
+		for _, col := range con.Columns {
+			ids = append(ids, newColumnID(tableID, col))
+		}
+		refTableID := newTableIDFromPath(con.ReferenceTable)
+		if refTableID != tableID {
+			ids = append(ids, refTableID)
+		}
+		for _, col := range con.ReferenceColumns {
+			ids = append(ids, newColumnID(refTableID, col))
+		}
+	case *ast.Check:
+		// Identifiers in the expression may not be columns, but it's harmless to depend on non-existent columns.
+		ast.Inspect(con.Expr, func(n ast.Node) bool {
+			if ident, ok := n.(*ast.Ident); ok {
+				ids = append(ids, newColumnID(tableID, ident))
+			}
+			return true
+		})
+	}
+	return ids
+}
+
+func (c *constraint) onDependencyChange(me, dependency migrationState, m *migration) {
+	if me.kind == migrationKindNone {
+		return
+	}
+	switch dep := dependency.definition().(type) {
+	case *table:
+		switch {
+		case dep.tableID() == c.table.tableID():
+			switch dependency.kind {
+			case migrationKindAdd, migrationKindDropAndAdd, migrationKindDrop:
+				// CREATE TABLE and DROP TABLE also add and drop constraints.
+				m.updateState(me.updateKind(migrationKindNone))
+			}
+		case me.kind != migrationKindDrop && dependency.kind == migrationKindDropAndAdd:
+			// The referenced table can't be dropped while a foreign key references it.
+			m.updateState(me.updateKind(migrationKindDropAndAdd))
+		}
+	case *column:
+		if me.kind != migrationKindDrop && dependency.kind == migrationKindDropAndAdd {
+			m.updateState(me.updateKind(migrationKindDropAndAdd))
+		}
+	default:
+		panic(fmt.Sprintf("unexpected dependency type on constraint: %T", dep))
+	}
+}
+
+// resolveUnnamedConstraints matches unnamed constraints in target with constraints in base that have
+// the same definition, so that a constraint named by Spanner is not recreated.
+func resolveUnnamedConstraints(base, target *definitions) {
+	var baseConstraints []*constraint
+	for _, def := range base.all {
+		if c, ok := def.(*constraint); ok {
+			baseConstraints = append(baseConstraints, c)
+		}
+	}
+	slices.SortFunc(baseConstraints, func(a, b *constraint) int {
+		return strings.Compare(a.cid.ID(), b.cid.ID())
+	})
+
+	var unnamed []*constraint
+	for _, def := range target.all {
+		if c, ok := def.(*constraint); ok && c.node.Name == nil {
+			if _, ok := base.all[c.cid]; !ok {
+				unnamed = append(unnamed, c)
+			}
+		}
+	}
+	slices.SortFunc(unnamed, func(a, b *constraint) int {
+		return strings.Compare(a.cid.ID(), b.cid.ID())
+	})
+
+	matched := make(map[constraintID]bool)
+	for _, tc := range unnamed {
+		for _, bc := range baseConstraints {
+			if matched[bc.cid] || bc.cid.tableID != tc.cid.tableID || !equalNode(bc.astNode(), tc.astNode()) {
+				continue
+			}
+			if _, ok := target.all[bc.cid]; ok {
+				continue
+			}
+			matched[bc.cid] = true
+			delete(target.all, tc.cid)
+			tc.cid = bc.cid
+			target.all[tc.cid] = tc
+			break
+		}
 	}
 }
 
