@@ -420,16 +420,15 @@ func (i changeStreamReadFunctionID) String() string {
 	return i.ID()
 }
 
-type databaseID struct {
-	name string
-}
+// Only one database exists, and its name differs between environments.
+type databaseID struct{}
 
-func newDatabaseID(ident *ast.Ident) databaseID {
-	return databaseID{nameOf(ident)}
+func newDatabaseID() databaseID {
+	return databaseID{}
 }
 
 func (i databaseID) ID() string {
-	return fmt.Sprintf("Database(%s)", i.name)
+	return "Database"
 }
 
 func (i databaseID) String() string {

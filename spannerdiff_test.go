@@ -1232,6 +1232,23 @@ func TestDiff(t *testing.T) {
 			ALTER DATABASE D1 SET OPTIONS (version_retention_period = '2d', optimizer_version = null);`,
 			false,
 		},
+		"alter database with different name": {
+			`
+			ALTER DATABASE D1 SET OPTIONS (version_retention_period = '1d');`,
+			`
+			ALTER DATABASE D2 SET OPTIONS (version_retention_period = '2d');`,
+			`
+			ALTER DATABASE D2 SET OPTIONS (version_retention_period = '2d');`,
+			false,
+		},
+		"ignore database name": {
+			`
+			ALTER DATABASE D1 SET OPTIONS (version_retention_period = '1d');`,
+			`
+			ALTER DATABASE D2 SET OPTIONS (version_retention_period = '1d');`,
+			``,
+			false,
+		},
 		"identifiers are case-insensitive": {
 			`
 			CREATE TABLE T1 (

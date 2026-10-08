@@ -2021,7 +2021,7 @@ func newDatabase(ad *ast.AlterDatabase) *database {
 }
 
 func (d *database) id() identifier {
-	return newDatabaseID(d.node.Name)
+	return newDatabaseID()
 }
 
 func (d *database) astNode() ast.Node {
@@ -2040,7 +2040,12 @@ func (d *database) alter(tgt definition, m *migration) {
 	base := d
 	target := tgt.(*database)
 
-	m.updateStateIfUndefined(newAlterState(base, target, &ast.AlterDatabase{Name: target.node.Name, Options: diffOptions(base.node.Options, target.node.Options)}))
+	options := diffOptions(base.node.Options, target.node.Options)
+	if options == nil {
+		// Only the database name is different.
+		return
+	}
+	m.updateStateIfUndefined(newAlterState(base, target, &ast.AlterDatabase{Name: target.node.Name, Options: options}))
 }
 
 func (d *database) dependsOn() []identifier {
