@@ -1,6 +1,7 @@
 package spannerdiff
 
 import (
+	"errors"
 	"fmt"
 	"io"
 
@@ -162,6 +163,7 @@ type migration struct {
 	targetDefs *definitions
 	states     map[identifier]migrationState
 	dependOn   map[identifier][]definition
+	errs       []error
 }
 
 func newMigration(base, target *definitions) *migration {
@@ -170,6 +172,7 @@ func newMigration(base, target *definitions) *migration {
 		target,
 		make(map[identifier]migrationState),
 		make(map[identifier][]definition),
+		nil,
 	}
 
 	for id := range base.all {
@@ -216,6 +219,10 @@ func (m *migration) updateState(s migrationState) {
 	}
 }
 
+func (m *migration) addError(err error) {
+	m.errs = append(m.errs, err)
+}
+
 func (m *migration) kind(id identifier) migrationKind {
 	return m.states[id].kind
 }
@@ -227,6 +234,9 @@ func diffDefinitions(base, target *definitions) ([]ast.DDL, error) {
 	m.drops(base, target)
 	m.alters(base, target)
 	m.adds(base, target)
+	if len(m.errs) > 0 {
+		return nil, errors.Join(m.errs...)
+	}
 
 	var operations []operation
 	for _, state := range m.states {

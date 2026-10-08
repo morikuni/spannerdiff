@@ -386,6 +386,18 @@ func (c *column) alter(tgt definition, m *migration) {
 		return
 	}
 
+	if !equalNode(base.node.Type, target.node.Type) || base.node.NotNull != target.node.NotNull || !equalNode(base.node.DefaultSemantics, target.node.DefaultSemantics) {
+		switch {
+		case isGeneratedColumn(base.node) || isGeneratedColumn(target.node):
+			// Generated columns cannot be altered, but their values can be recomputed from other columns.
+			m.updateStateIfUndefined(newDropAndAddState(base, target))
+			return
+		case !equalNode(base.node.DefaultSemantics, target.node.DefaultSemantics) && (isIdentityColumn(base.node) || isIdentityColumn(target.node)):
+			m.addError(fmt.Errorf("changing identity or auto increment of a column is not supported: %s", target.id()))
+			return
+		}
+	}
+
 	if equalNode(base.node.Type, target.node.Type) {
 		var ddls []ast.DDL
 		var defaultSet bool
@@ -425,6 +437,7 @@ func (c *column) alter(tgt definition, m *migration) {
 			tupleOf(scalar{ast.BytesTypeName}, scalar{ast.StringTypeName}),
 			tupleOf(protoOrEnum{}, scalar{ast.BytesTypeName}),
 			tupleOf(scalar{ast.BytesTypeName}, protoOrEnum{}),
+			tupleOf(protoOrEnum{}, protoOrEnum{}),
 			tupleOf(scalar{ast.StringTypeName}, scalar{ast.StringTypeName}),
 			tupleOf(scalar{ast.BytesTypeName}, scalar{ast.BytesTypeName}),
 			tupleOf(array{scalar{ast.StringTypeName}}, array{scalar{ast.StringTypeName}}),
@@ -449,6 +462,20 @@ func (c *column) alter(tgt definition, m *migration) {
 			return
 		}
 		m.updateStateIfUndefined(newDropAndAddState(base, target))
+	}
+}
+
+func isGeneratedColumn(col *ast.ColumnDef) bool {
+	_, ok := col.DefaultSemantics.(*ast.GeneratedColumnExpr)
+	return ok
+}
+
+func isIdentityColumn(col *ast.ColumnDef) bool {
+	switch col.DefaultSemantics.(type) {
+	case *ast.IdentityColumn, *ast.AutoIncrement:
+		return true
+	default:
+		return false
 	}
 }
 
