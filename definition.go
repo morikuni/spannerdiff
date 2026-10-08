@@ -1,7 +1,6 @@
 package spannerdiff
 
 import (
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -113,17 +112,12 @@ func newDefinitions(ddls []ast.DDL, errorOnUnsupported bool) (*definitions, erro
 	}
 
 	if duplicated != nil {
-		var b strings.Builder
-		b.WriteString("duplicated definition found: ")
-		var count int
+		ids := make([]string, 0, len(duplicated))
 		for id := range duplicated {
-			if count > 0 {
-				b.WriteString(", ")
-			}
-			b.WriteString(id.String())
-			count++
+			ids = append(ids, id.String())
 		}
-		return nil, errors.New(b.String())
+		slices.Sort(ids)
+		return nil, fmt.Errorf("duplicated definition found: %s", strings.Join(ids, ", "))
 	}
 
 	return d, nil
@@ -244,14 +238,14 @@ func (t *table) alter(tgt definition, m *migration) {
 		for _, syn := range target.node.Synonyms {
 			targetSynonyms[syn.Name.Name] = struct{}{}
 		}
-		for syn := range baseSynonyms {
-			if _, ok := targetSynonyms[syn]; !ok {
-				ddls = append(ddls, &ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.DropSynonym{Name: &ast.Ident{Name: syn}}})
+		for _, syn := range base.node.Synonyms {
+			if _, ok := targetSynonyms[syn.Name.Name]; !ok {
+				ddls = append(ddls, &ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.DropSynonym{Name: syn.Name}})
 			}
 		}
-		for syn := range targetSynonyms {
-			if _, ok := baseSynonyms[syn]; !ok {
-				ddls = append(ddls, &ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.AddSynonym{Name: &ast.Ident{Name: syn}}})
+		for _, syn := range target.node.Synonyms {
+			if _, ok := baseSynonyms[syn.Name.Name]; !ok {
+				ddls = append(ddls, &ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.AddSynonym{Name: syn.Name}})
 			}
 		}
 	}
@@ -268,24 +262,27 @@ func (t *table) alter(tgt definition, m *migration) {
 				targetConstraints[tc.Name.Name] = tc
 			}
 		}
-		for name, tc := range targetConstraints {
-			if _, ok := baseConstraints[name]; !ok {
+		for _, baseTC := range base.node.TableConstraints {
+			if baseTC.Name == nil {
+				continue
+			}
+			targetTC, ok := targetConstraints[baseTC.Name.Name]
+			switch {
+			case !ok:
+				ddls = append(ddls, &ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.DropConstraint{Name: baseTC.Name}})
+			case !equalNode(baseTC, targetTC):
+				ddls = append(ddls,
+					&ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.DropConstraint{Name: targetTC.Name}},
+					&ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.AddTableConstraint{TableConstraint: targetTC}},
+				)
+			}
+		}
+		for _, tc := range target.node.TableConstraints {
+			if tc.Name == nil {
+				continue
+			}
+			if _, ok := baseConstraints[tc.Name.Name]; !ok {
 				ddls = append(ddls, &ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.AddTableConstraint{TableConstraint: tc}})
-			}
-		}
-		for name := range baseConstraints {
-			if _, ok := targetConstraints[name]; !ok {
-				ddls = append(ddls, &ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.DropConstraint{Name: &ast.Ident{Name: name}}})
-			}
-		}
-		for name, baseTC := range baseConstraints {
-			if targetTC, ok := targetConstraints[name]; ok {
-				if !equalNode(baseTC, targetTC) {
-					ddls = append(ddls,
-						&ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.DropConstraint{Name: &ast.Ident{Name: targetTC.Name.Name}}},
-						&ast.AlterTable{Name: target.node.Name, TableAlteration: &ast.AddTableConstraint{TableConstraint: targetTC}},
-					)
-				}
 			}
 		}
 	}
@@ -527,29 +524,13 @@ func (i *index) alter(tgt definition, m *migration) {
 	targetCopy.Storing = nil
 
 	if equalNode(&baseCopy, &targetCopy) {
-		var baseStoring, targetStoring map[columnID]*ast.Ident
-		if base.node.Storing != nil {
-			baseStoring = make(map[columnID]*ast.Ident, len(base.node.Storing.Columns))
-			for _, col := range base.node.Storing.Columns {
-				baseStoring[newColumnID(base.tableID(), col)] = col
-			}
-		}
-		if target.node.Storing != nil {
-			targetStoring = make(map[columnID]*ast.Ident, len(target.node.Storing.Columns))
-			for _, col := range target.node.Storing.Columns {
-				targetStoring[newColumnID(target.tableID(), col)] = col
-			}
-		}
+		added, dropped := diffStoring(base.tableID(), base.node.Storing, target.node.Storing)
 		var ddls []ast.DDL
-		for colID, col := range targetStoring {
-			if _, ok := baseStoring[colID]; !ok {
-				ddls = append(ddls, &ast.AlterIndex{Name: target.node.Name, IndexAlteration: &ast.AddStoredColumn{Name: col}})
-			}
+		for _, col := range dropped {
+			ddls = append(ddls, &ast.AlterIndex{Name: target.node.Name, IndexAlteration: &ast.DropStoredColumn{Name: col}})
 		}
-		for colID, col := range baseStoring {
-			if _, ok := targetStoring[colID]; !ok {
-				ddls = append(ddls, &ast.AlterIndex{Name: target.node.Name, IndexAlteration: &ast.DropStoredColumn{Name: col}})
-			}
+		for _, col := range added {
+			ddls = append(ddls, &ast.AlterIndex{Name: target.node.Name, IndexAlteration: &ast.AddStoredColumn{Name: col}})
 		}
 		m.updateStateIfUndefined(newAlterState(base, target, ddls...))
 		return
@@ -588,6 +569,34 @@ func (i *index) onDependencyChange(me, dependency migrationState, m *migration) 
 	default:
 		panic(fmt.Sprintf("unexpected dependency type on index: %T", dep))
 	}
+}
+
+func diffStoring(tableID tableID, base, target *ast.Storing) (added, dropped []*ast.Ident) {
+	columns := func(s *ast.Storing) []*ast.Ident {
+		if s == nil {
+			return nil
+		}
+		return s.Columns
+	}
+	toSet := func(cols []*ast.Ident) map[columnID]struct{} {
+		set := make(map[columnID]struct{}, len(cols))
+		for _, col := range cols {
+			set[newColumnID(tableID, col)] = struct{}{}
+		}
+		return set
+	}
+	baseSet, targetSet := toSet(columns(base)), toSet(columns(target))
+	for _, col := range columns(target) {
+		if _, ok := baseSet[newColumnID(tableID, col)]; !ok {
+			added = append(added, col)
+		}
+	}
+	for _, col := range columns(base) {
+		if _, ok := targetSet[newColumnID(tableID, col)]; !ok {
+			dropped = append(dropped, col)
+		}
+	}
+	return added, dropped
 }
 
 type searchIndex struct {
@@ -638,29 +647,13 @@ func (si *searchIndex) alter(tgt definition, m *migration) {
 	targetCopy.Storing = nil
 
 	if equalNode(&baseCopy, &targetCopy) {
-		var baseStoring, targetStoring map[columnID]*ast.Ident
-		if base.node.Storing != nil {
-			baseStoring = make(map[columnID]*ast.Ident, len(base.node.Storing.Columns))
-			for _, col := range base.node.Storing.Columns {
-				baseStoring[newColumnID(base.tableID(), col)] = col
-			}
-		}
-		if target.node.Storing != nil {
-			targetStoring = make(map[columnID]*ast.Ident, len(target.node.Storing.Columns))
-			for _, col := range target.node.Storing.Columns {
-				targetStoring[newColumnID(target.tableID(), col)] = col
-			}
-		}
+		added, dropped := diffStoring(base.tableID(), base.node.Storing, target.node.Storing)
 		var ddls []ast.DDL
-		for colID, col := range targetStoring {
-			if _, ok := baseStoring[colID]; !ok {
-				ddls = append(ddls, &ast.AlterSearchIndex{Name: target.node.Name, IndexAlteration: &ast.AddStoredColumn{Name: col}})
-			}
+		for _, col := range dropped {
+			ddls = append(ddls, &ast.AlterSearchIndex{Name: target.node.Name, IndexAlteration: &ast.DropStoredColumn{Name: col}})
 		}
-		for colID, col := range baseStoring {
-			if _, ok := targetStoring[colID]; !ok {
-				ddls = append(ddls, &ast.AlterSearchIndex{Name: target.node.Name, IndexAlteration: &ast.DropStoredColumn{Name: col}})
-			}
+		for _, col := range added {
+			ddls = append(ddls, &ast.AlterSearchIndex{Name: target.node.Name, IndexAlteration: &ast.AddStoredColumn{Name: col}})
 		}
 		m.updateStateIfUndefined(newAlterState(base, target, ddls...))
 		return
@@ -1173,13 +1166,13 @@ func (pb *protoBundle) alter(tgt definition, migration *migration) {
 	}
 	added := make([]*ast.NamedType, 0, len(targetNames))
 	dropped := make([]*ast.NamedType, 0, len(baseNames))
-	for name, t := range targetNames {
-		if _, ok := baseNames[name]; !ok {
+	for _, t := range target.node.Types.Types {
+		if _, ok := baseNames[t.SQL()]; !ok {
 			added = append(added, t)
 		}
 	}
-	for name, t := range baseNames {
-		if _, ok := targetNames[name]; !ok {
+	for _, t := range base.node.Types.Types {
+		if _, ok := targetNames[t.SQL()]; !ok {
 			dropped = append(dropped, t)
 		}
 	}

@@ -2,7 +2,6 @@ package spannerdiff
 
 import (
 	"cmp"
-	"errors"
 	"fmt"
 	"slices"
 
@@ -31,7 +30,8 @@ const (
 
 func sortOperations(ops []operation) ([]operation, error) {
 	// sort operations before topological sort to fix the sorted result.
-	slices.SortFunc(ops, func(i, j operation) int {
+	// The sort must be stable to keep the order of operations generated for the same definition.
+	slices.SortStableFunc(ops, func(i, j operation) int {
 		return cmp.Or(
 			cmp.Compare(i.id.ID(), j.id.ID()),
 			cmp.Compare(i.kind, j.kind),
@@ -50,53 +50,62 @@ func sortOperations(ops []operation) ([]operation, error) {
 		}
 	}
 
-	sortedAddAlter, err := topologicalSort(addAlterOps)
+	sortedAddAlter, err := topologicalSort(addAlterOps, false)
 	if err != nil {
 		return nil, err
 	}
-	sortedDrop, err := topologicalSort(dropOps)
+	sortedDrop, err := topologicalSort(dropOps, true)
 	if err != nil {
 		return nil, err
 	}
-	reverse(sortedDrop)
+	slices.Reverse(sortedDrop)
 
 	return append(sortedDrop, sortedAddAlter...), nil
 }
 
-func topologicalSort(ops []operation) ([]operation, error) {
+// topologicalSort sorts operations so that each operation comes after its dependencies.
+// Operations of the same definition keep their original order. If reversed is true,
+// the caller reverses the result, so the operations of the same definition are chained in reverse.
+func topologicalSort(ops []operation, reversed bool) ([]operation, error) {
 	s := &toposort.Sorter{}
 
-	nodeMap := make(map[identifier]*operation, len(ops))
+	nodeMap := make(map[identifier][]*operation, len(ops))
 	for i := range ops {
-		nodeMap[ops[i].id] = &ops[i]
-		s.AddNode(&ops[i])
+		op := &ops[i]
+		s.AddNode(op)
+		if prevs := nodeMap[op.id]; len(prevs) > 0 {
+			prev := prevs[len(prevs)-1]
+			if reversed {
+				s.AddEdge(prev, op)
+			} else {
+				s.AddEdge(op, prev)
+			}
+		}
+		nodeMap[op.id] = append(nodeMap[op.id], op)
 	}
 
 	for i := range ops {
-		opPtr := &ops[i]
-		for _, dep := range opPtr.dependsOn {
-			if depPtr, ok := nodeMap[dep]; ok {
-				s.AddEdge(opPtr, depPtr)
+		op := &ops[i]
+		for _, dep := range op.dependsOn {
+			if dep == op.id {
+				continue
+			}
+			for _, depOp := range nodeMap[dep] {
+				s.AddEdge(op, depOp)
 			}
 		}
 	}
 
 	sorted, cycles := s.Sort()
 	if len(cycles) > 0 {
-		return nil, errors.New("dependency cycle detected")
+		return nil, fmt.Errorf("dependency cycle detected: %s", toposort.DumpCycles(cycles, func(n any) string {
+			return n.(*operation).id.ID()
+		}))
 	}
 
 	result := make([]operation, 0, len(sorted))
 	for _, v := range sorted {
-		if opPtr, ok := v.(*operation); ok {
-			result = append(result, *opPtr)
-		}
+		result = append(result, *v.(*operation))
 	}
 	return result, nil
-}
-
-func reverse(ops []operation) {
-	for i, j := 0, len(ops)-1; i < j; i, j = i+1, j-1 {
-		ops[i], ops[j] = ops[j], ops[i]
-	}
 }

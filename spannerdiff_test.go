@@ -939,3 +939,45 @@ func equalDDLs(t *testing.T, a, b string) {
 		t.Errorf("diff (+got -want):\n%s", diff)
 	}
 }
+
+func TestDiffDeterministic(t *testing.T) {
+	base := `
+	CREATE TABLE T1 (
+	  T1_I1 INT64 NOT NULL,
+	  T1_I2 INT64 NOT NULL,
+	  T1_I3 INT64 NOT NULL,
+	  T1_I4 INT64 NOT NULL,
+	  T1_T1 TIMESTAMP NOT NULL,
+	  CONSTRAINT C1 CHECK (T1_I1 > 0),
+	  CONSTRAINT C2 CHECK (T1_I2 > 0),
+	  SYNONYM(S1),
+	) PRIMARY KEY(T1_I1);
+	CREATE INDEX IDX1 ON T1(T1_I2) STORING (T1_I3, T1_I4);`
+	target := `
+	CREATE TABLE T1 (
+	  T1_I1 INT64 NOT NULL,
+	  T1_I2 INT64 NOT NULL,
+	  T1_I3 INT64 NOT NULL,
+	  T1_I4 INT64 NOT NULL,
+	  T1_T1 TIMESTAMP NOT NULL,
+	  CONSTRAINT C3 CHECK (T1_I3 > 0),
+	  CONSTRAINT C4 CHECK (T1_I4 > 0),
+	  SYNONYM(S2),
+	) PRIMARY KEY(T1_I1), ROW DELETION POLICY (OLDER_THAN(T1_T1, INTERVAL 1 DAY));
+	CREATE INDEX IDX1 ON T1(T1_I2) STORING (T1_T1, T1_I1);`
+
+	var first string
+	for i := range 50 {
+		var buf bytes.Buffer
+		if err := Diff(strings.NewReader(base), strings.NewReader(target), &buf, DiffOption{}); err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 {
+			first = buf.String()
+			continue
+		}
+		if diff := cmp.Diff(first, buf.String()); diff != "" {
+			t.Fatalf("output changed between runs:\n%s", diff)
+		}
+	}
+}
