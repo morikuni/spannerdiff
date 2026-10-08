@@ -424,7 +424,7 @@ func (c *column) alter(tgt definition, m *migration) {
 		switch {
 		case isGeneratedColumn(base.node) || isGeneratedColumn(target.node):
 			// Generated columns cannot be altered, but their values can be recomputed from other columns.
-			m.updateStateIfUndefined(newDropAndAddState(base, target))
+			base.recreate(target, m)
 			return
 		case !equalNode(base.node.DefaultSemantics, target.node.DefaultSemantics) && (isIdentityColumn(base.node) || isIdentityColumn(target.node)):
 			m.addError(fmt.Errorf("changing identity or auto increment of a column is not supported: %s", target.id()))
@@ -491,11 +491,37 @@ func (c *column) alter(tgt definition, m *migration) {
 				return
 			}
 		default:
-			m.updateStateIfUndefined(newDropAndAddState(base, target))
+			base.recreate(target, m)
 			return
 		}
-		m.updateStateIfUndefined(newDropAndAddState(base, target))
+		base.recreate(target, m)
 	}
+}
+
+func (c *column) recreate(target *column, m *migration) {
+	if !c.isPrimaryKey() {
+		m.updateStateIfUndefined(newDropAndAddState(c, target))
+		return
+	}
+	// Primary key columns can't be dropped, so the table is recreated.
+	tableState := m.states[c.table.id()]
+	switch tableState.kind {
+	case migrationKindDropAndAdd:
+		return
+	case migrationKindUndefined, migrationKindAlter:
+		m.updateState(tableState.updateKind(migrationKindDropAndAdd))
+	default:
+		panic(fmt.Sprintf("unexpected migration kind of table: %s: %s", tableState.kind, tableState.id))
+	}
+}
+
+func (c *column) isPrimaryKey() bool {
+	for _, key := range c.table.node.PrimaryKeys {
+		if equalNode(key.Name, c.node.Name) {
+			return true
+		}
+	}
+	return false
 }
 
 func isGeneratedColumn(col *ast.ColumnDef) bool {
