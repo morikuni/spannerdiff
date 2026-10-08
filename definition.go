@@ -47,7 +47,7 @@ type definitions struct {
 	all map[identifier]definition
 }
 
-func newDefinitions(ddls []ast.DDL, errorOnUnsupported bool) (*definitions, error) {
+func newDefinitions(ddls []ast.DDL, option DiffOption) (*definitions, error) {
 	d := &definitions{
 		make(map[identifier]definition),
 	}
@@ -111,8 +111,11 @@ func newDefinitions(ddls []ast.DDL, errorOnUnsupported bool) (*definitions, erro
 		case *ast.AlterDatabase:
 			add(newDatabase(ddl))
 		default:
-			if errorOnUnsupported {
+			if option.ErrorOnUnsupportedDDL {
 				return nil, fmt.Errorf("unsupported DDL: %s", ddl.SQL())
+			}
+			if option.OnUnsupportedDDL != nil {
+				option.OnUnsupportedDDL(ddl.SQL())
 			}
 		}
 	}

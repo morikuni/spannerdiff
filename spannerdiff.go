@@ -14,7 +14,9 @@ import (
 
 type DiffOption struct {
 	ErrorOnUnsupportedDDL bool
-	Printer               Printer
+	// OnUnsupportedDDL is called with each unsupported DDL ignored when ErrorOnUnsupportedDDL is false.
+	OnUnsupportedDDL func(sql string)
+	Printer          Printer
 }
 
 func Diff(baseSQL, targetSQL io.Reader, output io.Writer, option DiffOption) error {
@@ -65,11 +67,11 @@ func diff(baseDDLs, targetDDLs []ast.DDL, option DiffOption) (_ []ast.DDL, err e
 		}
 	}()
 
-	baseDefs, err := newDefinitions(baseDDLs, option.ErrorOnUnsupportedDDL)
+	baseDefs, err := newDefinitions(baseDDLs, option)
 	if err != nil {
 		return nil, err
 	}
-	targetDefs, err := newDefinitions(targetDDLs, option.ErrorOnUnsupportedDDL)
+	targetDefs, err := newDefinitions(targetDDLs, option)
 	if err != nil {
 		return nil, err
 	}

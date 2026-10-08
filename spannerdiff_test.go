@@ -1477,3 +1477,19 @@ func TestDiffDeterministic(t *testing.T) {
 		}
 	}
 }
+
+func TestDiffOnUnsupportedDDL(t *testing.T) {
+	var ignored []string
+	var buf bytes.Buffer
+	err := Diff(strings.NewReader(``), strings.NewReader(`ALTER INDEX IDX1 ADD STORED COLUMN T1_I1`), &buf, DiffOption{
+		OnUnsupportedDDL: func(sql string) {
+			ignored = append(ignored, sql)
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diff := cmp.Diff([]string{"ALTER INDEX IDX1 ADD STORED COLUMN T1_I1"}, ignored); diff != "" {
+		t.Errorf("diff (+got -want):\n%s", diff)
+	}
+}

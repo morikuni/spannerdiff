@@ -25,6 +25,7 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 	globalFlags := pflag.NewFlagSet("", pflag.ContinueOnError)
 	globalFlags.SortFlags = false
 	color := globalFlags.StringP("color", "", "auto", "color mode [auto, always, never]")
+	errorOnUnsupportedDDL := globalFlags.BoolP("error-on-unsupported-ddl", "", false, "exit with an error if the schema contains unsupported DDL instead of ignoring it")
 	versionFlag := globalFlags.BoolP("version", "", false, "print version")
 
 	baseFlags := pflag.NewFlagSet("", pflag.ContinueOnError)
@@ -141,6 +142,10 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 	}
 
 	err := spannerdiff.Diff(base, target, stdout, spannerdiff.DiffOption{
+		ErrorOnUnsupportedDDL: *errorOnUnsupportedDDL,
+		OnUnsupportedDDL: func(sql string) {
+			_, _ = fmt.Fprintln(stderr, aec.YellowF.Apply(fmt.Sprintf("ignored unsupported DDL: %s", sql)))
+		},
 		Printer: spannerdiff.DetectTerminalPrinter(cm, stdout),
 	})
 	if err != nil {
