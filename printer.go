@@ -94,7 +94,7 @@ func DetectTerminalPrinter(mode ColorMode, stdout *os.File) Printer {
 			p = NoStylePrinter{}
 		}
 	default:
-		panic(fmt.Sprintf("unexpected color mode: %s", mode)) // パニックではなくエラーを返すように変更も検討すべき
+		panic(fmt.Sprintf("unexpected color mode: %s", mode))
 	}
 	return WithSpacer("\n", p)
 }

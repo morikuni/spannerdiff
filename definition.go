@@ -19,8 +19,11 @@ type definition interface {
 }
 
 var _ = []definition{
+	&schema{},
 	&table{},
 	&column{},
+	&constraint{},
+	&rowDeletionPolicy{},
 	&index{},
 	&searchIndex{},
 	&vectorIndex{},
@@ -1105,58 +1108,35 @@ func (pg *propertyGraph) alter(tgt definition, m *migration) {
 
 func (pg *propertyGraph) dependsOn() []identifier {
 	var ids []identifier
-	for _, elem := range pg.node.Content.NodeTables.Tables.Elements {
+	elements := pg.node.Content.NodeTables.Tables.Elements
+	if pg.node.Content.EdgeTables != nil {
+		elements = append(slices.Clone(elements), pg.node.Content.EdgeTables.Tables.Elements...)
+	}
+	for _, elem := range elements {
 		tableID := newTableIDFromIdent(elem.Name)
 		ids = append(ids, tableID)
-		if elem.Keys != nil {
-			switch keys := elem.Keys.(type) {
-			case *ast.PropertyGraphNodeElementKey:
-				for _, key := range keys.Key.Keys.ColumnNameList {
-					ids = append(ids, newColumnID(tableID, key))
-				}
-			case *ast.PropertyGraphEdgeElementKeys:
-				if keys.Element != nil {
-					for _, key := range keys.Element.Keys.ColumnNameList {
-						ids = append(ids, newColumnID(tableID, key))
-					}
-				}
-				for _, key := range keys.Source.Keys.ColumnNameList {
-					ids = append(ids, newColumnID(tableID, key))
-				}
-				for _, key := range keys.Source.ReferenceColumns.ColumnNameList {
-					ids = append(ids, newColumnID(newTableIDFromIdent(keys.Source.ElementReference), key))
-				}
-			default:
-				panic(fmt.Sprintf("unexpected property graph type: %T", keys))
-			}
+		if elem.Keys == nil {
+			continue
 		}
-	}
-	if pg.node.Content.EdgeTables != nil {
-		for _, elem := range pg.node.Content.EdgeTables.Tables.Elements {
-			tableID := newTableIDFromIdent(elem.Name)
-			ids = append(ids, tableID)
-			if elem.Keys != nil {
-				switch keys := elem.Keys.(type) {
-				case *ast.PropertyGraphNodeElementKey:
-					for _, key := range keys.Key.Keys.ColumnNameList {
-						ids = append(ids, newColumnID(tableID, key))
-					}
-				case *ast.PropertyGraphEdgeElementKeys:
-					if keys.Element != nil {
-						for _, key := range keys.Element.Keys.ColumnNameList {
-							ids = append(ids, newColumnID(tableID, key))
-						}
-					}
-					for _, key := range keys.Source.Keys.ColumnNameList {
-						ids = append(ids, newColumnID(tableID, key))
-					}
-					for _, key := range keys.Source.ReferenceColumns.ColumnNameList {
-						ids = append(ids, newColumnID(newTableIDFromIdent(keys.Source.ElementReference), key))
-					}
-				default:
-					panic(fmt.Sprintf("unexpected property graph type: %T", keys))
+		switch keys := elem.Keys.(type) {
+		case *ast.PropertyGraphNodeElementKey:
+			for _, key := range keys.Key.Keys.ColumnNameList {
+				ids = append(ids, newColumnID(tableID, key))
+			}
+		case *ast.PropertyGraphEdgeElementKeys:
+			if keys.Element != nil {
+				for _, key := range keys.Element.Keys.ColumnNameList {
+					ids = append(ids, newColumnID(tableID, key))
 				}
 			}
+			for _, key := range keys.Source.Keys.ColumnNameList {
+				ids = append(ids, newColumnID(tableID, key))
+			}
+			for _, key := range keys.Source.ReferenceColumns.ColumnNameList {
+				ids = append(ids, newColumnID(newTableIDFromIdent(keys.Source.ElementReference), key))
+			}
+		default:
+			panic(fmt.Sprintf("unexpected property graph type: %T", keys))
 		}
 	}
 	return ids
@@ -1392,7 +1372,7 @@ func (cs *changeStream) onDependencyChange(me, dependency migrationState, m *mig
 			))
 		}
 	default:
-		panic(fmt.Sprintf("unexpected dependency type on property graph: %T", dep))
+		panic(fmt.Sprintf("unexpected dependency type on change stream: %T", dep))
 	}
 }
 
