@@ -1410,6 +1410,61 @@ func TestDiff(t *testing.T) {
 			REVOKE ROLE R2 FROM ROLE R1;`,
 			false,
 		},
+		"add sequence grant": {
+			``,
+			`
+			GRANT SELECT, UPDATE ON SEQUENCE S1, SCH1.S2 TO ROLE R1;`,
+			`
+			GRANT SELECT, UPDATE ON SEQUENCE S1 TO ROLE R1;
+			GRANT SELECT, UPDATE ON SEQUENCE SCH1.S2 TO ROLE R1;`,
+			false,
+		},
+		"alter sequence grant": {
+			`
+			GRANT SELECT ON SEQUENCE S1 TO ROLE R1;
+			GRANT UPDATE ON SEQUENCE S1 TO ROLE R1;`,
+			`
+			GRANT SELECT ON SEQUENCE S1 TO ROLE R1;`,
+			`
+			REVOKE UPDATE ON SEQUENCE S1 FROM ROLE R1;`,
+			false,
+		},
+		"revoke sequence grant before dropping sequence": {
+			`
+			CREATE SEQUENCE S1 OPTIONS (sequence_kind = 'bit_reversed_positive');
+			GRANT SELECT ON SEQUENCE S1 TO ROLE R1;`,
+			``,
+			`
+			REVOKE SELECT ON SEQUENCE S1 FROM ROLE R1;
+			DROP SEQUENCE S1;`,
+			false,
+		},
+		"add schema usage grant": {
+			``,
+			`
+			GRANT USAGE ON SCHEMA DEFAULT TO ROLE R1;
+			GRANT USAGE ON SCHEMA SCH1, DB1.SCH2 TO ROLE R1;`,
+			`
+			GRANT USAGE ON SCHEMA DEFAULT TO ROLE R1;
+			GRANT USAGE ON SCHEMA SCH1 TO ROLE R1;
+			GRANT USAGE ON SCHEMA DB1.SCH2 TO ROLE R1;`,
+			false,
+		},
+		"drop schema usage grant": {
+			`
+			GRANT USAGE ON SCHEMA SCH1 TO ROLE R1;`,
+			``,
+			`
+			REVOKE USAGE ON SCHEMA SCH1 FROM ROLE R1;`,
+			false,
+		},
+		"error on grant on all objects in schema": {
+			``,
+			`
+			GRANT SELECT ON ALL TABLES IN SCHEMA SCH1 TO ROLE R1;`,
+			``,
+			true,
+		},
 		"add alter database": {
 			``,
 			`

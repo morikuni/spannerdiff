@@ -67,7 +67,15 @@ func newSchemaID(ident *ast.Ident) schemaID {
 	return schemaID{nameOf(ident)}
 }
 
+// newDefaultSchemaID returns the id of the default schema, which has no name.
+func newDefaultSchemaID() schemaID {
+	return schemaID{}
+}
+
 func (s schemaID) ID() string {
+	if s.name == "" {
+		return "Schema(DEFAULT)"
+	}
 	return fmt.Sprintf("Schema(%s)", s.name)
 }
 
@@ -381,7 +389,7 @@ type grantID struct {
 }
 
 type grantPrivilegeID interface {
-	tableID | viewID | changeStreamID | roleID | changeStreamReadFunctionID
+	tableID | viewID | changeStreamID | roleID | changeStreamReadFunctionID | sequenceID | schemaID
 }
 
 func newGrantID[ID grantPrivilegeID](roleID roleID, privilegeID ID) grantID {

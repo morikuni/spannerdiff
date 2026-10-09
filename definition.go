@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/cloudspannerecosystem/memefish/ast"
+	"github.com/cloudspannerecosystem/memefish/token"
 )
 
 type definition interface {
@@ -112,7 +113,11 @@ func newDefinitions(ddls []ast.DDL, option DiffOption) (*definitions, error) {
 		case *ast.CreateRole:
 			add(newRole(ddl))
 		case *ast.Grant:
-			for _, g := range newGrant(ddl) {
+			grants, err := newGrant(ddl)
+			if err != nil {
+				return nil, err
+			}
+			for _, g := range grants {
 				add(g)
 			}
 		case *ast.AlterDatabase:
@@ -1719,7 +1724,7 @@ type grant struct {
 	grantID grantID
 }
 
-func newGrant(g *ast.Grant) []definition {
+func newGrant(g *ast.Grant) ([]definition, error) {
 	var grants []definition
 	switch t := g.Privilege.(type) {
 	case *ast.PrivilegeOnTable:
@@ -1796,10 +1801,79 @@ func newGrant(g *ast.Grant) []definition {
 				})
 			}
 		}
+	case *ast.PrivilegeOnSequence:
+		for _, r := range g.Roles {
+			for _, seqName := range t.Names {
+				grants = append(grants, &grant{
+					&ast.Grant{
+						Roles: []*ast.Ident{r},
+						Privilege: &ast.PrivilegeOnSequence{
+							Privileges: t.Privileges,
+							Names:      []*ast.Path{seqName},
+						},
+					},
+					newGrantID(newRoleID(r), newSequenceID(seqName)),
+				})
+			}
+		}
+	case *ast.UsagePrivilegeOnSchema:
+		for _, r := range g.Roles {
+			if !t.Default.Invalid() {
+				grants = append(grants, &grant{
+					&ast.Grant{
+						Roles:     []*ast.Ident{r},
+						Privilege: &ast.UsagePrivilegeOnSchema{Default: t.Default},
+					},
+					newGrantID(newRoleID(r), newDefaultSchemaID()),
+				})
+				continue
+			}
+			for _, schemaName := range t.Schemas {
+				grants = append(grants, &grant{
+					&ast.Grant{
+						Roles:     []*ast.Ident{r},
+						Privilege: &ast.UsagePrivilegeOnSchema{Default: token.InvalidPos, Schemas: []*ast.Path{schemaName}},
+					},
+					newGrantID(newRoleID(r), schemaIDOfGrant(schemaName)),
+				})
+			}
+		}
+	case *ast.PrivilegeOnAllTablesInSchema, *ast.PrivilegeOnAllSequencesInSchema, *ast.SelectPrivilegeOnAllViewsInSchema, *ast.SelectPrivilegeOnAllChangeStreamsInSchema:
+		// Spanner applies these privileges to each object, so they can't be compared with the base schema.
+		return nil, fmt.Errorf("GRANT ON ALL ... IN SCHEMA is not supported, grant privileges on each object instead: %s", g.SQL())
 	default:
-		panic(fmt.Sprintf("unexpected grant type: %T: %s", t, g.SQL()))
+		return nil, fmt.Errorf("unsupported GRANT: %s", g.SQL())
 	}
-	return grants
+	return grants, nil
+}
+
+// schemaIDOfGrant returns the schema of GRANT USAGE ON SCHEMA, which may be qualified by the database name.
+func schemaIDOfGrant(path *ast.Path) schemaID {
+	return newSchemaID(path.Idents[len(path.Idents)-1])
+}
+
+// sequencePrivileges returns whether SELECT and UPDATE are granted on a sequence.
+func sequencePrivileges(privileges []ast.TablePrivilege) (hasSelect, hasUpdate bool) {
+	for _, p := range privileges {
+		switch p.(type) {
+		case *ast.SelectPrivilege:
+			hasSelect = true
+		case *ast.UpdatePrivilege:
+			hasUpdate = true
+		}
+	}
+	return hasSelect, hasUpdate
+}
+
+func newSequencePrivileges(hasSelect, hasUpdate bool) []ast.TablePrivilege {
+	var privileges []ast.TablePrivilege
+	if hasSelect {
+		privileges = append(privileges, &ast.SelectPrivilege{})
+	}
+	if hasUpdate {
+		privileges = append(privileges, &ast.UpdatePrivilege{})
+	}
+	return privileges
 }
 
 func (g *grant) merge(other definition) bool {
@@ -1860,7 +1934,13 @@ func (g *grant) merge(other definition) bool {
 		}
 		p1.Privileges = privileges
 		return true
-	case *ast.SelectPrivilegeOnView, *ast.SelectPrivilegeOnChangeStream, *ast.ExecutePrivilegeOnTableFunction, *ast.RolePrivilege:
+	case *ast.PrivilegeOnSequence:
+		p2 := oth.node.Privilege.(*ast.PrivilegeOnSequence)
+		hasSelect1, hasUpdate1 := sequencePrivileges(p1.Privileges)
+		hasSelect2, hasUpdate2 := sequencePrivileges(p2.Privileges)
+		p1.Privileges = newSequencePrivileges(hasSelect1 || hasSelect2, hasUpdate1 || hasUpdate2)
+		return true
+	case *ast.SelectPrivilegeOnView, *ast.SelectPrivilegeOnChangeStream, *ast.ExecutePrivilegeOnTableFunction, *ast.RolePrivilege, *ast.UsagePrivilegeOnSchema:
 		// no additional parameters exist
 		return true
 	default:
@@ -2050,7 +2130,25 @@ func (g *grant) alter(tgt definition, m *migration) {
 		}
 
 		m.updateStateIfUndefined(newAlterStateWithOperations(base, target, ops...))
-	case *ast.SelectPrivilegeOnView, *ast.SelectPrivilegeOnChangeStream, *ast.ExecutePrivilegeOnTableFunction, *ast.RolePrivilege:
+	case *ast.PrivilegeOnSequence:
+		targetP := target.node.Privilege.(*ast.PrivilegeOnSequence)
+		baseSelect, baseUpdate := sequencePrivileges(baseP.Privileges)
+		targetSelect, targetUpdate := sequencePrivileges(targetP.Privileges)
+		var ops []operation
+		if dropped := newSequencePrivileges(baseSelect && !targetSelect, baseUpdate && !targetUpdate); len(dropped) > 0 {
+			ops = append(ops, newDropPhaseOperation(base, &ast.Revoke{
+				Roles:     target.node.Roles,
+				Privilege: &ast.PrivilegeOnSequence{Privileges: dropped, Names: targetP.Names},
+			}))
+		}
+		if added := newSequencePrivileges(!baseSelect && targetSelect, !baseUpdate && targetUpdate); len(added) > 0 {
+			ops = append(ops, newAddPhaseOperation(target, &ast.Grant{
+				Roles:     target.node.Roles,
+				Privilege: &ast.PrivilegeOnSequence{Privileges: added, Names: targetP.Names},
+			}))
+		}
+		m.updateStateIfUndefined(newAlterStateWithOperations(base, target, ops...))
+	case *ast.SelectPrivilegeOnView, *ast.SelectPrivilegeOnChangeStream, *ast.ExecutePrivilegeOnTableFunction, *ast.RolePrivilege, *ast.UsagePrivilegeOnSchema:
 		// never come here, because grant type handles only single target name (1 view, change stream, table function or role per grant type)
 		panic(fmt.Sprintf("unsupported GRANT alteration on: %s", target.node.SQL()))
 	}
@@ -2100,6 +2198,14 @@ func (g *grant) dependsOn() []identifier {
 		for _, roleName := range p.Names {
 			ids = append(ids, newRoleID(roleName))
 		}
+	case *ast.PrivilegeOnSequence:
+		for _, seqName := range p.Names {
+			ids = append(ids, newSequenceID(seqName))
+		}
+	case *ast.UsagePrivilegeOnSchema:
+		for _, schemaName := range p.Schemas {
+			ids = append(ids, schemaIDOfGrant(schemaName))
+		}
 	}
 	return ids
 }
@@ -2110,7 +2216,7 @@ func (g *grant) onDependencyChange(me, dependency migrationState, m *migration) 
 		return
 	}
 	switch dep := dependency.definition().(type) {
-	case *role, *table, *column, *view, *changeStream:
+	case *role, *table, *column, *view, *changeStream, *sequence, *schema:
 		switch dependency.kind {
 		case migrationKindDropAndAdd:
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
