@@ -2125,7 +2125,8 @@ func (d *database) alter(tgt definition, m *migration) {
 		// Only the database name is different.
 		return
 	}
-	m.updateStateIfUndefined(newAlterState(base, target, &ast.AlterDatabase{Name: target.node.Name, Options: options}))
+	// The migration is applied to the base database, whose name may differ from the target.
+	m.updateStateIfUndefined(newAlterState(base, target, &ast.AlterDatabase{Name: base.node.Name, Options: options}))
 }
 
 func (d *database) dependsOn() []identifier {

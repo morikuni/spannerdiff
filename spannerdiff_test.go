@@ -1390,7 +1390,7 @@ func TestDiff(t *testing.T) {
 			`
 			ALTER DATABASE D2 SET OPTIONS (version_retention_period = '2d');`,
 			`
-			ALTER DATABASE D2 SET OPTIONS (version_retention_period = '2d');`,
+			ALTER DATABASE D1 SET OPTIONS (version_retention_period = '2d');`,
 			false,
 		},
 		"ignore database name": {
