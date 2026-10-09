@@ -2,6 +2,7 @@ package spannerdiff
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cloudspannerecosystem/memefish/ast"
 )
@@ -15,6 +16,8 @@ var _ = []identifier{
 	schemaID{},
 	tableID{},
 	columnID{},
+	constraintID{},
+	rowDeletionPolicyID{},
 	indexID{},
 	searchIndexID{},
 	vectorIndexID{},
@@ -33,6 +36,8 @@ var _ = []struct{}{
 	isComparable(schemaID{}),
 	isComparable(tableID{}),
 	isComparable(columnID{}),
+	isComparable(constraintID{}),
+	isComparable(rowDeletionPolicyID{}),
 	isComparable(indexID{}),
 	isComparable(searchIndexID{}),
 	isComparable(vectorIndexID{}),
@@ -49,15 +54,28 @@ var _ = []struct{}{
 
 func isComparable[C comparable](_ C) struct{} { return struct{}{} }
 
+// nameOf normalizes an identifier name because identifiers are case-insensitive in Spanner.
+func nameOf(ident *ast.Ident) string {
+	return strings.ToLower(ident.Name)
+}
+
 type schemaID struct {
 	name string
 }
 
 func newSchemaID(ident *ast.Ident) schemaID {
-	return schemaID{ident.Name}
+	return schemaID{nameOf(ident)}
+}
+
+// newDefaultSchemaID returns the id of the default schema, which has no name.
+func newDefaultSchemaID() schemaID {
+	return schemaID{}
 }
 
 func (s schemaID) ID() string {
+	if s.name == "" {
+		return "Schema(DEFAULT)"
+	}
 	return fmt.Sprintf("Schema(%s)", s.name)
 }
 
@@ -73,9 +91,9 @@ type tableID struct {
 func newTableIDFromPath(path *ast.Path) tableID {
 	switch len(path.Idents) {
 	case 1:
-		return tableID{none[schemaID](), path.Idents[0].Name}
+		return tableID{none[schemaID](), nameOf(path.Idents[0])}
 	case 2:
-		return tableID{some(newSchemaID(path.Idents[0])), path.Idents[1].Name}
+		return tableID{some(newSchemaID(path.Idents[0])), nameOf(path.Idents[1])}
 	default:
 		panic(fmt.Sprintf("unexpected table name: %s", path.SQL()))
 	}
@@ -101,7 +119,7 @@ type columnID struct {
 }
 
 func newColumnID(tableID tableID, ident *ast.Ident) columnID {
-	return columnID{tableID, ident.Name}
+	return columnID{tableID, nameOf(ident)}
 }
 
 func (c columnID) ID() string {
@@ -112,6 +130,44 @@ func (c columnID) String() string {
 	return c.ID()
 }
 
+type constraintID struct {
+	tableID tableID
+	name    string
+}
+
+func newConstraintID(tableID tableID, tc *ast.TableConstraint) constraintID {
+	if tc.Name == nil {
+		// Unnamed constraints are identified by their definitions.
+		return constraintID{tableID, "#" + strings.ToLower(tc.Constraint.SQL())}
+	}
+	return constraintID{tableID, nameOf(tc.Name)}
+}
+
+func (c constraintID) ID() string {
+	return fmt.Sprintf("%s:Constraint(%s)", c.tableID.ID(), c.name)
+}
+
+func (c constraintID) String() string {
+	return c.ID()
+}
+
+// Only one row deletion policy can be defined in a table.
+type rowDeletionPolicyID struct {
+	tableID tableID
+}
+
+func newRowDeletionPolicyID(tableID tableID) rowDeletionPolicyID {
+	return rowDeletionPolicyID{tableID}
+}
+
+func (r rowDeletionPolicyID) ID() string {
+	return fmt.Sprintf("%s:RowDeletionPolicy", r.tableID.ID())
+}
+
+func (r rowDeletionPolicyID) String() string {
+	return r.ID()
+}
+
 type indexID struct {
 	schemaID optional[schemaID]
 	name     string
@@ -120,9 +176,9 @@ type indexID struct {
 func newIndexID(path *ast.Path) indexID {
 	switch len(path.Idents) {
 	case 1:
-		return indexID{none[schemaID](), path.Idents[0].Name}
+		return indexID{none[schemaID](), nameOf(path.Idents[0])}
 	case 2:
-		return indexID{some(newSchemaID(path.Idents[0])), path.Idents[1].Name}
+		return indexID{some(newSchemaID(path.Idents[0])), nameOf(path.Idents[1])}
 	default:
 		panic(fmt.Sprintf("unexpected index name: %s", path.SQL()))
 	}
@@ -147,9 +203,9 @@ type searchIndexID struct {
 func newSearchIndexID(path *ast.Path) searchIndexID {
 	switch len(path.Idents) {
 	case 1:
-		return searchIndexID{none[schemaID](), path.Idents[0].Name}
+		return searchIndexID{none[schemaID](), nameOf(path.Idents[0])}
 	case 2:
-		return searchIndexID{some(newSchemaID(path.Idents[0])), path.Idents[1].Name}
+		return searchIndexID{some(newSchemaID(path.Idents[0])), nameOf(path.Idents[1])}
 	default:
 		panic(fmt.Sprintf("unexpected search index name: %s", path.SQL()))
 	}
@@ -171,7 +227,7 @@ type vectorIndexID struct {
 }
 
 func newVectorIndexID(ident *ast.Ident) vectorIndexID {
-	return vectorIndexID{ident.Name}
+	return vectorIndexID{nameOf(ident)}
 }
 
 func (i vectorIndexID) ID() string {
@@ -187,7 +243,7 @@ type propertyGraphID struct {
 }
 
 func newPropertyGraphID(ident *ast.Ident) propertyGraphID {
-	return propertyGraphID{ident.Name}
+	return propertyGraphID{nameOf(ident)}
 }
 
 func (i propertyGraphID) ID() string {
@@ -206,9 +262,9 @@ type viewID struct {
 func newViewIDFromPath(path *ast.Path) viewID {
 	switch len(path.Idents) {
 	case 1:
-		return viewID{"", path.Idents[0].Name}
+		return viewID{"", nameOf(path.Idents[0])}
 	case 2:
-		return viewID{path.Idents[0].Name, path.Idents[1].Name}
+		return viewID{nameOf(path.Idents[0]), nameOf(path.Idents[1])}
 	default:
 		panic(fmt.Sprintf("unexpected view name: %s", path.SQL()))
 	}
@@ -234,7 +290,7 @@ type changeStreamID struct {
 }
 
 func newChangeStreamID(ident *ast.Ident) changeStreamID {
-	return changeStreamID{ident.Name}
+	return changeStreamID{nameOf(ident)}
 }
 
 // Change streams cannot belong to a named schema, so only a single identifier is accepted.
@@ -261,9 +317,9 @@ type sequenceID struct {
 func newSequenceID(ident *ast.Path) sequenceID {
 	switch len(ident.Idents) {
 	case 1:
-		return sequenceID{none[schemaID](), ident.Idents[0].Name}
+		return sequenceID{none[schemaID](), nameOf(ident.Idents[0])}
 	case 2:
-		return sequenceID{some(newSchemaID(ident.Idents[0])), ident.Idents[1].Name}
+		return sequenceID{some(newSchemaID(ident.Idents[0])), nameOf(ident.Idents[1])}
 	default:
 		panic(fmt.Sprintf("unexpected sequence name: %s", ident.SQL()))
 	}
@@ -285,7 +341,7 @@ type modelID struct {
 }
 
 func newModelID(ident *ast.Ident) modelID {
-	return modelID{ident.Name}
+	return modelID{nameOf(ident)}
 }
 
 func (i modelID) ID() string {
@@ -316,7 +372,7 @@ type roleID struct {
 }
 
 func newRoleID(ident *ast.Ident) roleID {
-	return roleID{ident.Name}
+	return roleID{nameOf(ident)}
 }
 
 func (i roleID) ID() string {
@@ -333,7 +389,7 @@ type grantID struct {
 }
 
 type grantPrivilegeID interface {
-	tableID | viewID | changeStreamID | roleID | changeStreamReadFunctionID
+	tableID | viewID | changeStreamID | roleID | changeStreamReadFunctionID | sequenceID | schemaID
 }
 
 func newGrantID[ID grantPrivilegeID](roleID roleID, privilegeID ID) grantID {
@@ -353,7 +409,7 @@ type changeStreamReadFunctionID struct {
 }
 
 func newChangeStreamReadFunctionID(name *ast.Ident) changeStreamReadFunctionID {
-	return changeStreamReadFunctionID{name.Name}
+	return changeStreamReadFunctionID{nameOf(name)}
 }
 
 // Change stream read functions cannot belong to a named schema, so only a single identifier is accepted.
@@ -372,16 +428,15 @@ func (i changeStreamReadFunctionID) String() string {
 	return i.ID()
 }
 
-type databaseID struct {
-	name string
-}
+// Only one database exists, and its name differs between environments.
+type databaseID struct{}
 
-func newDatabaseID(ident *ast.Ident) databaseID {
-	return databaseID{ident.Name}
+func newDatabaseID() databaseID {
+	return databaseID{}
 }
 
 func (i databaseID) ID() string {
-	return fmt.Sprintf("Database(%s)", i.name)
+	return "Database"
 }
 
 func (i databaseID) String() string {

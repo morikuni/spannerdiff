@@ -25,6 +25,7 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 	globalFlags := pflag.NewFlagSet("", pflag.ContinueOnError)
 	globalFlags.SortFlags = false
 	color := globalFlags.StringP("color", "", "auto", "color mode [auto, always, never]")
+	errorOnUnsupportedDDL := globalFlags.BoolP("error-on-unsupported-ddl", "", false, "exit with an error if the schema contains unsupported DDL instead of ignoring it")
 	versionFlag := globalFlags.BoolP("version", "", false, "print version")
 
 	baseFlags := pflag.NewFlagSet("", pflag.ContinueOnError)
@@ -56,7 +57,7 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 %s:
 %s
 %s:
-      > $ spanerdiff --base "CREATE TABLE t1 (c1 INT64) PRIMARY KEY(c1)" --target "CREATE TABLE t1 (c1 INT64, c2 INT64) PRIMARY KEY (c1)"
+      > $ spannerdiff --base "CREATE TABLE t1 (c1 INT64) PRIMARY KEY(c1)" --target "CREATE TABLE t1 (c1 INT64, c2 INT64) PRIMARY KEY (c1)"
       > ALTER TABLE t1 ADD COLUMN c2 INT64;
 `,
 			aec.Bold.Apply("Usage"),
@@ -83,9 +84,24 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 		return 0
 	}
 
+	usageError := func(msg string) int {
+		_, _ = fmt.Fprintln(stderr, aec.RedF.Apply(msg))
+		return 2
+	}
+
+	cm, ok := spannerdiff.NewColorMode(*color)
+	if !ok {
+		return usageError(fmt.Sprintf("invalid color mode: %s", *color))
+	}
+
+	if countTrue(rootFlags.Changed("base"), *baseFile != "", *baseStdin) > 1 {
+		return usageError("only one of --base, --base-file and --base-stdin can be specified")
+	}
+	if countTrue(rootFlags.Changed("target"), *targetFile != "", *targetStdin) > 1 {
+		return usageError("only one of --target, --target-file and --target-stdin can be specified")
+	}
 	if *baseStdin && *targetStdin {
-		_, _ = fmt.Fprintln(stderr, aec.RedF.Apply("cannot specify both --base-stdin and --target-stdin"))
-		return 1
+		return usageError("cannot specify both --base-stdin and --target-stdin")
 	}
 
 	var base, target io.Reader
@@ -98,8 +114,7 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 	if *baseFile != "" {
 		f, err := os.Open(*baseFile)
 		if err != nil {
-			_, _ = fmt.Fprintln(stderr, aec.RedF.Apply(fmt.Sprintf("failed to open base DDL file: %v", err)))
-			return 2
+			return usageError(fmt.Sprintf("failed to open base DDL file: %v", err))
 		}
 		defer func() {
 			_ = f.Close()
@@ -109,8 +124,7 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 	if *targetFile != "" {
 		f, err := os.Open(*targetFile)
 		if err != nil {
-			_, _ = fmt.Fprintln(stderr, aec.RedF.Apply(fmt.Sprintf("failed to open target DDL file: %v", err)))
-			return 2
+			return usageError(fmt.Sprintf("failed to open target DDL file: %v", err))
 		}
 		defer func() {
 			_ = f.Close()
@@ -127,12 +141,11 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 		target = strings.NewReader(*targetDDL)
 	}
 
-	cm, ok := spannerdiff.NewColorMode(*color)
-	if !ok {
-		_, _ = fmt.Fprintln(stderr, aec.RedF.Apply(fmt.Sprintf("invalid color mode: %s", *color)))
-	}
-
 	err := spannerdiff.Diff(base, target, stdout, spannerdiff.DiffOption{
+		ErrorOnUnsupportedDDL: *errorOnUnsupportedDDL,
+		OnUnsupportedDDL: func(sql string) {
+			_, _ = fmt.Fprintln(stderr, aec.YellowF.Apply(fmt.Sprintf("ignored unsupported DDL: %s", sql)))
+		},
 		Printer: spannerdiff.DetectTerminalPrinter(cm, stdout),
 	})
 	if err != nil {
@@ -141,4 +154,14 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 	}
 
 	return 0
+}
+
+func countTrue(bs ...bool) int {
+	var n int
+	for _, b := range bs {
+		if b {
+			n++
+		}
+	}
+	return n
 }

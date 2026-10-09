@@ -1,8 +1,12 @@
 package spannerdiff
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"maps"
+	"slices"
+	"strings"
 
 	"github.com/cloudspannerecosystem/memefish"
 	"github.com/cloudspannerecosystem/memefish/ast"
@@ -10,7 +14,9 @@ import (
 
 type DiffOption struct {
 	ErrorOnUnsupportedDDL bool
-	Printer               Printer
+	// OnUnsupportedDDL is called with each unsupported DDL ignored when ErrorOnUnsupportedDDL is false.
+	OnUnsupportedDDL func(sql string)
+	Printer          Printer
 }
 
 func Diff(baseSQL, targetSQL io.Reader, output io.Writer, option DiffOption) error {
@@ -32,16 +38,7 @@ func Diff(baseSQL, targetSQL io.Reader, output io.Writer, option DiffOption) err
 		return fmt.Errorf("failed to parse target SQL: %w", err)
 	}
 
-	baseDefs, err := newDefinitions(baseDDLs, option.ErrorOnUnsupportedDDL)
-	if err != nil {
-		return err
-	}
-	targetDefs, err := newDefinitions(targetDDLs, option.ErrorOnUnsupportedDDL)
-	if err != nil {
-		return err
-	}
-
-	stmts, err := diffDefinitions(baseDefs, targetDefs)
+	stmts, err := diff(baseDDLs, targetDDLs, option)
 	if err != nil {
 		return err
 	}
@@ -59,6 +56,27 @@ func Diff(baseSQL, targetSQL io.Reader, output io.Writer, option DiffOption) err
 	}
 
 	return nil
+}
+
+// diff recovers from panics so that library users get an error instead of a crash
+// when the schema contains a construct this package does not handle yet.
+func diff(baseDDLs, targetDDLs []ast.DDL, option DiffOption) (_ []ast.DDL, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("unexpected error, please report this issue at https://github.com/morikuni/spannerdiff/issues: %v", r)
+		}
+	}()
+
+	baseDefs, err := newDefinitions(baseDDLs, option)
+	if err != nil {
+		return nil, err
+	}
+	targetDefs, err := newDefinitions(targetDDLs, option)
+	if err != nil {
+		return nil, err
+	}
+
+	return diffDefinitions(baseDefs, targetDefs)
 }
 
 type migrationKind string
@@ -100,6 +118,20 @@ func newAlterState(base, target definition, alters ...ast.DDL) migrationState {
 		operations = append(operations, newOperation(target, operationKindAlter, ddl))
 	}
 	return migrationState{base.id(), some(base), some(target), migrationKindAlter, operations}
+}
+
+func newAlterStateWithOperations(base, target definition, operations ...operation) migrationState {
+	return migrationState{base.id(), some(base), some(target), migrationKindAlter, operations}
+}
+
+// newAddPhaseOperation returns an alteration executed with additions, after drops.
+func newAddPhaseOperation(target definition, ddl ast.DDL) operation {
+	return newOperation(target, operationKindAlter, ddl)
+}
+
+// newDropPhaseOperation returns an alteration executed with drops, before the dependencies of the base definition are dropped.
+func newDropPhaseOperation(base definition, ddl ast.DDL) operation {
+	return newOperation(base, operationKindDrop, ddl)
 }
 
 func newDropState(base definition) migrationState {
@@ -150,6 +182,7 @@ type migration struct {
 	targetDefs *definitions
 	states     map[identifier]migrationState
 	dependOn   map[identifier][]definition
+	errs       []error
 }
 
 func newMigration(base, target *definitions) *migration {
@@ -158,6 +191,7 @@ func newMigration(base, target *definitions) *migration {
 		target,
 		make(map[identifier]migrationState),
 		make(map[identifier][]definition),
+		nil,
 	}
 
 	for id := range base.all {
@@ -204,17 +238,38 @@ func (m *migration) updateState(s migrationState) {
 	}
 }
 
+func (m *migration) addError(err error) {
+	m.errs = append(m.errs, err)
+}
+
+// dropsAnyOf reports whether any of the definitions exists in base but not in target.
+func (m *migration) dropsAnyOf(ids []identifier) bool {
+	for _, id := range ids {
+		_, inBase := m.baseDefs.all[id]
+		_, inTarget := m.targetDefs.all[id]
+		if inBase && !inTarget {
+			return true
+		}
+	}
+	return false
+}
+
 func (m *migration) kind(id identifier) migrationKind {
 	return m.states[id].kind
 }
 
 func diffDefinitions(base, target *definitions) ([]ast.DDL, error) {
+	resolveUnnamedConstraints(base, target)
 	m := newMigration(base, target)
 
 	// Supported schema update: https://cloud.google.com/spanner/docs/schema-updates?t#supported-updates
 	m.drops(base, target)
 	m.alters(base, target)
 	m.adds(base, target)
+	m.validate()
+	if len(m.errs) > 0 {
+		return nil, errors.Join(m.errs...)
+	}
 
 	var operations []operation
 	for _, state := range m.states {
@@ -231,6 +286,18 @@ func diffDefinitions(base, target *definitions) ([]ast.DDL, error) {
 		ddls = append(ddls, op.ddl)
 	}
 	return ddls, nil
+}
+
+func (m *migration) validate() {
+	for _, id := range slices.SortedFunc(maps.Keys(m.states), func(a, b identifier) int { return strings.Compare(a.ID(), b.ID()) }) {
+		state := m.states[id]
+		switch state.kind {
+		case migrationKindDrop, migrationKindDropAndAdd:
+			if c, ok := state.base.mustGet().(*constraint); ok && c.node.Name == nil {
+				m.addError(fmt.Errorf("unnamed constraint can't be dropped, name the constraint in the base schema: %s", c.node.SQL()))
+			}
+		}
+	}
 }
 
 func (m *migration) drops(baseDefs, targetDefs *definitions) {

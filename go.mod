@@ -3,7 +3,7 @@ module github.com/morikuni/spannerdiff
 go 1.25.0
 
 require (
-	github.com/cloudspannerecosystem/memefish v0.7.0
+	github.com/cloudspannerecosystem/memefish v0.8.1
 	github.com/google/go-cmp v0.7.0
 	v.io/x/lib v0.1.21
 )
@@ -16,7 +16,6 @@ require (
 )
 
 require (
-	github.com/dlclark/regexp2 v1.12.0 // indirect
 	github.com/dlclark/regexp2/v2 v2.2.1 // indirect
 	golang.org/x/sys v0.46.0 // indirect
 )
