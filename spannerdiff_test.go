@@ -661,6 +661,45 @@ func TestDiff(t *testing.T) {
 			ALTER TABLE T1 ADD COLUMN T1_G1 INT64 AS (T1_I2 + 2) STORED;`,
 			false,
 		},
+		"alter non-stored generated column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			  T1_G1 INT64 AS (T1_I2 + 1),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			  T1_G1 INT64 AS (T1_I2 + 2),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 ALTER COLUMN T1_G1 INT64 AS (T1_I2 + 2);`,
+			false,
+		},
+		"recreate indexed non-stored generated column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			  T1_G1 INT64 AS (T1_I2 + 1),
+			) PRIMARY KEY(T1_I1);
+			CREATE INDEX IDX1 ON T1(T1_G1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			  T1_G1 INT64 AS (T1_I2 + 2),
+			) PRIMARY KEY(T1_I1);
+			CREATE INDEX IDX1 ON T1(T1_G1);`,
+			`
+			DROP INDEX IDX1;
+			ALTER TABLE T1 DROP COLUMN T1_G1;
+			ALTER TABLE T1 ADD COLUMN T1_G1 INT64 AS (T1_I2 + 2);
+			CREATE INDEX IDX1 ON T1(T1_G1);`,
+			false,
+		},
 		"recreate column to generated column": {
 			`
 			CREATE TABLE T1 (

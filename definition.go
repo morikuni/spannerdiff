@@ -456,7 +456,15 @@ func (c *column) alter(tgt definition, m *migration) {
 	if !equalNode(base.node.Type, target.node.Type) || base.node.NotNull != target.node.NotNull || !equalNode(base.node.DefaultSemantics, target.node.DefaultSemantics) {
 		switch {
 		case isGeneratedColumn(base.node) || isGeneratedColumn(target.node):
-			// Generated columns cannot be altered, but their values can be recomputed from other columns.
+			if base.canAlterGeneratedExpr(target, m) {
+				m.updateStateIfUndefined(newAlterState(base, target, &ast.AlterTable{Name: target.table.node.Name, TableAlteration: &ast.AlterColumn{Name: target.node.Name, Alteration: &ast.AlterColumnType{
+					Type:          target.node.Type,
+					Null:          token.InvalidPos,
+					GeneratedExpr: target.node.DefaultSemantics.(*ast.GeneratedColumnExpr),
+				}}}))
+				return
+			}
+			// Other changes of generated columns can't be altered, but their values can be recomputed from other columns.
 			base.recreate(target, m)
 			return
 		case isIdentityColumn(base.node) || isIdentityColumn(target.node):
@@ -615,6 +623,31 @@ func identityParamsOf(col *ast.ColumnDef) identityParams {
 		}
 	}
 	return params
+}
+
+// canAlterGeneratedExpr reports whether only the expression of a generated column changes and it can be altered.
+// The expression of a stored or indexed generated column can't be modified.
+func (c *column) canAlterGeneratedExpr(target *column, m *migration) bool {
+	if !isNonStoredGeneratedColumn(c.node) || !isNonStoredGeneratedColumn(target.node) {
+		return false
+	}
+	if !equalNode(c.node.Type, target.node.Type) || c.node.NotNull != target.node.NotNull {
+		return false
+	}
+	for _, def := range m.baseDefs.all {
+		switch def.(type) {
+		case *index, *searchIndex, *vectorIndex:
+			if slices.Contains(def.dependsOn(), c.id()) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func isNonStoredGeneratedColumn(col *ast.ColumnDef) bool {
+	expr, ok := col.DefaultSemantics.(*ast.GeneratedColumnExpr)
+	return ok && expr.Stored.Invalid()
 }
 
 func isGeneratedColumn(col *ast.ColumnDef) bool {
