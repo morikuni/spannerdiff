@@ -61,6 +61,56 @@ func TestDiff(t *testing.T) {
 			DROP TABLE T1;`,
 			false,
 		},
+		"primary key in column definition": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL PRIMARY KEY,
+			  T1_I2 INT64,
+			);`,
+			``,
+			false,
+		},
+		"primary key as table constraint": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1, T1_I2 DESC);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			  PRIMARY KEY (T1_I1, T1_I2 DESC),
+			);`,
+			``,
+			false,
+		},
+		"recreate table by changing primary key as table constraint": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			  PRIMARY KEY (T1_I1, T1_I2),
+			);`,
+			`
+			DROP TABLE T1;
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			  PRIMARY KEY (T1_I1, T1_I2),
+			);`,
+			false,
+		},
 		"recreate table": {
 			`
 			CREATE TABLE T1 (

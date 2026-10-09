@@ -82,6 +82,10 @@ func newDefinitions(ddls []ast.DDL, option DiffOption) (*definitions, error) {
 				add(newColumn(table, col))
 			}
 			for _, tc := range ddl.TableConstraints {
+				if _, ok := tc.Constraint.(*ast.TablePrimaryKey); ok {
+					// The primary key is a part of the table definition.
+					continue
+				}
 				add(newConstraint(table, tc))
 			}
 			if ddl.RowDeletionPolicy != nil {
@@ -216,7 +220,7 @@ func (t *table) alter(tgt definition, m *migration) {
 	// - Add or remove a synonym from an existing table.
 	// - Set table options.
 
-	if !equalNodes(base.node.PrimaryKeys, target.node.PrimaryKeys) {
+	if !equalNodes(base.primaryKeys(), target.primaryKeys()) {
 		m.updateStateIfUndefined(newDropAndAddState(base, target))
 		return
 	}
@@ -227,6 +231,8 @@ func (t *table) alter(tgt definition, m *migration) {
 	targetRest := *target.node
 	baseRest.Columns = nil
 	targetRest.Columns = nil
+	baseRest.PrimaryKeys = nil
+	targetRest.PrimaryKeys = nil
 
 	var ddls []ast.DDL
 	if alteration, ok := alterCluster(base.node.Cluster, target.node.Cluster); ok {
@@ -357,6 +363,25 @@ func (t *table) onDependencyChange(me, dependency migrationState, m *migration) 
 	}
 }
 
+// primaryKeys returns the primary key regardless of whether it's written after the column definitions,
+// as a table constraint, or as a column constraint.
+func (t *table) primaryKeys() []*ast.IndexKey {
+	if len(t.node.PrimaryKeys) > 0 {
+		return t.node.PrimaryKeys
+	}
+	for _, tc := range t.node.TableConstraints {
+		if pk, ok := tc.Constraint.(*ast.TablePrimaryKey); ok {
+			return pk.Columns
+		}
+	}
+	for _, col := range t.node.Columns {
+		if col.PrimaryKey {
+			return []*ast.IndexKey{{Name: col.Name}}
+		}
+	}
+	return nil
+}
+
 func (t *table) columns() map[columnID]*ast.ColumnDef {
 	m := make(map[columnID]*ast.ColumnDef)
 	for _, col := range t.node.Columns {
@@ -378,8 +403,11 @@ func (c *column) id() identifier {
 	return newColumnID(c.table.tableID(), c.node.Name)
 }
 
+// astNode returns the column without PRIMARY KEY because primary keys are compared by the table.
 func (c *column) astNode() ast.Node {
-	return c.node
+	node := *c.node
+	node.PrimaryKey = false
+	return &node
 }
 
 func (c *column) add() ast.DDL {
@@ -516,7 +544,7 @@ func (c *column) recreate(target *column, m *migration) {
 }
 
 func (c *column) isPrimaryKey() bool {
-	for _, key := range c.table.node.PrimaryKeys {
+	for _, key := range c.table.primaryKeys() {
 		if equalNode(key.Name, c.node.Name) {
 			return true
 		}
