@@ -1157,13 +1157,60 @@ func (vi *vectorIndex) drop() optional[ast.DDL] {
 }
 
 func (vi *vectorIndex) alter(tgt definition, m *migration) {
-	// ALTER VECTOR INDEX is not supported.
-	m.updateStateIfUndefined(newDropAndAddState(vi, tgt))
+	base := vi
+	target := tgt.(*vectorIndex)
+
+	// https://cloud.google.com/spanner/docs/reference/standard-sql/data-definition-language#alter_vector_index
+	// - Add or remove a stored column.
+	// - Set disable_search option.
+
+	baseCopy := *base.node
+	targetCopy := *target.node
+	baseCopy.Storing, targetCopy.Storing = nil, nil
+	baseCopy.Options, targetCopy.Options = nil, nil
+	options := diffOptions(base.node.Options, target.node.Options)
+	if !equalNode(&baseCopy, &targetCopy) || !onlyOptions(options, "disable_search") {
+		m.updateStateIfUndefined(newDropAndAddState(base, target))
+		return
+	}
+
+	name := &ast.Path{Idents: []*ast.Ident{target.node.Name}}
+	added, dropped := diffStoring(base.tableID(), base.node.Storing, target.node.Storing)
+	var ops []operation
+	for _, col := range dropped {
+		// Stored columns must be dropped from the index before the columns are dropped.
+		ops = append(ops, newDropPhaseOperation(base, &ast.AlterVectorIndex{Name: name, Alteration: &ast.DropStoredColumn{Name: col}}))
+	}
+	for _, col := range added {
+		ops = append(ops, newAddPhaseOperation(target, &ast.AlterVectorIndex{Name: name, Alteration: &ast.AddStoredColumn{Name: col}}))
+	}
+	if options != nil {
+		ops = append(ops, newAddPhaseOperation(target, &ast.AlterVectorIndex{Name: name, Alteration: &ast.VectorIndexSetOptions{Options: options}}))
+	}
+	m.updateStateIfUndefined(newAlterStateWithOperations(base, target, ops...))
+}
+
+// onlyOptions reports whether options contain only the given names.
+func onlyOptions(options *ast.Options, names ...string) bool {
+	if options == nil {
+		return true
+	}
+	for _, r := range options.Records {
+		if !slices.Contains(names, nameOf(r.Name)) {
+			return false
+		}
+	}
+	return true
 }
 
 func (vi *vectorIndex) dependsOn() []identifier {
 	var ids []identifier
-	ids = append(ids, newColumnID(newTableIDFromIdent(vi.node.TableName), vi.node.ColumnName))
+	ids = append(ids, newColumnID(vi.tableID(), vi.node.ColumnName))
+	if vi.node.Storing != nil {
+		for _, col := range vi.node.Storing.Columns {
+			ids = append(ids, newColumnID(vi.tableID(), col))
+		}
+	}
 	ids = append(ids, vi.tableID())
 	return ids
 }
