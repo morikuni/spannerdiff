@@ -426,8 +426,8 @@ func (c *column) alter(tgt definition, m *migration) {
 			// Generated columns cannot be altered, but their values can be recomputed from other columns.
 			base.recreate(target, m)
 			return
-		case !equalNode(base.node.DefaultSemantics, target.node.DefaultSemantics) && (isIdentityColumn(base.node) || isIdentityColumn(target.node)):
-			m.addError(fmt.Errorf("changing identity or auto increment of a column is not supported: %s", target.id()))
+		case isIdentityColumn(base.node) || isIdentityColumn(target.node):
+			base.alterIdentity(target, m)
 			return
 		}
 	}
@@ -522,6 +522,66 @@ func (c *column) isPrimaryKey() bool {
 		}
 	}
 	return false
+}
+
+// alterIdentity migrates a column whose base or target is an identity column.
+// Only the skip range can be altered by ALTER IDENTITY, and other changes are reported as errors
+// because recreating the column loses the data.
+func (c *column) alterIdentity(target *column, m *migration) {
+	switch {
+	case !isIdentityColumn(c.node) || !isIdentityColumn(target.node):
+		m.addError(fmt.Errorf("converting a column to or from an identity column is not supported: %s", target.id()))
+		return
+	case !equalNode(c.node.Type, target.node.Type) || c.node.NotNull != target.node.NotNull:
+		m.addError(fmt.Errorf("changing the type or NOT NULL of an identity column is not supported: %s", target.id()))
+		return
+	}
+
+	base, tgt := identityParamsOf(c.node), identityParamsOf(target.node)
+	if !equalNode(base.startCounterWith, tgt.startCounterWith) {
+		m.addError(fmt.Errorf("changing START COUNTER WITH of an identity column is not supported: %s", target.id()))
+		return
+	}
+	if equalNode(base.skipRange, tgt.skipRange) {
+		// The sequence kind is ignored because an omitted kind means default_sequence_kind of the database,
+		// and the kind can't be changed after creation.
+		return
+	}
+
+	var alteration ast.IdentityAlteration = &ast.SetSkipRange{SkipRange: tgt.skipRange}
+	if tgt.skipRange == nil {
+		alteration = &ast.SetNoSkipRange{NoSkipRange: &ast.NoSkipRange{}}
+	}
+	m.updateStateIfUndefined(newAlterState(c, target, &ast.AlterTable{
+		Name: target.table.node.Name,
+		TableAlteration: &ast.AlterColumn{
+			Name:       target.node.Name,
+			Alteration: &ast.AlterColumnAlterIdentity{Alteration: alteration},
+		},
+	}))
+}
+
+type identityParams struct {
+	skipRange        *ast.SkipRange
+	startCounterWith *ast.StartCounterWith
+}
+
+// identityParamsOf returns the parameters of an identity column. AUTO_INCREMENT is an identity column without parameters.
+func identityParamsOf(col *ast.ColumnDef) identityParams {
+	var params identityParams
+	ic, ok := col.DefaultSemantics.(*ast.IdentityColumn)
+	if !ok {
+		return params
+	}
+	for _, p := range ic.Params {
+		switch p := p.(type) {
+		case *ast.SkipRange:
+			params.skipRange = p
+		case *ast.StartCounterWith:
+			params.startCounterWith = p
+		}
+	}
+	return params
 }
 
 func isGeneratedColumn(col *ast.ColumnDef) bool {
