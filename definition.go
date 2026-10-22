@@ -432,7 +432,26 @@ func (c *column) astNode() ast.Node {
 	return &node
 }
 
+// add adds a NOT NULL column without a default value with its zero value as a temporary default value,
+// because Spanner can't add such a column to an existing table even if the table is empty.
 func (c *column) add() []ast.DDL {
+	if c.node.NotNull && c.node.DefaultSemantics == nil {
+		if zero, ok := zeroValueOf(c.node.Type).get(); ok {
+			node := *c.node
+			node.DefaultSemantics = &ast.ColumnDefaultExpr{Expr: zero}
+			// A commit timestamp column only allows PENDING_COMMIT_TIMESTAMP() as its default value,
+			// so the options are set after the default value is dropped.
+			node.Options = nil
+			ddls := []ast.DDL{
+				&ast.AlterTable{Name: c.table.node.Name, TableAlteration: &ast.AddColumn{Column: &node}},
+				&ast.AlterTable{Name: c.table.node.Name, TableAlteration: &ast.AlterColumn{Name: c.node.Name, Alteration: &ast.AlterColumnDropDefault{}}},
+			}
+			if c.node.Options != nil {
+				ddls = append(ddls, &ast.AlterTable{Name: c.table.node.Name, TableAlteration: &ast.AlterColumn{Name: c.node.Name, Alteration: &ast.AlterColumnSetOptions{Options: c.node.Options}}})
+			}
+			return ddls
+		}
+	}
 	return []ast.DDL{
 		&ast.AlterTable{
 			Name: c.table.node.Name,
@@ -441,6 +460,36 @@ func (c *column) add() []ast.DDL {
 			},
 		},
 	}
+}
+
+// zeroValueOf returns the zero value of the column type, or none if it is unknown.
+func zeroValueOf(t ast.SchemaType) optional[ast.Expr] {
+	switch t := columnTypeOf(t).(type) {
+	case array:
+		return some[ast.Expr](&ast.ArrayLiteral{})
+	case scalar:
+		switch t.t {
+		case ast.BoolTypeName:
+			return some[ast.Expr](&ast.BoolLiteral{Value: false})
+		case ast.Int64TypeName:
+			return some[ast.Expr](&ast.IntLiteral{Base: 10, Value: "0"})
+		case ast.Float32TypeName, ast.Float64TypeName:
+			return some[ast.Expr](&ast.FloatLiteral{Value: "0"})
+		case ast.StringTypeName:
+			return some[ast.Expr](&ast.StringLiteral{Value: ""})
+		case ast.BytesTypeName:
+			return some[ast.Expr](&ast.BytesLiteral{Value: []byte{}})
+		case ast.DateTypeName:
+			return some[ast.Expr](&ast.DateLiteral{Value: &ast.StringLiteral{Value: "0001-01-01"}})
+		case ast.TimestampTypeName:
+			return some[ast.Expr](&ast.TimestampLiteral{Value: &ast.StringLiteral{Value: "0001-01-01T00:00:00Z"}})
+		case ast.NumericTypeName:
+			return some[ast.Expr](&ast.NumericLiteral{Value: &ast.StringLiteral{Value: "0"}})
+		case ast.JSONTypeName:
+			return some[ast.Expr](&ast.JSONLiteral{Value: &ast.StringLiteral{Value: "{}"}})
+		}
+	}
+	return none[ast.Expr]()
 }
 
 func (c *column) drop() optional[ast.DDL] {

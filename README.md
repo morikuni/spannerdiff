@@ -87,4 +87,5 @@ Use `--error-on-unsupported-ddl` to exit with an error instead.
 
 - View DDL generation may be incorrect or out of order due to unresolved column names in the view query.
 - Changes that can't be done by `ALTER` statements are migrated by dropping and recreating the object (e.g. changing the type of a column, or the primary key of a table). This deletes the data in it, so review the generated DDL before applying it.
+- A `NOT NULL` column without a default value is added to an existing table with the zero value of its type (e.g. `0`, `""`) as a temporary default, because Spanner can't add such a column otherwise. Existing rows get the zero value.
 - An unnamed constraint in the base schema can't be dropped. Spanner names unnamed constraints, so use the schema returned by Spanner (e.g. `gcloud spanner databases ddl describe`) as the base schema.
