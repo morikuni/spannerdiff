@@ -27,6 +27,7 @@ var _ = []identifier{
 	sequenceID{},
 	modelID{},
 	protoBundleID{},
+	queueID{},
 	roleID{},
 	grantID{},
 	databaseID{},
@@ -47,6 +48,7 @@ var _ = []struct{}{
 	isComparable(sequenceID{}),
 	isComparable(modelID{}),
 	isComparable(protoBundleID{}),
+	isComparable(queueID{}),
 	isComparable(roleID{}),
 	isComparable(grantID{}),
 	isComparable(databaseID{}),
@@ -151,7 +153,7 @@ func (c constraintID) String() string {
 	return c.ID()
 }
 
-// Only one row deletion policy can be defined in a table.
+// Only one row deletion policy can be defined in a table or a queue.
 type rowDeletionPolicyID struct {
 	ownerID identifier
 }
@@ -364,6 +366,26 @@ func (i protoBundleID) ID() string {
 }
 
 func (i protoBundleID) String() string {
+	return i.ID()
+}
+
+type queueID struct {
+	name string
+}
+
+// Queues cannot be created in named schemas, so only a single identifier is accepted.
+func newQueueIDFromPath(path *ast.Path) queueID {
+	if len(path.Idents) != 1 {
+		panic(fmt.Sprintf("unexpected queue name: %s", path.SQL()))
+	}
+	return queueID{nameOf(path.Idents[0])}
+}
+
+func (i queueID) ID() string {
+	return fmt.Sprintf("Queue(%s)", i.name)
+}
+
+func (i queueID) String() string {
 	return i.ID()
 }
 
