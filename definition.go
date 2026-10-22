@@ -12,7 +12,7 @@ import (
 type definition interface {
 	id() identifier
 	astNode() ast.Node
-	add() ast.DDL
+	add() []ast.DDL
 	drop() optional[ast.DDL]
 	alter(target definition, m *migration)
 	dependsOn() []identifier
@@ -167,8 +167,8 @@ func (s *schema) astNode() ast.Node {
 	return s.node
 }
 
-func (s *schema) add() ast.DDL {
-	return s.node
+func (s *schema) add() []ast.DDL {
+	return []ast.DDL{s.node}
 }
 
 func (s *schema) drop() optional[ast.DDL] {
@@ -211,8 +211,8 @@ func (t *table) astNode() ast.Node {
 	return t.node
 }
 
-func (t *table) add() ast.DDL {
-	return t.node
+func (t *table) add() []ast.DDL {
+	return []ast.DDL{t.node}
 }
 
 func (t *table) drop() optional[ast.DDL] {
@@ -432,11 +432,13 @@ func (c *column) astNode() ast.Node {
 	return &node
 }
 
-func (c *column) add() ast.DDL {
-	return &ast.AlterTable{
-		Name: c.table.node.Name,
-		TableAlteration: &ast.AddColumn{
-			Column: c.node,
+func (c *column) add() []ast.DDL {
+	return []ast.DDL{
+		&ast.AlterTable{
+			Name: c.table.node.Name,
+			TableAlteration: &ast.AddColumn{
+				Column: c.node,
+			},
 		},
 	}
 }
@@ -741,10 +743,12 @@ func (c *constraint) astNode() ast.Node {
 	return c.node.Constraint
 }
 
-func (c *constraint) add() ast.DDL {
-	return &ast.AlterTable{
-		Name:            c.table.node.Name,
-		TableAlteration: &ast.AddTableConstraint{TableConstraint: c.node},
+func (c *constraint) add() []ast.DDL {
+	return []ast.DDL{
+		&ast.AlterTable{
+			Name:            c.table.node.Name,
+			TableAlteration: &ast.AddTableConstraint{TableConstraint: c.node},
+		},
 	}
 }
 
@@ -843,8 +847,8 @@ func (r *rowDeletionPolicy) astNode() ast.Node {
 	return r.node
 }
 
-func (r *rowDeletionPolicy) add() ast.DDL {
-	return r.owner.alterRowDeletionPolicy(&ast.AddRowDeletionPolicy{RowDeletionPolicy: r.node})
+func (r *rowDeletionPolicy) add() []ast.DDL {
+	return []ast.DDL{r.owner.alterRowDeletionPolicy(&ast.AddRowDeletionPolicy{RowDeletionPolicy: r.node})}
 }
 
 func (r *rowDeletionPolicy) drop() optional[ast.DDL] {
@@ -969,8 +973,8 @@ func (i *index) astNode() ast.Node {
 	return i.node
 }
 
-func (i *index) add() ast.DDL {
-	return i.node
+func (i *index) add() []ast.DDL {
+	return []ast.DDL{i.node}
 }
 
 func (i *index) drop() optional[ast.DDL] {
@@ -1096,8 +1100,8 @@ func (si *searchIndex) astNode() ast.Node {
 	return si.node
 }
 
-func (si *searchIndex) add() ast.DDL {
-	return si.node
+func (si *searchIndex) add() []ast.DDL {
+	return []ast.DDL{si.node}
 }
 
 func (si *searchIndex) drop() optional[ast.DDL] {
@@ -1200,8 +1204,8 @@ func (vi *vectorIndex) astNode() ast.Node {
 	return vi.node
 }
 
-func (vi *vectorIndex) add() ast.DDL {
-	return vi.node
+func (vi *vectorIndex) add() []ast.DDL {
+	return []ast.DDL{vi.node}
 }
 
 func (vi *vectorIndex) drop() optional[ast.DDL] {
@@ -1301,8 +1305,8 @@ func (pg *propertyGraph) astNode() ast.Node {
 	return pg.node
 }
 
-func (pg *propertyGraph) add() ast.DDL {
-	return pg.node
+func (pg *propertyGraph) add() []ast.DDL {
+	return []ast.DDL{pg.node}
 }
 
 func (pg *propertyGraph) drop() optional[ast.DDL] {
@@ -1405,8 +1409,8 @@ func (v *view) astNode() ast.Node {
 	return v.node
 }
 
-func (v *view) add() ast.DDL {
-	return v.node
+func (v *view) add() []ast.DDL {
+	return []ast.DDL{v.node}
 }
 
 func (v *view) drop() optional[ast.DDL] {
@@ -1483,8 +1487,8 @@ func (cs *changeStream) astNode() ast.Node {
 	return cs.node
 }
 
-func (cs *changeStream) add() ast.DDL {
-	return cs.node
+func (cs *changeStream) add() []ast.DDL {
+	return []ast.DDL{cs.node}
 }
 
 func (cs *changeStream) drop() optional[ast.DDL] {
@@ -1631,8 +1635,8 @@ func (s *sequence) astNode() ast.Node {
 	return s.node
 }
 
-func (s *sequence) add() ast.DDL {
-	return s.node
+func (s *sequence) add() []ast.DDL {
+	return []ast.DDL{s.node}
 }
 
 func (s *sequence) drop() optional[ast.DDL] {
@@ -1682,8 +1686,8 @@ func (m *model) astNode() ast.Node {
 	return m.node
 }
 
-func (m *model) add() ast.DDL {
-	return m.node
+func (m *model) add() []ast.DDL {
+	return []ast.DDL{m.node}
 }
 
 func (m *model) drop() optional[ast.DDL] {
@@ -1733,8 +1737,8 @@ func (pb *protoBundle) astNode() ast.Node {
 	return pb.node
 }
 
-func (pb *protoBundle) add() ast.DDL {
-	return pb.node
+func (pb *protoBundle) add() []ast.DDL {
+	return []ast.DDL{pb.node}
 }
 
 func (pb *protoBundle) drop() optional[ast.DDL] {
@@ -1797,8 +1801,8 @@ func (q *queue) astNode() ast.Node {
 	return q.node
 }
 
-func (q *queue) add() ast.DDL {
-	return q.node
+func (q *queue) add() []ast.DDL {
+	return []ast.DDL{q.node}
 }
 
 func (q *queue) drop() optional[ast.DDL] {
@@ -1920,8 +1924,8 @@ func (r *role) astNode() ast.Node {
 	return r.node
 }
 
-func (r *role) add() ast.DDL {
-	return r.node
+func (r *role) add() []ast.DDL {
+	return []ast.DDL{r.node}
 }
 
 func (r *role) drop() optional[ast.DDL] {
@@ -2180,8 +2184,8 @@ func (g *grant) astNode() ast.Node {
 	return g.node
 }
 
-func (g *grant) add() ast.DDL {
-	return g.node
+func (g *grant) add() []ast.DDL {
+	return []ast.DDL{g.node}
 }
 
 func (g *grant) drop() optional[ast.DDL] {
@@ -2466,8 +2470,8 @@ func (d *database) astNode() ast.Node {
 	return d.node
 }
 
-func (d *database) add() ast.DDL {
-	return d.node
+func (d *database) add() []ast.DDL {
+	return []ast.DDL{d.node}
 }
 
 func (d *database) drop() optional[ast.DDL] {

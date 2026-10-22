@@ -151,7 +151,11 @@ func (ms migrationState) updateKind(kind migrationKind, alters ...operation) mig
 func (ms migrationState) operations() []operation {
 	switch ms.kind {
 	case migrationKindAdd:
-		return []operation{newOperation(ms.target.mustGet(), operationKindAdd, ms.target.mustGet().add())}
+		var ops []operation
+		for _, ddl := range ms.target.mustGet().add() {
+			ops = append(ops, newOperation(ms.target.mustGet(), operationKindAdd, ddl))
+		}
+		return ops
 	case migrationKindAlter:
 		return ms.alters
 	case migrationKindDrop:
@@ -164,7 +168,9 @@ func (ms migrationState) operations() []operation {
 		if ddl, ok := ms.base.mustGet().drop().get(); ok {
 			alters = append(alters, newOperation(ms.base.mustGet(), operationKindDrop, ddl))
 		}
-		alters = append(alters, newOperation(ms.target.mustGet(), operationKindAdd, ms.target.mustGet().add()))
+		for _, ddl := range ms.target.mustGet().add() {
+			alters = append(alters, newOperation(ms.target.mustGet(), operationKindAdd, ddl))
+		}
 		return alters
 	case migrationKindNone, migrationKindUndefined:
 		return nil
