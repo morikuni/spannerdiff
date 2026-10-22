@@ -3,7 +3,7 @@ module github.com/morikuni/spannerdiff
 go 1.25.0
 
 require (
-	github.com/cloudspannerecosystem/memefish v0.8.1
+	github.com/cloudspannerecosystem/memefish v0.9.0
 	github.com/google/go-cmp v0.7.0
 	v.io/x/lib v0.1.21
 )
