@@ -395,6 +395,10 @@ func (t *table) columns() map[columnID]*ast.ColumnDef {
 	return m
 }
 
+func (t *table) alterRowDeletionPolicy(alteration ast.TableAlteration) ast.DDL {
+	return &ast.AlterTable{Name: t.node.Name, TableAlteration: alteration}
+}
+
 type column struct {
 	node  *ast.ColumnDef
 	table *table
@@ -803,17 +807,23 @@ func (c *constraint) onDependencyChange(me, dependency migrationState, m *migrat
 	}
 }
 
-type rowDeletionPolicy struct {
-	node  *ast.RowDeletionPolicy
-	table *table
+// rowDeletionPolicyOwner is a definition that can have a row deletion policy.
+type rowDeletionPolicyOwner interface {
+	definition
+	alterRowDeletionPolicy(alteration ast.TableAlteration) ast.DDL
 }
 
-func newRowDeletionPolicy(table *table, rdp *ast.RowDeletionPolicy) *rowDeletionPolicy {
-	return &rowDeletionPolicy{rdp, table}
+type rowDeletionPolicy struct {
+	node  *ast.RowDeletionPolicy
+	owner rowDeletionPolicyOwner
+}
+
+func newRowDeletionPolicy(owner rowDeletionPolicyOwner, rdp *ast.RowDeletionPolicy) *rowDeletionPolicy {
+	return &rowDeletionPolicy{rdp, owner}
 }
 
 func (r *rowDeletionPolicy) id() identifier {
-	return newRowDeletionPolicyID(r.table.tableID())
+	return newRowDeletionPolicyID(r.owner.id())
 }
 
 func (r *rowDeletionPolicy) astNode() ast.Node {
@@ -821,17 +831,11 @@ func (r *rowDeletionPolicy) astNode() ast.Node {
 }
 
 func (r *rowDeletionPolicy) add() ast.DDL {
-	return &ast.AlterTable{
-		Name:            r.table.node.Name,
-		TableAlteration: &ast.AddRowDeletionPolicy{RowDeletionPolicy: r.node},
-	}
+	return r.owner.alterRowDeletionPolicy(&ast.AddRowDeletionPolicy{RowDeletionPolicy: r.node})
 }
 
 func (r *rowDeletionPolicy) drop() optional[ast.DDL] {
-	return some[ast.DDL](&ast.AlterTable{
-		Name:            r.table.node.Name,
-		TableAlteration: &ast.DropRowDeletionPolicy{},
-	})
+	return some(r.owner.alterRowDeletionPolicy(&ast.DropRowDeletionPolicy{}))
 }
 
 func (r *rowDeletionPolicy) alter(tgt definition, m *migration) {
@@ -848,14 +852,17 @@ func (r *rowDeletionPolicy) alter(tgt definition, m *migration) {
 		m.updateStateIfUndefined(newDropAndAddState(base, target))
 		return
 	}
-	m.updateStateIfUndefined(newAlterState(base, target, &ast.AlterTable{
-		Name:            target.table.node.Name,
-		TableAlteration: &ast.ReplaceRowDeletionPolicy{RowDeletionPolicy: target.node},
-	}))
+	m.updateStateIfUndefined(newAlterState(base, target,
+		target.owner.alterRowDeletionPolicy(&ast.ReplaceRowDeletionPolicy{RowDeletionPolicy: target.node}),
+	))
 }
 
 func (r *rowDeletionPolicy) dependsOn() []identifier {
-	return []identifier{r.table.tableID(), newColumnID(r.table.tableID(), r.node.ColumnName)}
+	ids := []identifier{r.owner.id()}
+	if t, ok := r.owner.(*table); ok {
+		ids = append(ids, newColumnID(t.tableID(), r.node.ColumnName))
+	}
+	return ids
 }
 
 func (r *rowDeletionPolicy) onDependencyChange(me, dependency migrationState, m *migration) {

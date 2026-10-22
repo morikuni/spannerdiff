@@ -153,15 +153,15 @@ func (c constraintID) String() string {
 
 // Only one row deletion policy can be defined in a table.
 type rowDeletionPolicyID struct {
-	tableID tableID
+	ownerID identifier
 }
 
-func newRowDeletionPolicyID(tableID tableID) rowDeletionPolicyID {
-	return rowDeletionPolicyID{tableID}
+func newRowDeletionPolicyID(ownerID identifier) rowDeletionPolicyID {
+	return rowDeletionPolicyID{ownerID}
 }
 
 func (r rowDeletionPolicyID) ID() string {
-	return fmt.Sprintf("%s:RowDeletionPolicy", r.tableID.ID())
+	return fmt.Sprintf("%s:RowDeletionPolicy", r.ownerID.ID())
 }
 
 func (r rowDeletionPolicyID) String() string {
