@@ -23,6 +23,7 @@ $ brew install morikuni/tap/spannerdiff
 - `CREATE VECTOR INDEX`
 - `CREATE MODEL`
 - `CREATE PROTO BUNDLE`
+- `CREATE QUEUE`
 - `CREATE ROLE`
 - `GRANT`
 - `ALTER DATABASE`
