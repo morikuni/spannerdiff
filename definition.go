@@ -342,11 +342,15 @@ func (t *table) dependsOn() []identifier {
 	for _, col := range t.node.Columns {
 		ids = append(ids, sequencesInColumn(col)...)
 	}
-	// CREATE TABLE contains foreign keys, so referenced tables must exist before the table is created.
+	// CREATE TABLE contains foreign keys, so referenced tables and columns must exist before the table is created,
+	// and the table must be dropped before them.
 	for _, tc := range t.node.TableConstraints {
 		if fk, ok := tc.Constraint.(*ast.ForeignKey); ok {
 			if refID := newTableIDFromPath(fk.ReferenceTable); refID != t.tableID() {
 				ids = append(ids, refID)
+				for _, col := range fk.ReferenceColumns {
+					ids = append(ids, newColumnID(refID, col))
+				}
 			}
 		}
 	}
@@ -366,6 +370,8 @@ func (t *table) onDependencyChange(me, dependency migrationState, m *migration) 
 		}
 	case *sequence:
 		// The sequence is only used for ordering operations.
+	case *column:
+		// A column referenced by foreign keys is handled by constraint definitions, and is only used for ordering operations.
 	case *table:
 		// A table referenced by foreign keys is handled by constraint definitions,
 		// so only an interleaved table is recreated along with its parent.

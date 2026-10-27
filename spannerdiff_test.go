@@ -616,9 +616,9 @@ func TestDiff(t *testing.T) {
 			  T2_I1 INT64 NOT NULL,
 			) PRIMARY KEY(T2_I1)`,
 			`
-			ALTER TABLE T2 DROP COLUMN T2_S1;
 			DROP TABLE T1;
-			DROP TABLE T3;`,
+			DROP TABLE T3;
+			ALTER TABLE T2 DROP COLUMN T2_S1;`,
 			false,
 		},
 		"create table with foreign key and column it references": {
@@ -640,6 +640,7 @@ func TestDiff(t *testing.T) {
 			  FOREIGN KEY (T1_S1) REFERENCES T3 (T3_S1),
 			) PRIMARY KEY(T1_S1)`,
 			`
+			ALTER TABLE T2 ADD COLUMN T2_S1 STRING(MAX);
 			CREATE TABLE T3 (
 			  T3_S1 STRING(MAX) NOT NULL,
 			  FOREIGN KEY (T3_S1) REFERENCES T2 (T2_S1),
@@ -647,8 +648,7 @@ func TestDiff(t *testing.T) {
 			CREATE TABLE T1 (
 			  T1_S1 STRING(MAX) NOT NULL,
 			  FOREIGN KEY (T1_S1) REFERENCES T3 (T3_S1),
-			) PRIMARY KEY(T1_S1);
-			ALTER TABLE T2 ADD COLUMN T2_S1 STRING(MAX);`,
+			) PRIMARY KEY(T1_S1);`,
 			false,
 		},
 		"drop table with foreign key and recreate column it references": {
@@ -671,9 +671,9 @@ func TestDiff(t *testing.T) {
 			  T2_S1 INT64,
 			) PRIMARY KEY(T2_I1)`,
 			`
-			ALTER TABLE T2 DROP COLUMN T2_S1;
 			DROP TABLE T1;
 			DROP TABLE T3;
+			ALTER TABLE T2 DROP COLUMN T2_S1;
 			ALTER TABLE T2 ADD COLUMN T2_S1 INT64;`,
 			false,
 		},
@@ -698,6 +698,7 @@ func TestDiff(t *testing.T) {
 			) PRIMARY KEY(T1_S1)`,
 			`
 			ALTER TABLE T2 DROP COLUMN T2_S1;
+			ALTER TABLE T2 ADD COLUMN T2_S1 STRING(MAX);
 			CREATE TABLE T3 (
 			  T3_S1 STRING(MAX) NOT NULL,
 			  FOREIGN KEY (T3_S1) REFERENCES T2 (T2_S1),
@@ -705,8 +706,7 @@ func TestDiff(t *testing.T) {
 			CREATE TABLE T1 (
 			  T1_S1 STRING(MAX) NOT NULL,
 			  FOREIGN KEY (T1_S1) REFERENCES T3 (T3_S1),
-			) PRIMARY KEY(T1_S1);
-			ALTER TABLE T2 ADD COLUMN T2_S1 STRING(MAX);`,
+			) PRIMARY KEY(T1_S1);`,
 			false,
 		},
 		"alter column": {
