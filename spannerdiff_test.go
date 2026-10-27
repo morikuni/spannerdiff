@@ -424,9 +424,7 @@ func TestDiff(t *testing.T) {
 			  T1_S1 STRING(MAX),
 			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ENFORCED,
 			) PRIMARY KEY(T1_I1)`,
-			`
-			ALTER TABLE T1 DROP CONSTRAINT FK1;
-			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ENFORCED;`,
+			``,
 			false,
 		},
 		"change enforcement of unnamed foreign key from enforced to omitted": {
@@ -443,7 +441,7 @@ func TestDiff(t *testing.T) {
 			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
 			) PRIMARY KEY(T1_I1)`,
 			``,
-			true,
+			false,
 		},
 		"recreate foreign key by changing enforcement from omitted to not enforced": {
 			`
@@ -510,9 +508,7 @@ func TestDiff(t *testing.T) {
 			  T1_S1 STRING(MAX),
 			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ENFORCED,
 			) PRIMARY KEY(T1_I1)`,
-			`
-			ALTER TABLE T1 DROP CONSTRAINT FK1;
-			ALTER TABLE T1 ADD FOREIGN KEY (T1_S1) REFERENCES T2(T2_S1) ENFORCED;`,
+			``,
 			false,
 		},
 		"change named enforced foreign key to unnamed one without enforcement": {
@@ -528,9 +524,7 @@ func TestDiff(t *testing.T) {
 			  T1_S1 STRING(MAX),
 			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
 			) PRIMARY KEY(T1_I1)`,
-			`
-			ALTER TABLE T1 DROP CONSTRAINT FK1;
-			ALTER TABLE T1 ADD FOREIGN KEY (T1_S1) REFERENCES T2(T2_S1);`,
+			``,
 			false,
 		},
 		"change enforcement of unnamed foreign keys on same columns from omitted to enforced": {
@@ -549,7 +543,7 @@ func TestDiff(t *testing.T) {
 			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ENFORCED,
 			) PRIMARY KEY(T1_I1)`,
 			``,
-			true,
+			false,
 		},
 		"create referenced table first": {
 			``,
