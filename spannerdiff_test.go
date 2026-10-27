@@ -191,9 +191,7 @@ func TestDiff(t *testing.T) {
 			  T1_S1 STRING(MAX),
 			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE NO ACTION,
 			) PRIMARY KEY(T1_I1)`,
-			`
-			ALTER TABLE T1 DROP CONSTRAINT FK1;
-			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE NO ACTION;`,
+			``,
 			false,
 		},
 		"match unnamed foreign key with on delete no action with one without on delete": {
@@ -210,7 +208,7 @@ func TestDiff(t *testing.T) {
 			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
 			) PRIMARY KEY(T1_I1)`,
 			``,
-			true,
+			false,
 		},
 		"recreate foreign key by changing on delete from omitted to cascade": {
 			`
@@ -279,9 +277,7 @@ func TestDiff(t *testing.T) {
 			  T1_S1 STRING(MAX),
 			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE NO ACTION,
 			) PRIMARY KEY(T1_I1)`,
-			`
-			ALTER TABLE T1 DROP CONSTRAINT FK1;
-			ALTER TABLE T1 ADD FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE NO ACTION;`,
+			``,
 			false,
 		},
 		"error on changing on delete of unnamed foreign key from omitted to cascade": {
@@ -314,7 +310,7 @@ func TestDiff(t *testing.T) {
 			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE NO ACTION,
 			) PRIMARY KEY(T1_I1)`,
 			``,
-			true,
+			false,
 		},
 		"match named foreign key with on delete no action with unnamed one without on delete": {
 			`
@@ -329,9 +325,7 @@ func TestDiff(t *testing.T) {
 			  T1_S1 STRING(MAX),
 			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
 			) PRIMARY KEY(T1_I1)`,
-			`
-			ALTER TABLE T1 DROP CONSTRAINT FK1;
-			ALTER TABLE T1 ADD FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1);`,
+			``,
 			false,
 		},
 		"match foreign key with on delete no action with one without on delete": {
@@ -347,9 +341,7 @@ func TestDiff(t *testing.T) {
 			  T1_S1 STRING(MAX),
 			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
 			) PRIMARY KEY(T1_I1)`,
-			`
-			ALTER TABLE T1 DROP CONSTRAINT FK1;
-			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1);`,
+			``,
 			false,
 		},
 		"match foreign keys on same columns by on delete action": {
@@ -367,9 +359,7 @@ func TestDiff(t *testing.T) {
 			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE CASCADE,
 			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE NO ACTION,
 			) PRIMARY KEY(T1_I1)`,
-			`
-			ALTER TABLE T1 DROP CONSTRAINT FK1;
-			ALTER TABLE T1 ADD FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE NO ACTION;`,
+			``,
 			false,
 		},
 		"match not enforced foreign key without on delete with on delete no action": {
@@ -390,7 +380,7 @@ func TestDiff(t *testing.T) {
 			  FOREIGN KEY (T1_S2) REFERENCES T2 (T2_S1) ON DELETE NO ACTION NOT ENFORCED,
 			) PRIMARY KEY(T1_I1)`,
 			``,
-			true,
+			false,
 		},
 		"create referenced table first": {
 			``,
@@ -2458,8 +2448,8 @@ func TestDiffDeterministicWithOnDelete(t *testing.T) {
 	var first string
 	for i := range 50 {
 		var buf bytes.Buffer
-		if err := Diff(strings.NewReader(base), strings.NewReader(target), &buf, DiffOption{}); err == nil {
-			t.Fatal("want error, got nil")
+		if err := Diff(strings.NewReader(base), strings.NewReader(target), &buf, DiffOption{}); err != nil {
+			t.Fatal(err)
 		}
 		if i == 0 {
 			first = buf.String()

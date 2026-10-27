@@ -41,6 +41,14 @@ func (o optional[T]) or(a optional[T]) optional[T] {
 	return a
 }
 
+// normalizeOnDeleteAction returns ON DELETE NO ACTION for an omitted ON DELETE clause, which is its default action.
+func normalizeOnDeleteAction(action ast.OnDeleteAction) ast.OnDeleteAction {
+	if action == "" {
+		return ast.OnDeleteNoAction
+	}
+	return action
+}
+
 func equalNode(a, b ast.Node) bool {
 	return cmp.Equal(a, b, equalOptions()...)
 }
@@ -53,6 +61,10 @@ func equalOptions() []cmp.Option {
 			sf, ok := p.Last().(cmp.StructField)
 			return ok && (sf.Name() == "IfNotExists" || sf.Name() == "OrReplace")
 		}, cmp.Ignore()),
+		// ON DELETE NO ACTION is the default action, so it is the same as no ON DELETE clause.
+		cmp.Comparer(func(a, b ast.OnDeleteAction) bool {
+			return normalizeOnDeleteAction(a) == normalizeOnDeleteAction(b)
+		}),
 		// Identifiers are case-insensitive in Spanner.
 		cmp.Comparer(func(a, b *ast.Ident) bool {
 			if a == nil || b == nil {

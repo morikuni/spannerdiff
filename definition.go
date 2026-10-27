@@ -308,12 +308,6 @@ type tableOrQueueAlteration interface {
 // alterCluster returns the alteration to change the INTERLEAVE IN clause of a table or a queue.
 // It returns false if the change requires recreating the table or the queue, and a nil alteration if nothing changes.
 func alterCluster(base, target *ast.Cluster) (tableOrQueueAlteration, bool) {
-	onDelete := func(c *ast.Cluster) ast.OnDeleteAction {
-		if c.OnDelete == "" {
-			return ast.OnDeleteNoAction
-		}
-		return c.OnDelete
-	}
 	switch {
 	case base == nil && target == nil:
 		return nil, true
@@ -323,8 +317,8 @@ func alterCluster(base, target *ast.Cluster) (tableOrQueueAlteration, bool) {
 		return nil, false
 	case base.Enforced != target.Enforced:
 		return &ast.SetInterleaveIn{TableName: target.TableName, Enforced: target.Enforced, OnDelete: target.OnDelete}, true
-	case onDelete(base) != onDelete(target):
-		return &ast.SetOnDelete{OnDelete: onDelete(target)}, true
+	case normalizeOnDeleteAction(base.OnDelete) != normalizeOnDeleteAction(target.OnDelete):
+		return &ast.SetOnDelete{OnDelete: normalizeOnDeleteAction(target.OnDelete)}, true
 	default:
 		return nil, true
 	}
