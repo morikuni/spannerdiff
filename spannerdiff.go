@@ -16,7 +16,9 @@ type DiffOption struct {
 	ErrorOnUnsupportedDDL bool
 	// OnUnsupportedDDL is called with each unsupported DDL ignored when ErrorOnUnsupportedDDL is false.
 	OnUnsupportedDDL func(sql string)
-	Printer          Printer
+	// ZeroDefaultForNotNullColumns adds NOT NULL columns without a default value to existing tables with zero values as temporary default values.
+	ZeroDefaultForNotNullColumns bool
+	Printer                      Printer
 }
 
 func Diff(baseSQL, targetSQL io.Reader, output io.Writer, option DiffOption) error {

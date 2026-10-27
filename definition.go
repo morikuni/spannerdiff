@@ -81,7 +81,7 @@ func newDefinitions(ddls []ast.DDL, option DiffOption) (*definitions, error) {
 			table := newTable(ddl)
 			add(table)
 			for _, col := range table.columns() {
-				add(newColumn(table, col))
+				add(newColumn(table, col, option.ZeroDefaultForNotNullColumns))
 			}
 			for _, tc := range ddl.TableConstraints {
 				if _, ok := tc.Constraint.(*ast.TablePrimaryKey); ok {
@@ -413,12 +413,13 @@ func (t *table) alterRowDeletionPolicy(alteration tableOrQueueAlteration) ast.DD
 }
 
 type column struct {
-	node  *ast.ColumnDef
-	table *table
+	node        *ast.ColumnDef
+	table       *table
+	zeroDefault bool
 }
 
-func newColumn(table *table, col *ast.ColumnDef) *column {
-	return &column{col, table}
+func newColumn(table *table, col *ast.ColumnDef, zeroDefault bool) *column {
+	return &column{col, table, zeroDefault}
 }
 
 func (c *column) id() identifier {
@@ -432,10 +433,10 @@ func (c *column) astNode() ast.Node {
 	return &node
 }
 
-// add adds a NOT NULL column without a default value with its zero value as a temporary default value,
-// because Spanner can't add such a column to an existing table even if the table is empty.
+// add adds a NOT NULL column without a default value with its zero value as a temporary default value when zeroDefault is set.
+// Spanner can't add such a column to an existing table even if the table is empty.
 func (c *column) add() []ast.DDL {
-	if c.node.NotNull && c.node.DefaultSemantics == nil {
+	if c.zeroDefault && c.node.NotNull && c.node.DefaultSemantics == nil {
 		if zero, ok := zeroValueOf(c.node.Type).get(); ok {
 			node := *c.node
 			node.DefaultSemantics = &ast.ColumnDefaultExpr{Expr: zero}
