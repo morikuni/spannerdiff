@@ -157,6 +157,10 @@ func columnTypeOf(a ast.SchemaType) columnType {
 	case *ast.SizedSchemaType:
 		return scalar{a.Name}
 	case *ast.NamedType:
+		// memefish parses UUID as a named type like proto and enum types.
+		if len(a.Path) == 1 && strings.EqualFold(a.Path[0].Name, string(uuidTypeName)) {
+			return scalar{uuidTypeName}
+		}
 		return protoOrEnum{}
 	default:
 		panic(fmt.Sprintf("unexpected column type: %s", a.SQL()))
@@ -172,6 +176,8 @@ var _ = []struct{}{
 	isComparable(array{}),
 	isComparable(protoOrEnum{}),
 }
+
+const uuidTypeName ast.ScalarTypeName = "UUID"
 
 type scalar struct {
 	t ast.ScalarTypeName

@@ -488,6 +488,11 @@ func zeroValueOf(t ast.SchemaType) optional[ast.Expr] {
 			return some[ast.Expr](&ast.NumericLiteral{Value: &ast.StringLiteral{Value: "0"}})
 		case ast.JSONTypeName:
 			return some[ast.Expr](&ast.JSONLiteral{Value: &ast.StringLiteral{Value: "{}"}})
+		case uuidTypeName:
+			return some[ast.Expr](&ast.CastExpr{
+				Expr: &ast.StringLiteral{Value: "00000000-0000-0000-0000-000000000000"},
+				Type: &ast.NamedType{Path: []*ast.Ident{{Name: string(uuidTypeName)}}},
+			})
 		}
 	}
 	return none[ast.Expr]()
