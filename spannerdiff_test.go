@@ -323,7 +323,7 @@ func TestDiff(t *testing.T) {
 			  FOREIGN KEY (T2_S1) REFERENCES T1 (T1_S1) ON DELETE NO ACTION,
 			) PRIMARY KEY(T2_I1);`,
 			``,
-			true,
+			false,
 		},
 		"match unnamed check constraint added by alter table with inline check constraint": {
 			`
@@ -337,7 +337,7 @@ func TestDiff(t *testing.T) {
 			  CHECK (T1_I1 > 0),
 			) PRIMARY KEY(T1_I1);`,
 			``,
-			true,
+			false,
 		},
 		"match constraint added by alter table before create table": {
 			`
@@ -351,7 +351,7 @@ func TestDiff(t *testing.T) {
 			  CHECK (T1_I1 > 0),
 			) PRIMARY KEY(T1_I1);`,
 			``,
-			true,
+			false,
 		},
 		"drop named foreign key added by alter table": {
 			`
@@ -365,8 +365,9 @@ func TestDiff(t *testing.T) {
 			  T1_I1 INT64 NOT NULL,
 			  T1_S1 STRING(MAX),
 			) PRIMARY KEY(T1_I1);`,
-			``,
-			true,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;`,
+			false,
 		},
 		"add foreign key by alter table in target": {
 			`
@@ -380,8 +381,9 @@ func TestDiff(t *testing.T) {
 			  T1_S1 STRING(MAX),
 			) PRIMARY KEY(T1_I1);
 			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1);`,
-			``,
-			true,
+			`
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2(T2_S1);`,
+			false,
 		},
 		"error on adding constraint to unknown table by alter table": {
 			``,
@@ -404,7 +406,7 @@ func TestDiff(t *testing.T) {
 			  CHECK (T1_I1 > 0),
 			) PRIMARY KEY(T1_I1);`,
 			``,
-			true,
+			false,
 		},
 		"add constraints by alter table with new table": {
 			`
@@ -421,8 +423,14 @@ func TestDiff(t *testing.T) {
 			) PRIMARY KEY(T2_I1);
 			ALTER TABLE T2 ADD CONSTRAINT FK1 FOREIGN KEY (T2_S1) REFERENCES T1 (T1_S1);
 			ALTER TABLE T2 ADD CHECK (T2_I1 > 0);`,
-			``,
-			true,
+			`
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX) NOT NULL
+			) PRIMARY KEY (T2_I1);
+			ALTER TABLE T2 ADD CHECK (T2_I1 > 0);
+			ALTER TABLE T2 ADD CONSTRAINT FK1 FOREIGN KEY (T2_S1) REFERENCES T1(T1_S1);`,
+			false,
 		},
 		"add constraint by alter table again with recreated table": {
 			`
@@ -443,8 +451,15 @@ func TestDiff(t *testing.T) {
 			  T2_S1 STRING(MAX) NOT NULL,
 			) PRIMARY KEY(T2_I1, T2_S1);
 			ALTER TABLE T2 ADD CONSTRAINT FK1 FOREIGN KEY (T2_S1) REFERENCES T1 (T1_S1);`,
-			``,
-			true,
+			`
+			ALTER TABLE T2 DROP CONSTRAINT FK1;
+			DROP TABLE T2;
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX) NOT NULL
+			) PRIMARY KEY (T2_I1, T2_S1);
+			ALTER TABLE T2 ADD CONSTRAINT FK1 FOREIGN KEY (T2_S1) REFERENCES T1(T1_S1);`,
+			false,
 		},
 		"add constraint by alter table with new table referencing recreated table": {
 			`
@@ -462,8 +477,18 @@ func TestDiff(t *testing.T) {
 			  T2_S1 STRING(MAX) NOT NULL,
 			) PRIMARY KEY(T2_I1);
 			ALTER TABLE T2 ADD CONSTRAINT FK1 FOREIGN KEY (T2_S1) REFERENCES T1 (T1_S1);`,
-			``,
-			true,
+			`
+			DROP TABLE T1;
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX) NOT NULL
+			) PRIMARY KEY (T1_I1, T1_S1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX) NOT NULL
+			) PRIMARY KEY (T2_I1);
+			ALTER TABLE T2 ADD CONSTRAINT FK1 FOREIGN KEY (T2_S1) REFERENCES T1(T1_S1);`,
+			false,
 		},
 		"add foreign key by alter table again with recreated tables": {
 			`
@@ -482,8 +507,18 @@ func TestDiff(t *testing.T) {
 			  T2_I1 STRING(MAX) NOT NULL,
 			) PRIMARY KEY(T2_I1);
 			ALTER TABLE T2 ADD CONSTRAINT FK1 FOREIGN KEY (T2_I1) REFERENCES T1 (T1_I1);`,
-			``,
-			true,
+			`
+			ALTER TABLE T2 DROP CONSTRAINT FK1;
+			DROP TABLE T2;
+			DROP TABLE T1;
+			CREATE TABLE T1 (
+			  T1_I1 STRING(MAX) NOT NULL
+			) PRIMARY KEY (T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 STRING(MAX) NOT NULL
+			) PRIMARY KEY (T2_I1);
+			ALTER TABLE T2 ADD CONSTRAINT FK1 FOREIGN KEY (T2_I1) REFERENCES T1(T1_I1);`,
+			false,
 		},
 		"add circular foreign keys by alter table with new tables": {
 			``,
@@ -498,8 +533,18 @@ func TestDiff(t *testing.T) {
 			) PRIMARY KEY(T2_I1);
 			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);
 			ALTER TABLE T2 ADD CONSTRAINT FK2 FOREIGN KEY (T2_I2) REFERENCES T1 (T1_I1);`,
-			``,
-			true,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64
+			) PRIMARY KEY (T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64
+			) PRIMARY KEY (T2_I1);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2(T2_I1);
+			ALTER TABLE T2 ADD CONSTRAINT FK2 FOREIGN KEY (T2_I2) REFERENCES T1(T1_I1);`,
+			false,
 		},
 		"add constraint by alter table again with recreated interleaved table": {
 			`
@@ -522,8 +567,19 @@ func TestDiff(t *testing.T) {
 			) PRIMARY KEY(T1_I1, T2_I1),
 			  INTERLEAVE IN PARENT T1 ON DELETE CASCADE;
 			ALTER TABLE T2 ADD CHECK (T2_I1 > 0);`,
-			``,
-			true,
+			`
+			DROP TABLE T2;
+			DROP TABLE T1;
+			CREATE TABLE T1 (
+			  T1_I1 STRING(MAX) NOT NULL
+			) PRIMARY KEY (T1_I1);
+			CREATE TABLE T2 (
+			  T1_I1 STRING(MAX) NOT NULL,
+			  T2_I1 INT64 NOT NULL
+			) PRIMARY KEY (T1_I1, T2_I1),
+			  INTERLEAVE IN PARENT T1 ON DELETE CASCADE;
+			ALTER TABLE T2 ADD CHECK (T2_I1 > 0);`,
+			false,
 		},
 		"drop named foreign key by alter table before dropping tables": {
 			`
@@ -536,8 +592,11 @@ func TestDiff(t *testing.T) {
 			) PRIMARY KEY(T2_I1);
 			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
 			``,
-			``,
-			true,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			DROP TABLE T2;
+			DROP TABLE T1;`,
+			false,
 		},
 		"drop table with unnamed foreign key by alter table before referenced table": {
 			`
@@ -550,8 +609,10 @@ func TestDiff(t *testing.T) {
 			) PRIMARY KEY(T2_I1);
 			ALTER TABLE T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
 			``,
-			``,
-			true,
+			`
+			DROP TABLE T1;
+			DROP TABLE T2;`,
+			false,
 		},
 		"recreate tables with unnamed foreign key by alter table": {
 			`
@@ -573,8 +634,19 @@ func TestDiff(t *testing.T) {
 			  T2_I2 INT64,
 			) PRIMARY KEY(T2_I1, T2_I2);
 			ALTER TABLE T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
-			``,
-			true,
+			`
+			DROP TABLE T1;
+			DROP TABLE T2;
+			CREATE TABLE T1 (
+			  T1_I1 STRING(MAX) NOT NULL,
+			  T1_I2 INT64
+			) PRIMARY KEY (T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64
+			) PRIMARY KEY (T2_I1, T2_I2);
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2(T2_I1);`,
+			false,
 		},
 		"drop table with unnamed foreign key by alter table before referenced table in schema": {
 			`
@@ -591,8 +663,14 @@ func TestDiff(t *testing.T) {
 			CREATE TABLE T2 (
 			  T2_I1 STRING(MAX) NOT NULL,
 			) PRIMARY KEY(T2_I1);`,
-			``,
-			true,
+			`
+			DROP TABLE S1.T1;
+			DROP TABLE T2;
+			DROP SCHEMA S1;
+			CREATE TABLE T2 (
+			  T2_I1 STRING(MAX) NOT NULL
+			) PRIMARY KEY (T2_I1);`,
+			false,
 		},
 		"drop circular named foreign keys by alter table before dropping tables": {
 			`
@@ -607,8 +685,12 @@ func TestDiff(t *testing.T) {
 			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);
 			ALTER TABLE T2 ADD CONSTRAINT FK2 FOREIGN KEY (T2_I2) REFERENCES T1 (T1_I1);`,
 			``,
-			``,
-			true,
+			`
+			ALTER TABLE T2 DROP CONSTRAINT FK2;
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			DROP TABLE T2;
+			DROP TABLE T1;`,
+			false,
 		},
 		"error on dropping tables with circular unnamed foreign keys by alter table": {
 			`
@@ -645,8 +727,15 @@ func TestDiff(t *testing.T) {
 			CREATE TABLE T2 (
 			  T2_I1 INT64 NOT NULL,
 			) PRIMARY KEY(T2_I1);`,
-			``,
-			true,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			DROP TABLE T1;
+			CREATE TABLE T1 (
+			  T1_I1 STRING(MAX) NOT NULL,
+			  T1_I2 INT64,
+			  CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1)
+			) PRIMARY KEY (T1_I1);`,
+			false,
 		},
 		"add foreign key by alter table referencing recreated table": {
 			`
@@ -668,8 +757,14 @@ func TestDiff(t *testing.T) {
 			  T2_I2 INT64,
 			) PRIMARY KEY(T2_I1, T2_I2);
 			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
-			``,
-			true,
+			`
+			DROP TABLE T2;
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64
+			) PRIMARY KEY (T2_I1, T2_I2);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2(T2_I1);`,
+			false,
 		},
 		"add check constraint by alter table on recreated column": {
 			`
@@ -683,8 +778,11 @@ func TestDiff(t *testing.T) {
 			  T1_I2 STRING(MAX),
 			) PRIMARY KEY(T1_I1);
 			ALTER TABLE T1 ADD CONSTRAINT C1 CHECK (T1_I2 != '');`,
-			``,
-			true,
+			`
+			ALTER TABLE T1 DROP COLUMN T1_I2;
+			ALTER TABLE T1 ADD COLUMN T1_I2 STRING(MAX);
+			ALTER TABLE T1 ADD CONSTRAINT C1 CHECK (T1_I2 != "");`,
+			false,
 		},
 		"drop table with unnamed foreign key by alter table before referenced column": {
 			`
@@ -701,8 +799,10 @@ func TestDiff(t *testing.T) {
 			CREATE TABLE T2 (
 			  T2_I1 INT64 NOT NULL,
 			) PRIMARY KEY(T2_I1);`,
-			``,
-			true,
+			`
+			DROP TABLE T1;
+			ALTER TABLE T2 DROP COLUMN T2_I2;`,
+			false,
 		},
 		"drop table with unnamed foreign key by alter table before recreating referenced column": {
 			`
@@ -720,8 +820,11 @@ func TestDiff(t *testing.T) {
 			  T2_I1 INT64 NOT NULL,
 			  T2_I2 STRING(MAX),
 			) PRIMARY KEY(T2_I1);`,
-			``,
-			true,
+			`
+			DROP TABLE T1;
+			ALTER TABLE T2 DROP COLUMN T2_I2;
+			ALTER TABLE T2 ADD COLUMN T2_I2 STRING(MAX);`,
+			false,
 		},
 		"drop table with named check constraint by alter table": {
 			`
@@ -730,8 +833,9 @@ func TestDiff(t *testing.T) {
 			) PRIMARY KEY(T1_I1);
 			ALTER TABLE T1 ADD CONSTRAINT C1 CHECK (T1_I1 > 0);`,
 			``,
-			``,
-			true,
+			`
+			DROP TABLE T1;`,
+			false,
 		},
 		"drop table with named self-referencing foreign key by alter table": {
 			`
@@ -741,8 +845,9 @@ func TestDiff(t *testing.T) {
 			) PRIMARY KEY(T1_I1);
 			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T1 (T1_I1);`,
 			``,
-			``,
-			true,
+			`
+			DROP TABLE T1;`,
+			false,
 		},
 		"recreate table with named foreign key by alter table into unnamed inline foreign key": {
 			`
@@ -763,8 +868,15 @@ func TestDiff(t *testing.T) {
 			CREATE TABLE T2 (
 			  T2_I1 INT64 NOT NULL,
 			) PRIMARY KEY(T2_I1);`,
-			``,
-			true,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK_T1;
+			DROP TABLE T1;
+			CREATE TABLE T1 (
+			  T1_I1 STRING(MAX) NOT NULL,
+			  T1_I2 INT64,
+			  FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1)
+			) PRIMARY KEY (T1_I1);`,
+			false,
 		},
 		"recreate table with named inline foreign key into unnamed foreign key by alter table": {
 			`
@@ -785,8 +897,14 @@ func TestDiff(t *testing.T) {
 			  T2_I1 INT64 NOT NULL,
 			) PRIMARY KEY(T2_I1);
 			ALTER TABLE T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
-			``,
-			true,
+			`
+			DROP TABLE T1;
+			CREATE TABLE T1 (
+			  T1_I1 STRING(MAX) NOT NULL,
+			  T1_I2 INT64
+			) PRIMARY KEY (T1_I1);
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2(T2_I1);`,
+			false,
 		},
 		"match named foreign key by alter table with unnamed foreign key by alter table": {
 			`
@@ -808,7 +926,7 @@ func TestDiff(t *testing.T) {
 			) PRIMARY KEY(T2_I1);
 			ALTER TABLE T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
 			``,
-			true,
+			false,
 		},
 		"match named foreign key added by alter table with unnamed inline foreign key": {
 			`
@@ -830,7 +948,7 @@ func TestDiff(t *testing.T) {
 			  FOREIGN KEY (T2_S1) REFERENCES T1 (T1_S1) ON DELETE NO ACTION,
 			) PRIMARY KEY(T2_I1);`,
 			``,
-			true,
+			false,
 		},
 		"drop named foreign key by alter table with the same definition as unnamed foreign key by alter table": {
 			`
@@ -852,8 +970,9 @@ func TestDiff(t *testing.T) {
 			  T2_S1 STRING(MAX) NOT NULL,
 			  FOREIGN KEY (T2_S1) REFERENCES T1 (T1_S1) ON DELETE NO ACTION,
 			) PRIMARY KEY(T2_I1);`,
-			``,
-			true,
+			`
+			ALTER TABLE T2 DROP CONSTRAINT FK_T2;`,
+			false,
 		},
 		"error on naming unnamed foreign key added by alter table": {
 			`
@@ -890,8 +1009,11 @@ func TestDiff(t *testing.T) {
 			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);
 			ALTER TABLE T2 ADD FOREIGN KEY (T2_I2) REFERENCES T1 (T1_I1);`,
 			``,
-			``,
-			true,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			DROP TABLE T2;
+			DROP TABLE T1;`,
+			false,
 		},
 		"error on dropping tables with unnamed foreign key by alter table and inline foreign key referencing each other": {
 			`
@@ -937,8 +1059,24 @@ func TestDiff(t *testing.T) {
 			  T2_I2 INT64 NOT NULL,
 			) PRIMARY KEY(T2_I1, T2_I2);
 			ALTER TABLE C1 ADD FOREIGN KEY (C1_I1) REFERENCES T2 (T2_I1);`,
-			``,
-			true,
+			`
+			DROP TABLE C1;
+			DROP TABLE T2;
+			DROP TABLE P1;
+			CREATE TABLE P1 (
+			  P1_I1 STRING(MAX) NOT NULL
+			) PRIMARY KEY (P1_I1);
+			CREATE TABLE C1 (
+			  P1_I1 STRING(MAX) NOT NULL,
+			  C1_I1 INT64 NOT NULL
+			) PRIMARY KEY (P1_I1, C1_I1),
+			  INTERLEAVE IN PARENT P1;
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64 NOT NULL
+			) PRIMARY KEY (T2_I1, T2_I2);
+			ALTER TABLE C1 ADD FOREIGN KEY (C1_I1) REFERENCES T2(T2_I1);`,
+			false,
 		},
 		"recreate named foreign key by alter table with recreated referenced table": {
 			`
@@ -961,8 +1099,15 @@ func TestDiff(t *testing.T) {
 			  T2_I2 INT64,
 			) PRIMARY KEY(T2_I1, T2_I2);
 			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
-			``,
-			true,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			DROP TABLE T2;
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64
+			) PRIMARY KEY (T2_I1, T2_I2);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2(T2_I1);`,
+			false,
 		},
 		"error on recreating referenced table of unnamed foreign key by alter table": {
 			`
@@ -1006,7 +1151,7 @@ func TestDiff(t *testing.T) {
 			  CHECK (T1_I1 < 10),
 			) PRIMARY KEY(T1_I1);`,
 			``,
-			true,
+			false,
 		},
 		"error on dropping unnamed constraint": {
 			`
@@ -3084,7 +3229,6 @@ func TestDiffOnUnsupportedDDL(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{
-		"ALTER TABLE T1 ADD CHECK (T1_I1 > 0)",
 		"ALTER TABLE S1.S2.T1 ADD CHECK (T1_I1 > 0)",
 		"ALTER INDEX IDX1 ADD STORED COLUMN T1_I1",
 	}

@@ -16,8 +16,17 @@ type operation struct {
 	dependsOn []identifier
 }
 
+// dropDependencyOwner is a definition whose drop operations have more dependencies than its other operations.
+type dropDependencyOwner interface {
+	dropDependsOn() []identifier
+}
+
 func newOperation(def definition, kind operationKind, ddl ast.DDL) operation {
-	return operation{def.id(), kind, ddl, def.dependsOn()}
+	dependsOn := def.dependsOn()
+	if d, ok := def.(dropDependencyOwner); ok && kind == operationKindDrop {
+		dependsOn = d.dropDependsOn()
+	}
+	return operation{def.id(), kind, ddl, dependsOn}
 }
 
 type operationKind string

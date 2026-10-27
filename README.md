@@ -27,6 +27,7 @@ $ brew install morikuni/tap/spannerdiff
 - `CREATE ROLE`
 - `GRANT`
 - `ALTER DATABASE`
+- `ALTER TABLE ... ADD [CONSTRAINT name] {FOREIGN KEY | CHECK}`
 
 ## Colored Output
 

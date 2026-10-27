@@ -73,6 +73,18 @@ func newDefinitions(ddls []ast.DDL, option DiffOption) (*definitions, error) {
 		d.all[id] = def
 	}
 
+	unsupported := func(ddl ast.DDL) error {
+		if option.ErrorOnUnsupportedDDL {
+			return fmt.Errorf("unsupported DDL: %s", ddl.SQL())
+		}
+		if option.OnUnsupportedDDL != nil {
+			option.OnUnsupportedDDL(ddl.SQL())
+		}
+		return nil
+	}
+
+	// Constraints added by ALTER TABLE are added after all tables are defined, because they may precede CREATE TABLE.
+	var addConstraints []*ast.AlterTable
 	for _, ddl := range ddls {
 		switch ddl := ddl.(type) {
 		case *ast.CreateSchema:
@@ -129,14 +141,34 @@ func newDefinitions(ddls []ast.DDL, option DiffOption) (*definitions, error) {
 			}
 		case *ast.AlterDatabase:
 			add(newDatabase(ddl))
-		default:
-			if option.ErrorOnUnsupportedDDL {
-				return nil, fmt.Errorf("unsupported DDL: %s", ddl.SQL())
+		case *ast.AlterTable:
+			// Spanner returns some constraints as ALTER TABLE ADD statements instead of in CREATE TABLE,
+			// so they are compared in the same way as constraints in CREATE TABLE.
+			// A table name with more than two parts is not supported, as in CREATE TABLE.
+			if _, ok := ddl.TableAlteration.(*ast.AddTableConstraint); ok && len(ddl.Name.Idents) <= 2 {
+				addConstraints = append(addConstraints, ddl)
+				continue
 			}
-			if option.OnUnsupportedDDL != nil {
-				option.OnUnsupportedDDL(ddl.SQL())
+			if err := unsupported(ddl); err != nil {
+				return nil, err
+			}
+		default:
+			if err := unsupported(ddl); err != nil {
+				return nil, err
 			}
 		}
+	}
+
+	for _, at := range addConstraints {
+		table, ok := d.all[newTableIDFromPath(at.Name)].(*table)
+		if !ok {
+			return nil, fmt.Errorf("table not found: %s", at.SQL())
+		}
+		tc := at.TableAlteration.(*ast.AddTableConstraint).TableConstraint
+		table.constraintsByAlterTable = append(table.constraintsByAlterTable, tc)
+		c := newConstraint(table, tc)
+		c.addedByAlterTable = true
+		add(c)
 	}
 
 	if duplicated != nil {
@@ -188,11 +220,12 @@ func (s *schema) dependsOn() []identifier {
 func (s *schema) onDependencyChange(me, dependency migrationState, m *migration) {}
 
 type table struct {
-	node *ast.CreateTable
+	node                    *ast.CreateTable
+	constraintsByAlterTable []*ast.TableConstraint
 }
 
 func newTable(ct *ast.CreateTable) *table {
-	return &table{ct}
+	return &table{ct, nil}
 }
 
 func (t *table) id() identifier {
@@ -351,6 +384,26 @@ func (t *table) dependsOn() []identifier {
 		}
 	}
 	return ids
+}
+
+// dropDependsOn returns the dependencies of DROP TABLE.
+// DROP TABLE also drops unnamed foreign keys defined by ALTER TABLE, because they can't be dropped by name,
+// so the table must be dropped before the tables and the columns referenced by them.
+func (t *table) dropDependsOn() []identifier {
+	var refs []identifier
+	for _, tc := range t.constraintsByAlterTable {
+		if fk, ok := tc.Constraint.(*ast.ForeignKey); ok && tc.Name == nil {
+			if refID := newTableIDFromPath(fk.ReferenceTable); refID != t.tableID() {
+				refs = append(refs, refID)
+				for _, col := range fk.ReferenceColumns {
+					refs = append(refs, newColumnID(refID, col))
+				}
+			}
+		}
+	}
+	// The order of dependencies affects the order of operations, so it must not depend on the order of ALTER TABLE statements.
+	slices.SortFunc(refs, func(a, b identifier) int { return strings.Compare(a.ID(), b.ID()) })
+	return append(t.dependsOn(), refs...)
 }
 
 func (t *table) onDependencyChange(me, dependency migrationState, m *migration) {
@@ -726,10 +779,12 @@ type constraint struct {
 	node  *ast.TableConstraint
 	table *table
 	cid   constraintID
+	// addedByAlterTable reports whether the constraint is defined by ALTER TABLE instead of CREATE TABLE.
+	addedByAlterTable bool
 }
 
 func newConstraint(table *table, tc *ast.TableConstraint) *constraint {
-	return &constraint{tc, table, newConstraintID(table.tableID(), tc)}
+	return &constraint{tc, table, newConstraintID(table.tableID(), tc), false}
 }
 
 func (c *constraint) id() identifier {
@@ -804,21 +859,52 @@ func (c *constraint) onDependencyChange(me, dependency migrationState, m *migrat
 		case dep.tableID() == c.table.tableID():
 			switch dependency.kind {
 			case migrationKindAdd, migrationKindDropAndAdd, migrationKindDrop:
-				// CREATE TABLE and DROP TABLE also add and drop constraints.
-				m.updateState(me.updateKind(migrationKindNone))
+				// CREATE TABLE and DROP TABLE also add and drop constraints in them, but not constraints defined by ALTER TABLE.
+				// A named foreign key defined by ALTER TABLE that references another table is dropped before DROP TABLE,
+				// because foreign keys defined by ALTER TABLE may reference each other. An unnamed one can't be dropped,
+				// so it orders DROP TABLE instead (see table.dropDependsOn).
+				base, dropBase := constraintByAlterTable(me.base)
+				dropBase = dropBase && base.node.Name != nil && base.referencesOtherTable()
+				_, addTarget := constraintByAlterTable(me.target)
+				switch {
+				case dropBase && addTarget:
+					m.updateState(me.updateKind(migrationKindDropAndAdd))
+				case dropBase:
+					m.updateState(me.updateKind(migrationKindDrop))
+				case addTarget:
+					m.updateState(me.updateKind(migrationKindAdd))
+				default:
+					m.updateState(me.updateKind(migrationKindNone))
+				}
 			}
-		case me.base.valid && me.kind != migrationKindDrop && dependency.kind == migrationKindDropAndAdd:
+		case me.base.valid && me.kind != migrationKindDrop && me.kind != migrationKindAdd && dependency.kind == migrationKindDropAndAdd:
 			// The referenced table can't be dropped while a foreign key references it.
-			// A constraint not in base doesn't need to be dropped.
+			// A constraint not in base, or added after its table is recreated, doesn't need to be dropped.
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
 		}
 	case *column:
-		if me.base.valid && me.kind != migrationKindDrop && dependency.kind == migrationKindDropAndAdd {
+		if me.base.valid && me.kind != migrationKindDrop && me.kind != migrationKindAdd && dependency.kind == migrationKindDropAndAdd {
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
 		}
 	default:
 		panic(fmt.Sprintf("unexpected dependency type on constraint: %T", dep))
 	}
+}
+
+// referencesOtherTable reports whether the constraint is a foreign key that references another table.
+func (c *constraint) referencesOtherTable() bool {
+	fk, ok := c.node.Constraint.(*ast.ForeignKey)
+	return ok && newTableIDFromPath(fk.ReferenceTable) != c.table.tableID()
+}
+
+// constraintByAlterTable returns the constraint and true if the constraint is defined by ALTER TABLE.
+func constraintByAlterTable(def optional[definition]) (*constraint, bool) {
+	d, ok := def.get()
+	if !ok {
+		return nil, false
+	}
+	c := d.(*constraint)
+	return c, c.addedByAlterTable
 }
 
 // rowDeletionPolicyOwner is a table or a queue, which can have a row deletion policy.
