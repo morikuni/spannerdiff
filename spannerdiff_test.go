@@ -593,9 +593,8 @@ func TestDiff(t *testing.T) {
 			  T1_I1 INT64 NOT NULL,
 			  T1_S1 STRING(MAX) NOT NULL,
 			) PRIMARY KEY(T1_I1)`,
-			`
-			ALTER TABLE T1 ADD COLUMN T1_S1 STRING(MAX) NOT NULL;`,
-			false,
+			``,
+			true,
 		},
 		"add not null column with default": {
 			`
@@ -759,10 +758,8 @@ func TestDiff(t *testing.T) {
 			  T1_I1 INT64 NOT NULL,
 			  T1_S1 INT64 NOT NULL,
 			) PRIMARY KEY(T1_I1)`,
-			`
-			ALTER TABLE T1 DROP COLUMN T1_S1;
-			ALTER TABLE T1 ADD COLUMN T1_S1 INT64 NOT NULL;`,
-			false,
+			``,
+			true,
 		},
 		"recreate column to generated column": {
 			`
@@ -1153,7 +1150,7 @@ func TestDiff(t *testing.T) {
 			CREATE TABLE Transfer (
 			  id INT64 NOT NULL,
 			  person_id INT64 NOT NULL,
-			  account_id STRING(MAX) NOT NULL,
+			  account_id STRING(MAX),
 			) PRIMARY KEY(id);
 			CREATE PROPERTY GRAPH G1
 			  NODE TABLES (Person, Account)
@@ -1165,7 +1162,7 @@ func TestDiff(t *testing.T) {
 			`
 			DROP PROPERTY GRAPH G1;
 			ALTER TABLE Transfer DROP COLUMN account_id;
-			ALTER TABLE Transfer ADD COLUMN account_id STRING(MAX) NOT NULL;
+			ALTER TABLE Transfer ADD COLUMN account_id STRING(MAX);
 			CREATE PROPERTY GRAPH G1
 			  NODE TABLES (Person, Account)
 			  EDGE TABLES (
@@ -2299,9 +2296,8 @@ func TestDiffZeroDefaultForNotNullColumns(t *testing.T) {
 			  T1_I1 INT64 NOT NULL,
 			  T1_P1 examples.shipping.Order NOT NULL,
 			) PRIMARY KEY(T1_I1)`,
-			`
-			ALTER TABLE T1 ADD COLUMN T1_P1 examples.shipping.Order NOT NULL;`,
-			false,
+			``,
+			true,
 		},
 		"recreate column to not null column": {
 			`

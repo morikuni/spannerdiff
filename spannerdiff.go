@@ -305,6 +305,16 @@ func (m *migration) validate() {
 				m.addError(fmt.Errorf("unnamed constraint can't be dropped, name the constraint in the base schema: %s", c.node.SQL()))
 			}
 		}
+		switch state.kind {
+		case migrationKindAdd, migrationKindDropAndAdd:
+			if c, ok := state.target.mustGet().(*column); ok && c.node.NotNull && c.node.DefaultSemantics == nil {
+				if _, ok := zeroValueOf(c.node.Type).get(); !ok {
+					m.addError(fmt.Errorf("NOT NULL column without a default value can't be added to an existing table because the zero value of its type is unknown, add it with a default value or as a nullable column first: %s", c.id()))
+				} else if !c.zeroDefault {
+					m.addError(fmt.Errorf("NOT NULL column without a default value can't be added to an existing table, add it with a default value or as a nullable column first, or use --zero-default-for-not-null-columns if the zero value is valid for existing rows: %s", c.id()))
+				}
+			}
+		}
 	}
 }
 
