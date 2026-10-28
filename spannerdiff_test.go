@@ -3072,44 +3072,97 @@ func equalDDLs(t *testing.T, a, b string) {
 }
 
 func TestDiffDeterministic(t *testing.T) {
-	base := `
-	CREATE TABLE T1 (
-	  T1_I1 INT64 NOT NULL,
-	  T1_I2 INT64 NOT NULL,
-	  T1_I3 INT64 NOT NULL,
-	  T1_I4 INT64 NOT NULL,
-	  T1_T1 TIMESTAMP NOT NULL,
-	  CONSTRAINT C1 CHECK (T1_I1 > 0),
-	  CONSTRAINT C2 CHECK (T1_I2 > 0),
-	  SYNONYM(S1),
-	) PRIMARY KEY(T1_I1);
-	CREATE INDEX IDX1 ON T1(T1_I2) STORING (T1_I3, T1_I4);`
-	target := `
-	CREATE TABLE T1 (
-	  T1_I1 INT64 NOT NULL,
-	  T1_I2 INT64 NOT NULL,
-	  T1_I3 INT64 NOT NULL,
-	  T1_I4 INT64 NOT NULL,
-	  T1_T1 TIMESTAMP NOT NULL,
-	  CONSTRAINT C3 CHECK (T1_I3 > 0),
-	  CONSTRAINT C4 CHECK (T1_I4 > 0),
-	  SYNONYM(S2),
-	) PRIMARY KEY(T1_I1), ROW DELETION POLICY (OLDER_THAN(T1_T1, INTERVAL 1 DAY));
-	CREATE INDEX IDX1 ON T1(T1_I2) STORING (T1_T1, T1_I1);`
-
-	var first string
-	for i := range 50 {
-		var buf bytes.Buffer
-		if err := Diff(strings.NewReader(base), strings.NewReader(target), &buf, DiffOption{}); err != nil {
-			t.Fatal(err)
-		}
-		if i == 0 {
-			first = buf.String()
-			continue
-		}
-		if diff := cmp.Diff(first, buf.String()); diff != "" {
-			t.Fatalf("output changed between runs:\n%s", diff)
-		}
+	for name, tt := range map[string]struct {
+		base   string
+		target string
+	}{
+		"constraints, synonyms, row deletion policy and index": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			  T1_I3 INT64 NOT NULL,
+			  T1_I4 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP NOT NULL,
+			  CONSTRAINT C1 CHECK (T1_I1 > 0),
+			  CONSTRAINT C2 CHECK (T1_I2 > 0),
+			  SYNONYM(S1),
+			) PRIMARY KEY(T1_I1);
+			CREATE INDEX IDX1 ON T1(T1_I2) STORING (T1_I3, T1_I4);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			  T1_I3 INT64 NOT NULL,
+			  T1_I4 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP NOT NULL,
+			  CONSTRAINT C3 CHECK (T1_I3 > 0),
+			  CONSTRAINT C4 CHECK (T1_I4 > 0),
+			  SYNONYM(S2),
+			) PRIMARY KEY(T1_I1), ROW DELETION POLICY (OLDER_THAN(T1_T1, INTERVAL 1 DAY));
+			CREATE INDEX IDX1 ON T1(T1_I2) STORING (T1_T1, T1_I1);`,
+		},
+		"constraints by alter table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			  T1_I3 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1);
+			CREATE TABLE T3 (
+			  T3_I1 INT64 NOT NULL,
+			  T3_I2 INT64,
+			) PRIMARY KEY(T3_I1);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_I3) REFERENCES T3 (T3_I1);
+			ALTER TABLE T2 ADD CONSTRAINT FK2 FOREIGN KEY (T2_I2) REFERENCES T3 (T3_I1);
+			ALTER TABLE T3 ADD CONSTRAINT C1 CHECK (T3_I2 > 0);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 STRING(MAX) NOT NULL,
+			  T1_I2 INT64,
+			  T1_I3 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			  T2_I3 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1, T2_I3);
+			CREATE TABLE T3 (
+			  T3_I1 INT64 NOT NULL,
+			  T3_I2 INT64,
+			) PRIMARY KEY(T3_I1);
+			CREATE TABLE T4 (
+			  T4_I1 INT64 NOT NULL,
+			  T4_S1 STRING(MAX),
+			) PRIMARY KEY(T4_I1);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_I3) REFERENCES T3 (T3_I1);
+			ALTER TABLE T2 ADD CONSTRAINT FK2 FOREIGN KEY (T2_I2) REFERENCES T3 (T3_I1);
+			ALTER TABLE T3 ADD CONSTRAINT C2 CHECK (T3_I2 > 0);
+			ALTER TABLE T4 ADD FOREIGN KEY (T4_S1) REFERENCES T1 (T1_I1);`,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var first string
+			for i := range 50 {
+				var buf bytes.Buffer
+				if err := Diff(strings.NewReader(tt.base), strings.NewReader(tt.target), &buf, DiffOption{}); err != nil {
+					t.Fatal(err)
+				}
+				if i == 0 {
+					first = buf.String()
+					continue
+				}
+				if diff := cmp.Diff(first, buf.String()); diff != "" {
+					t.Fatalf("output changed between runs:\n%s", diff)
+				}
+			}
+		})
 	}
 }
 
@@ -3137,66 +3190,6 @@ func TestDiffIndependentOfAlterTableOrder(t *testing.T) {
 	}
 	if diff := cmp.Diff(outputs[0], outputs[1]); diff != "" {
 		t.Fatalf("output changed by the order of ALTER TABLE:\n%s", diff)
-	}
-}
-
-func TestDiffDeterministicWithAlterTable(t *testing.T) {
-	base := `
-	CREATE TABLE T1 (
-	  T1_I1 INT64 NOT NULL,
-	  T1_I2 INT64,
-	  T1_I3 INT64,
-	) PRIMARY KEY(T1_I1);
-	CREATE TABLE T2 (
-	  T2_I1 INT64 NOT NULL,
-	  T2_I2 INT64,
-	) PRIMARY KEY(T2_I1);
-	CREATE TABLE T3 (
-	  T3_I1 INT64 NOT NULL,
-	  T3_I2 INT64,
-	) PRIMARY KEY(T3_I1);
-	ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);
-	ALTER TABLE T1 ADD FOREIGN KEY (T1_I3) REFERENCES T3 (T3_I1);
-	ALTER TABLE T2 ADD CONSTRAINT FK2 FOREIGN KEY (T2_I2) REFERENCES T3 (T3_I1);
-	ALTER TABLE T3 ADD CONSTRAINT C1 CHECK (T3_I2 > 0);`
-	target := `
-	CREATE TABLE T1 (
-	  T1_I1 STRING(MAX) NOT NULL,
-	  T1_I2 INT64,
-	  T1_I3 INT64,
-	) PRIMARY KEY(T1_I1);
-	CREATE TABLE T2 (
-	  T2_I1 INT64 NOT NULL,
-	  T2_I2 INT64,
-	  T2_I3 INT64 NOT NULL,
-	) PRIMARY KEY(T2_I1, T2_I3);
-	CREATE TABLE T3 (
-	  T3_I1 INT64 NOT NULL,
-	  T3_I2 INT64,
-	) PRIMARY KEY(T3_I1);
-	CREATE TABLE T4 (
-	  T4_I1 INT64 NOT NULL,
-	  T4_S1 STRING(MAX),
-	) PRIMARY KEY(T4_I1);
-	ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);
-	ALTER TABLE T1 ADD FOREIGN KEY (T1_I3) REFERENCES T3 (T3_I1);
-	ALTER TABLE T2 ADD CONSTRAINT FK2 FOREIGN KEY (T2_I2) REFERENCES T3 (T3_I1);
-	ALTER TABLE T3 ADD CONSTRAINT C2 CHECK (T3_I2 > 0);
-	ALTER TABLE T4 ADD FOREIGN KEY (T4_S1) REFERENCES T1 (T1_I1);`
-
-	var first string
-	for i := range 50 {
-		var buf bytes.Buffer
-		if err := Diff(strings.NewReader(base), strings.NewReader(target), &buf, DiffOption{}); err != nil {
-			t.Fatal(err)
-		}
-		if i == 0 {
-			first = buf.String()
-			continue
-		}
-		if diff := cmp.Diff(first, buf.String()); diff != "" {
-			t.Fatalf("output changed between runs:\n%s", diff)
-		}
 	}
 }
 
