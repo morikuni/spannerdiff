@@ -74,6 +74,11 @@ func TestRealMain(t *testing.T) {
 			wantCode:   1,
 			wantStderr: "unsupported DDL: ALTER INDEX IDX1 ADD STORED COLUMN C1",
 		},
+		"zero default for not null columns": {
+			args:       []string{"--zero-default-for-not-null-columns", "--base", "CREATE TABLE T1 (T1_I1 INT64) PRIMARY KEY (T1_I1)", "--target", "CREATE TABLE T1 (T1_I1 INT64, T1_I2 INT64 NOT NULL) PRIMARY KEY (T1_I1)"},
+			wantCode:   0,
+			wantStdout: "ALTER TABLE T1 ADD COLUMN T1_I2 INT64 NOT NULL DEFAULT (0);\n\nALTER TABLE T1 ALTER COLUMN T1_I2 DROP DEFAULT;\n",
+		},
 		"parse error": {
 			args:       []string{"--target", "CREATE"},
 			wantCode:   1,

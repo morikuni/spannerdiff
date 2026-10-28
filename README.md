@@ -83,6 +83,16 @@ Schema updating...done.
 DDL statements that are not listed in [Supported DDL](#supported-ddl) are ignored with a warning.
 Use `--error-on-unsupported-ddl` to exit with an error instead.
 
+## Adding NOT NULL Columns
+
+Spanner can't add a `NOT NULL` column without a default value to an existing table, even if the table is empty.
+spannerdiff exits with an error for such a column instead of generating DDL that Spanner rejects.
+This also applies when spannerdiff recreates such a column, e.g. to change its type.
+Add the column with a default value or as a nullable column first, so that you decide the values of existing rows.
+Use `--zero-default-for-not-null-columns` to add such a column with the zero value of its type (e.g. `0`, `''`) as a temporary default value.
+Existing rows get the zero value, so make sure that it is valid for the column, e.g. for a `CHECK` constraint, a unique index or a foreign key on the column.
+With the option, spannerdiff still reports the error for `PROTO` and `ENUM` columns, because spannerdiff can't tell a proto from an enum without the proto descriptors, and `0` isn't always a valid enum value.
+
 ## Known Issues & Limitations
 
 - View DDL generation may be incorrect or out of order due to unresolved column names in the view query.

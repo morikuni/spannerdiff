@@ -16,7 +16,9 @@ type DiffOption struct {
 	ErrorOnUnsupportedDDL bool
 	// OnUnsupportedDDL is called with each unsupported DDL ignored when ErrorOnUnsupportedDDL is false.
 	OnUnsupportedDDL func(sql string)
-	Printer          Printer
+	// ZeroDefaultForNotNullColumns adds NOT NULL columns without a default value to existing tables with zero values as temporary default values.
+	ZeroDefaultForNotNullColumns bool
+	Printer                      Printer
 }
 
 func Diff(baseSQL, targetSQL io.Reader, output io.Writer, option DiffOption) error {
@@ -151,7 +153,11 @@ func (ms migrationState) updateKind(kind migrationKind, alters ...operation) mig
 func (ms migrationState) operations() []operation {
 	switch ms.kind {
 	case migrationKindAdd:
-		return []operation{newOperation(ms.target.mustGet(), operationKindAdd, ms.target.mustGet().add())}
+		var ops []operation
+		for _, ddl := range ms.target.mustGet().add() {
+			ops = append(ops, newOperation(ms.target.mustGet(), operationKindAdd, ddl))
+		}
+		return ops
 	case migrationKindAlter:
 		return ms.alters
 	case migrationKindDrop:
@@ -164,7 +170,9 @@ func (ms migrationState) operations() []operation {
 		if ddl, ok := ms.base.mustGet().drop().get(); ok {
 			alters = append(alters, newOperation(ms.base.mustGet(), operationKindDrop, ddl))
 		}
-		alters = append(alters, newOperation(ms.target.mustGet(), operationKindAdd, ms.target.mustGet().add()))
+		for _, ddl := range ms.target.mustGet().add() {
+			alters = append(alters, newOperation(ms.target.mustGet(), operationKindAdd, ddl))
+		}
 		return alters
 	case migrationKindNone, migrationKindUndefined:
 		return nil
@@ -295,6 +303,16 @@ func (m *migration) validate() {
 		case migrationKindDrop, migrationKindDropAndAdd:
 			if c, ok := state.base.mustGet().(*constraint); ok && c.node.Name == nil {
 				m.addError(fmt.Errorf("unnamed constraint can't be dropped, name the constraint in the base schema: %s", c.node.SQL()))
+			}
+		}
+		switch state.kind {
+		case migrationKindAdd, migrationKindDropAndAdd:
+			if c, ok := state.target.mustGet().(*column); ok && c.node.NotNull && c.node.DefaultSemantics == nil {
+				if _, ok := zeroValueOf(c.node.Type).get(); !ok {
+					m.addError(fmt.Errorf("NOT NULL column without a default value can't be added to an existing table because the zero value of its type is unknown, add it with a default value or as a nullable column first: %s", c.id()))
+				} else if !c.zeroDefault {
+					m.addError(fmt.Errorf("NOT NULL column without a default value can't be added to an existing table, add it with a default value or as a nullable column first, or use --zero-default-for-not-null-columns if the zero value is valid for existing rows: %s", c.id()))
+				}
 			}
 		}
 	}

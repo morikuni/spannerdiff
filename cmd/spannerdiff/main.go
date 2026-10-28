@@ -26,6 +26,7 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 	globalFlags.SortFlags = false
 	color := globalFlags.StringP("color", "", "auto", "color mode [auto, always, never]")
 	errorOnUnsupportedDDL := globalFlags.BoolP("error-on-unsupported-ddl", "", false, "exit with an error if the schema contains unsupported DDL instead of ignoring it")
+	zeroDefaultForNotNullColumns := globalFlags.BoolP("zero-default-for-not-null-columns", "", false, "add NOT NULL columns without a default value with zero values as temporary default values")
 	versionFlag := globalFlags.BoolP("version", "", false, "print version")
 
 	baseFlags := pflag.NewFlagSet("", pflag.ContinueOnError)
@@ -146,7 +147,8 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 		OnUnsupportedDDL: func(sql string) {
 			_, _ = fmt.Fprintln(stderr, aec.YellowF.Apply(fmt.Sprintf("ignored unsupported DDL: %s", sql)))
 		},
-		Printer: spannerdiff.DetectTerminalPrinter(cm, stdout),
+		ZeroDefaultForNotNullColumns: *zeroDefaultForNotNullColumns,
+		Printer:                      spannerdiff.DetectTerminalPrinter(cm, stdout),
 	})
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, aec.RedF.Apply(err.Error()))

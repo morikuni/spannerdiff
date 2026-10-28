@@ -583,6 +583,33 @@ func TestDiff(t *testing.T) {
 			ALTER TABLE T1 ADD COLUMN T1_S1 STRING(MAX);`,
 			false,
 		},
+		"add not null column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_I1)`,
+			``,
+			true,
+		},
+		"add not null column with default": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX) NOT NULL DEFAULT ('a'),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 ADD COLUMN T1_S1 STRING(MAX) NOT NULL DEFAULT ('a');`,
+			false,
+		},
 		"drop column": {
 			`
 			CREATE TABLE T1 (
@@ -643,6 +670,26 @@ func TestDiff(t *testing.T) {
 			ALTER TABLE T1 ADD COLUMN T1_S1 INT64;`,
 			false,
 		},
+		"recreate uuid columns": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_U1 UUID,
+			  T1_U2 UUID,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_U1 BYTES(MAX),
+			  T1_U2 examples.Message,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 DROP COLUMN T1_U2;
+			ALTER TABLE T1 DROP COLUMN T1_U1;
+			ALTER TABLE T1 ADD COLUMN T1_U1 BYTES(MAX);
+			ALTER TABLE T1 ADD COLUMN T1_U2 examples.Message;`,
+			false,
+		},
 		"recreate generated column": {
 			`
 			CREATE TABLE T1 (
@@ -699,6 +746,20 @@ func TestDiff(t *testing.T) {
 			ALTER TABLE T1 ADD COLUMN T1_G1 INT64 AS (T1_I2 + 2);
 			CREATE INDEX IDX1 ON T1(T1_G1);`,
 			false,
+		},
+		"recreate column to not null column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1)`,
+			``,
+			true,
 		},
 		"recreate column to generated column": {
 			`
@@ -1089,7 +1150,7 @@ func TestDiff(t *testing.T) {
 			CREATE TABLE Transfer (
 			  id INT64 NOT NULL,
 			  person_id INT64 NOT NULL,
-			  account_id STRING(MAX) NOT NULL,
+			  account_id STRING(MAX),
 			) PRIMARY KEY(id);
 			CREATE PROPERTY GRAPH G1
 			  NODE TABLES (Person, Account)
@@ -1101,7 +1162,7 @@ func TestDiff(t *testing.T) {
 			`
 			DROP PROPERTY GRAPH G1;
 			ALTER TABLE Transfer DROP COLUMN account_id;
-			ALTER TABLE Transfer ADD COLUMN account_id STRING(MAX) NOT NULL;
+			ALTER TABLE Transfer ADD COLUMN account_id STRING(MAX);
 			CREATE PROPERTY GRAPH G1
 			  NODE TABLES (Person, Account)
 			  EDGE TABLES (
@@ -2128,6 +2189,147 @@ func TestDiff(t *testing.T) {
 
 			if (err != nil) != tt.wantError {
 				t.Fatalf("want error %v, got %v", tt.wantError, err)
+			}
+			equalDDLs(t, tt.wantDDLs, buf.String())
+		})
+	}
+}
+
+func TestDiffZeroDefaultForNotNullColumns(t *testing.T) {
+	for name, tt := range map[string]struct {
+		base      string
+		target    string
+		wantDDLs  string
+		wantError bool
+	}{
+		"add not null columns": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_BL1 BOOL NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			  T1_F1 FLOAT32 NOT NULL,
+			  T1_F2 FLOAT64 NOT NULL,
+			  T1_N1 NUMERIC NOT NULL,
+			  T1_S1 STRING(MAX) NOT NULL,
+			  T1_S2 STRING(10) NOT NULL,
+			  T1_BY1 BYTES(MAX) NOT NULL,
+			  T1_D1 DATE NOT NULL,
+			  T1_T1 TIMESTAMP NOT NULL,
+			  T1_J1 JSON NOT NULL,
+			  T1_AF1 ARRAY<FLOAT64> NOT NULL,
+			  T1_U1 UUID NOT NULL,
+			  T1_AU1 ARRAY<UUID> NOT NULL,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 ADD COLUMN T1_AF1 ARRAY<FLOAT64> NOT NULL DEFAULT (ARRAY[]);
+			ALTER TABLE T1 ALTER COLUMN T1_AF1 DROP DEFAULT;
+			ALTER TABLE T1 ADD COLUMN T1_AU1 ARRAY<UUID> NOT NULL DEFAULT (ARRAY[]);
+			ALTER TABLE T1 ALTER COLUMN T1_AU1 DROP DEFAULT;
+			ALTER TABLE T1 ADD COLUMN T1_BL1 BOOL NOT NULL DEFAULT (FALSE);
+			ALTER TABLE T1 ALTER COLUMN T1_BL1 DROP DEFAULT;
+			ALTER TABLE T1 ADD COLUMN T1_BY1 BYTES(MAX) NOT NULL DEFAULT (b'');
+			ALTER TABLE T1 ALTER COLUMN T1_BY1 DROP DEFAULT;
+			ALTER TABLE T1 ADD COLUMN T1_D1 DATE NOT NULL DEFAULT (DATE '0001-01-01');
+			ALTER TABLE T1 ALTER COLUMN T1_D1 DROP DEFAULT;
+			ALTER TABLE T1 ADD COLUMN T1_F1 FLOAT32 NOT NULL DEFAULT (0);
+			ALTER TABLE T1 ALTER COLUMN T1_F1 DROP DEFAULT;
+			ALTER TABLE T1 ADD COLUMN T1_F2 FLOAT64 NOT NULL DEFAULT (0);
+			ALTER TABLE T1 ALTER COLUMN T1_F2 DROP DEFAULT;
+			ALTER TABLE T1 ADD COLUMN T1_I2 INT64 NOT NULL DEFAULT (0);
+			ALTER TABLE T1 ALTER COLUMN T1_I2 DROP DEFAULT;
+			ALTER TABLE T1 ADD COLUMN T1_J1 JSON NOT NULL DEFAULT (JSON '{}');
+			ALTER TABLE T1 ALTER COLUMN T1_J1 DROP DEFAULT;
+			ALTER TABLE T1 ADD COLUMN T1_N1 NUMERIC NOT NULL DEFAULT (NUMERIC '0');
+			ALTER TABLE T1 ALTER COLUMN T1_N1 DROP DEFAULT;
+			ALTER TABLE T1 ADD COLUMN T1_S1 STRING(MAX) NOT NULL DEFAULT ('');
+			ALTER TABLE T1 ALTER COLUMN T1_S1 DROP DEFAULT;
+			ALTER TABLE T1 ADD COLUMN T1_S2 STRING(10) NOT NULL DEFAULT ('');
+			ALTER TABLE T1 ALTER COLUMN T1_S2 DROP DEFAULT;
+			ALTER TABLE T1 ADD COLUMN T1_T1 TIMESTAMP NOT NULL DEFAULT (TIMESTAMP '0001-01-01T00:00:00Z');
+			ALTER TABLE T1 ALTER COLUMN T1_T1 DROP DEFAULT;
+			ALTER TABLE T1 ADD COLUMN T1_U1 UUID NOT NULL DEFAULT (CAST('00000000-0000-0000-0000-000000000000' AS UUID));
+			ALTER TABLE T1 ALTER COLUMN T1_U1 DROP DEFAULT;`,
+			false,
+		},
+		"add not null commit timestamp column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp = true),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 ADD COLUMN T1_T1 TIMESTAMP NOT NULL DEFAULT (TIMESTAMP '0001-01-01T00:00:00Z');
+			ALTER TABLE T1 ALTER COLUMN T1_T1 DROP DEFAULT;
+			ALTER TABLE T1 ALTER COLUMN T1_T1 SET OPTIONS (allow_commit_timestamp = true);`,
+			false,
+		},
+		"add not null column with default": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX) NOT NULL DEFAULT ('a'),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 ADD COLUMN T1_S1 STRING(MAX) NOT NULL DEFAULT ('a');`,
+			false,
+		},
+		"add not null proto column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_P1 examples.shipping.Order NOT NULL,
+			) PRIMARY KEY(T1_I1)`,
+			``,
+			true,
+		},
+		"recreate column to not null column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 DROP COLUMN T1_S1;
+			ALTER TABLE T1 ADD COLUMN T1_S1 INT64 NOT NULL DEFAULT (0);
+			ALTER TABLE T1 ALTER COLUMN T1_S1 DROP DEFAULT;`,
+			false,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var buf bytes.Buffer
+			err := Diff(strings.NewReader(tt.base), strings.NewReader(tt.target), &buf, DiffOption{
+				ErrorOnUnsupportedDDL:        true,
+				ZeroDefaultForNotNullColumns: true,
+			})
+			if tt.wantError {
+				if err == nil {
+					t.Fatalf("want error, got nil")
+				}
+				return
+			} else if err != nil {
+				t.Fatalf("want no error, got %v", err)
 			}
 			equalDDLs(t, tt.wantDDLs, buf.String())
 		})
