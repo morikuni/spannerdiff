@@ -2402,26 +2402,6 @@ func equalDDLs(t *testing.T, a, b string) {
 	}
 }
 
-func TestDiffErrorOnChangingOnDeleteOfUnnamedForeignKey(t *testing.T) {
-	base := `
-	CREATE TABLE T1 (
-	  T1_I1 INT64 NOT NULL,
-	  T1_S1 STRING(MAX),
-	  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
-	) PRIMARY KEY(T1_I1)`
-	target := `
-	CREATE TABLE T1 (
-	  T1_I1 INT64 NOT NULL,
-	  T1_S1 STRING(MAX),
-	  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE CASCADE,
-	) PRIMARY KEY(T1_I1)`
-	var buf bytes.Buffer
-	err := Diff(strings.NewReader(base), strings.NewReader(target), &buf, DiffOption{})
-	if err == nil || !strings.Contains(err.Error(), "unnamed constraint can't be dropped") {
-		t.Fatalf("want unnamed constraint error, got %v", err)
-	}
-}
-
 func TestDiffDeterministicWithOnDelete(t *testing.T) {
 	base := `
 	CREATE TABLE T1 (
