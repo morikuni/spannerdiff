@@ -178,6 +178,220 @@ func TestDiff(t *testing.T) {
 			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2(T2_S1);`,
 			false,
 		},
+		"match foreign key without on delete with on delete no action": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE NO ACTION,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE NO ACTION;`,
+			false,
+		},
+		"match unnamed foreign key with on delete no action with one without on delete": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE NO ACTION,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			``,
+			true,
+		},
+		"recreate foreign key by changing on delete from omitted to cascade": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE CASCADE,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2(T2_S1) ON DELETE CASCADE;`,
+			false,
+		},
+		"recreate foreign key by changing on delete from no action to cascade": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE NO ACTION,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE CASCADE,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2(T2_S1) ON DELETE CASCADE;`,
+			false,
+		},
+		"recreate foreign key by changing on delete from cascade to omitted": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE CASCADE,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2(T2_S1);`,
+			false,
+		},
+		"match named foreign key without on delete with unnamed one with on delete no action": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE NO ACTION,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE NO ACTION;`,
+			false,
+		},
+		"error on changing on delete of unnamed foreign key from omitted to cascade": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE CASCADE,
+			) PRIMARY KEY(T1_I1)`,
+			``,
+			true,
+		},
+		"match unnamed foreign key without on delete with one with on delete no action": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE NO ACTION,
+			) PRIMARY KEY(T1_I1)`,
+			``,
+			true,
+		},
+		"match named foreign key with on delete no action with unnamed one without on delete": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE NO ACTION,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1);`,
+			false,
+		},
+		"match foreign key with on delete no action with one without on delete": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE NO ACTION,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1);`,
+			false,
+		},
+		"match foreign keys on same columns by on delete action": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			  CONSTRAINT FK2 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE CASCADE,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE CASCADE,
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE NO ACTION,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE NO ACTION;`,
+			false,
+		},
+		"match not enforced foreign key without on delete with on delete no action": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  T1_S2 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) NOT ENFORCED,
+			  FOREIGN KEY (T1_S2) REFERENCES T2 (T2_S1) NOT ENFORCED,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  T1_S2 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE NO ACTION NOT ENFORCED,
+			  FOREIGN KEY (T1_S2) REFERENCES T2 (T2_S1) ON DELETE NO ACTION NOT ENFORCED,
+			) PRIMARY KEY(T1_I1)`,
+			``,
+			true,
+		},
 		"create referenced table first": {
 			``,
 			`
@@ -497,6 +711,47 @@ func TestDiff(t *testing.T) {
 			) PRIMARY KEY(P1_I1, C1_I1), INTERLEAVE IN P1;`,
 			`
 			ALTER TABLE C1 SET INTERLEAVE IN P1;`,
+			false,
+		},
+		"alter interleave in to interleave in parent": {
+			`
+			CREATE TABLE P1 (
+			  P1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1);
+			CREATE TABLE C1 (
+			  P1_I1 INT64 NOT NULL,
+			  C1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1, C1_I1), INTERLEAVE IN P1;`,
+			`
+			CREATE TABLE P1 (
+			  P1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1);
+			CREATE TABLE C1 (
+			  P1_I1 INT64 NOT NULL,
+			  C1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1, C1_I1), INTERLEAVE IN PARENT P1;`,
+			`
+			ALTER TABLE C1 SET INTERLEAVE IN PARENT P1;`,
+			false,
+		},
+		"match interleaved table without on delete with on delete no action": {
+			`
+			CREATE TABLE P1 (
+			  P1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1);
+			CREATE TABLE C1 (
+			  P1_I1 INT64 NOT NULL,
+			  C1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1, C1_I1), INTERLEAVE IN PARENT P1;`,
+			`
+			CREATE TABLE P1 (
+			  P1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1);
+			CREATE TABLE C1 (
+			  P1_I1 INT64 NOT NULL,
+			  C1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1, C1_I1), INTERLEAVE IN PARENT P1 ON DELETE NO ACTION;`,
+			``,
 			false,
 		},
 		"recreate table on interleave parent change": {
@@ -2154,6 +2409,65 @@ func equalDDLs(t *testing.T, a, b string) {
 	}
 	if diff := cmp.Diff(linesA, linesB); diff != "" {
 		t.Errorf("diff (+got -want):\n%s", diff)
+	}
+}
+
+func TestDiffErrorOnChangingOnDeleteOfUnnamedForeignKey(t *testing.T) {
+	base := `
+	CREATE TABLE T1 (
+	  T1_I1 INT64 NOT NULL,
+	  T1_S1 STRING(MAX),
+	  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+	) PRIMARY KEY(T1_I1)`
+	target := `
+	CREATE TABLE T1 (
+	  T1_I1 INT64 NOT NULL,
+	  T1_S1 STRING(MAX),
+	  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE CASCADE,
+	) PRIMARY KEY(T1_I1)`
+	var buf bytes.Buffer
+	err := Diff(strings.NewReader(base), strings.NewReader(target), &buf, DiffOption{})
+	if err == nil || !strings.Contains(err.Error(), "unnamed constraint can't be dropped") {
+		t.Fatalf("want unnamed constraint error, got %v", err)
+	}
+}
+
+func TestDiffDeterministicWithOnDelete(t *testing.T) {
+	base := `
+	CREATE TABLE T1 (
+	  T1_I1 INT64 NOT NULL,
+	  T1_S1 STRING(MAX),
+	  T1_S2 STRING(MAX),
+	  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+	  CONSTRAINT FK2 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE CASCADE,
+	  FOREIGN KEY (T1_S2) REFERENCES T2 (T2_S1),
+	  FOREIGN KEY (T1_S2) REFERENCES T2 (T2_S1) ON DELETE CASCADE,
+	) PRIMARY KEY(T1_I1)`
+	target := `
+	CREATE TABLE T1 (
+	  T1_I1 INT64 NOT NULL,
+	  T1_S1 STRING(MAX),
+	  T1_S2 STRING(MAX),
+	  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE NO ACTION,
+	  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE CASCADE,
+	  FOREIGN KEY (T1_S2) REFERENCES T2 (T2_S1) ON DELETE NO ACTION,
+	  FOREIGN KEY (T1_S2) REFERENCES T2 (T2_S1) ON DELETE CASCADE,
+	  CONSTRAINT FK3 FOREIGN KEY (T1_S2) REFERENCES T2 (T2_S1) ON DELETE NO ACTION NOT ENFORCED,
+	) PRIMARY KEY(T1_I1)`
+
+	var first string
+	for i := range 50 {
+		var buf bytes.Buffer
+		if err := Diff(strings.NewReader(base), strings.NewReader(target), &buf, DiffOption{}); err == nil {
+			t.Fatal("want error, got nil")
+		}
+		if i == 0 {
+			first = buf.String()
+			continue
+		}
+		if diff := cmp.Diff(first, buf.String()); diff != "" {
+			t.Fatalf("output changed between runs:\n%s", diff)
+		}
 	}
 }
 
