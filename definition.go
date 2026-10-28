@@ -864,9 +864,13 @@ func (c *constraint) onDependencyChange(me, dependency migrationState, m *migrat
 				// A named foreign key defined by ALTER TABLE that references another table is dropped before DROP TABLE,
 				// because foreign keys defined by ALTER TABLE may reference each other. An unnamed one can't be dropped,
 				// so it orders DROP TABLE instead (see table.dropDependsOn).
-				base, dropBase := constraintByAlterTable(me.base)
-				dropBase = dropBase && base.node.Name != nil && base.referencesOtherTable()
-				_, addTarget := constraintByAlterTable(me.target)
+				var dropBase, addTarget bool
+				if b, ok := me.base.get(); ok {
+					dropBase = b.(*constraint).droppedBeforeTable()
+				}
+				if t, ok := me.target.get(); ok {
+					addTarget = t.(*constraint).addedByAlterTable()
+				}
 				switch {
 				case dropBase && addTarget:
 					m.updateState(me.updateKind(migrationKindDropAndAdd))
@@ -892,20 +896,10 @@ func (c *constraint) onDependencyChange(me, dependency migrationState, m *migrat
 	}
 }
 
-// referencesOtherTable reports whether the constraint is a foreign key that references another table.
-func (c *constraint) referencesOtherTable() bool {
+// droppedBeforeTable reports whether the constraint is dropped by DROP CONSTRAINT before its table is dropped.
+func (c *constraint) droppedBeforeTable() bool {
 	fk, ok := c.node.Constraint.(*ast.ForeignKey)
-	return ok && newTableIDFromPath(fk.ReferenceTable) != c.table.tableID()
-}
-
-// constraintByAlterTable returns the constraint and true if the constraint is defined by ALTER TABLE.
-func constraintByAlterTable(def optional[definition]) (*constraint, bool) {
-	d, ok := def.get()
-	if !ok {
-		return nil, false
-	}
-	c := d.(*constraint)
-	return c, c.addedByAlterTable()
+	return ok && c.addedByAlterTable() && c.node.Name != nil && newTableIDFromPath(fk.ReferenceTable) != c.table.tableID()
 }
 
 // rowDeletionPolicyOwner is a table or a queue, which can have a row deletion policy.
