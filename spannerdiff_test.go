@@ -303,6 +303,711 @@ func TestDiff(t *testing.T) {
 			ALTER TABLE T1 ADD CHECK (T1_I1 > 0);`,
 			false,
 		},
+		"match unnamed foreign key added by alter table with inline foreign key": {
+			`
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_S1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T2 ADD FOREIGN KEY(T2_S1) REFERENCES T1(T1_S1) ON DELETE NO ACTION;`,
+			`
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_S1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX) NOT NULL,
+			  FOREIGN KEY (T2_S1) REFERENCES T1 (T1_S1) ON DELETE NO ACTION,
+			) PRIMARY KEY(T2_I1);`,
+			``,
+			true,
+		},
+		"match unnamed check constraint added by alter table with inline check constraint": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);
+			ALTER TABLE T1 ADD CHECK (T1_I1 > 0);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  CHECK (T1_I1 > 0),
+			) PRIMARY KEY(T1_I1);`,
+			``,
+			true,
+		},
+		"match constraint added by alter table before create table": {
+			`
+			ALTER TABLE T1 ADD CHECK (T1_I1 > 0);
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  CHECK (T1_I1 > 0),
+			) PRIMARY KEY(T1_I1);`,
+			``,
+			true,
+		},
+		"drop named foreign key added by alter table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			) PRIMARY KEY(T1_I1);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			) PRIMARY KEY(T1_I1);`,
+			``,
+			true,
+		},
+		"add foreign key by alter table in target": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			) PRIMARY KEY(T1_I1);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1);`,
+			``,
+			true,
+		},
+		"error on adding constraint to unknown table by alter table": {
+			``,
+			`
+			ALTER TABLE T1 ADD CHECK (T1_I1 > 0);`,
+			``,
+			true,
+		},
+		"match constraint added by alter table on table in named schema": {
+			`
+			CREATE SCHEMA S1;
+			CREATE TABLE S1.T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);
+			ALTER TABLE S1.T1 ADD CHECK (T1_I1 > 0);`,
+			`
+			CREATE SCHEMA S1;
+			CREATE TABLE S1.T1 (
+			  T1_I1 INT64 NOT NULL,
+			  CHECK (T1_I1 > 0),
+			) PRIMARY KEY(T1_I1);`,
+			``,
+			true,
+		},
+		"add constraints by alter table with new table": {
+			`
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_S1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_S1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T2 ADD CONSTRAINT FK1 FOREIGN KEY (T2_S1) REFERENCES T1 (T1_S1);
+			ALTER TABLE T2 ADD CHECK (T2_I1 > 0);`,
+			``,
+			true,
+		},
+		"add constraint by alter table again with recreated table": {
+			`
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_S1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T2 ADD CONSTRAINT FK1 FOREIGN KEY (T2_S1) REFERENCES T1 (T1_S1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_S1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T2_I1, T2_S1);
+			ALTER TABLE T2 ADD CONSTRAINT FK1 FOREIGN KEY (T2_S1) REFERENCES T1 (T1_S1);`,
+			``,
+			true,
+		},
+		"add constraint by alter table with new table referencing recreated table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_I1, T1_S1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T2 ADD CONSTRAINT FK1 FOREIGN KEY (T2_S1) REFERENCES T1 (T1_S1);`,
+			``,
+			true,
+		},
+		"add foreign key by alter table again with recreated tables": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T2 ADD CONSTRAINT FK1 FOREIGN KEY (T2_I1) REFERENCES T1 (T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T2 ADD CONSTRAINT FK1 FOREIGN KEY (T2_I1) REFERENCES T1 (T1_I1);`,
+			``,
+			true,
+		},
+		"add circular foreign keys by alter table with new tables": {
+			``,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);
+			ALTER TABLE T2 ADD CONSTRAINT FK2 FOREIGN KEY (T2_I2) REFERENCES T1 (T1_I1);`,
+			``,
+			true,
+		},
+		"add constraint by alter table again with recreated interleaved table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T1_I1 INT64 NOT NULL,
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1, T2_I1),
+			  INTERLEAVE IN PARENT T1 ON DELETE CASCADE;
+			ALTER TABLE T2 ADD CHECK (T2_I1 > 0);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T1_I1 STRING(MAX) NOT NULL,
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1, T2_I1),
+			  INTERLEAVE IN PARENT T1 ON DELETE CASCADE;
+			ALTER TABLE T2 ADD CHECK (T2_I1 > 0);`,
+			``,
+			true,
+		},
+		"drop named foreign key by alter table before dropping tables": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			``,
+			``,
+			true,
+		},
+		"drop table with unnamed foreign key by alter table before referenced table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			``,
+			``,
+			true,
+		},
+		"recreate tables with unnamed foreign key by alter table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 STRING(MAX) NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1, T2_I2);
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			``,
+			true,
+		},
+		"drop table with unnamed foreign key by alter table before referenced table in schema": {
+			`
+			CREATE SCHEMA S1;
+			CREATE TABLE S1.T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE S1.T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			`
+			CREATE TABLE T2 (
+			  T2_I1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T2_I1);`,
+			``,
+			true,
+		},
+		"drop circular named foreign keys by alter table before dropping tables": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);
+			ALTER TABLE T2 ADD CONSTRAINT FK2 FOREIGN KEY (T2_I2) REFERENCES T1 (T1_I1);`,
+			``,
+			``,
+			true,
+		},
+		"error on dropping tables with circular unnamed foreign keys by alter table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);
+			ALTER TABLE T2 ADD FOREIGN KEY (T2_I2) REFERENCES T1 (T1_I1);`,
+			``,
+			``,
+			true,
+		},
+		"recreate table with named foreign key by alter table into inline foreign key": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 STRING(MAX) NOT NULL,
+			  T1_I2 INT64,
+			  CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1),
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);`,
+			``,
+			true,
+		},
+		"add foreign key by alter table referencing recreated table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1, T2_I2);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			``,
+			true,
+		},
+		"add check constraint by alter table on recreated column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 STRING(MAX),
+			) PRIMARY KEY(T1_I1);
+			ALTER TABLE T1 ADD CONSTRAINT C1 CHECK (T1_I2 != '');`,
+			``,
+			true,
+		},
+		"drop table with unnamed foreign key by alter table before referenced column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I2);`,
+			`
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);`,
+			``,
+			true,
+		},
+		"drop table with unnamed foreign key by alter table before recreating referenced column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I2);`,
+			`
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 STRING(MAX),
+			) PRIMARY KEY(T2_I1);`,
+			``,
+			true,
+		},
+		"drop table with named check constraint by alter table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);
+			ALTER TABLE T1 ADD CONSTRAINT C1 CHECK (T1_I1 > 0);`,
+			``,
+			``,
+			true,
+		},
+		"drop table with named self-referencing foreign key by alter table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T1 (T1_I1);`,
+			``,
+			``,
+			true,
+		},
+		"recreate table with named foreign key by alter table into unnamed inline foreign key": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD CONSTRAINT FK_T1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 STRING(MAX) NOT NULL,
+			  T1_I2 INT64,
+			  FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1),
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);`,
+			``,
+			true,
+		},
+		"recreate table with named inline foreign key into unnamed foreign key by alter table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			  CONSTRAINT FK_T1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1),
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 STRING(MAX) NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			``,
+			true,
+		},
+		"match named foreign key by alter table with unnamed foreign key by alter table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD CONSTRAINT FK_T1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			``,
+			true,
+		},
+		"match named foreign key added by alter table with unnamed inline foreign key": {
+			`
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_S1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T2 ADD CONSTRAINT FK_T2 FOREIGN KEY(T2_S1) REFERENCES T1(T1_S1) ON DELETE NO ACTION;`,
+			`
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_S1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX) NOT NULL,
+			  FOREIGN KEY (T2_S1) REFERENCES T1 (T1_S1) ON DELETE NO ACTION,
+			) PRIMARY KEY(T2_I1);`,
+			``,
+			true,
+		},
+		"drop named foreign key by alter table with the same definition as unnamed foreign key by alter table": {
+			`
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_S1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T2 ADD FOREIGN KEY(T2_S1) REFERENCES T1(T1_S1) ON DELETE NO ACTION;
+			ALTER TABLE T2 ADD CONSTRAINT FK_T2 FOREIGN KEY(T2_S1) REFERENCES T1(T1_S1) ON DELETE NO ACTION;`,
+			`
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_S1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX) NOT NULL,
+			  FOREIGN KEY (T2_S1) REFERENCES T1 (T1_S1) ON DELETE NO ACTION,
+			) PRIMARY KEY(T2_I1);`,
+			``,
+			true,
+		},
+		"error on naming unnamed foreign key added by alter table": {
+			`
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_S1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T2 ADD FOREIGN KEY(T2_S1) REFERENCES T1(T1_S1) ON DELETE NO ACTION;`,
+			`
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_S1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX) NOT NULL,
+			  CONSTRAINT FK_T2 FOREIGN KEY (T2_S1) REFERENCES T1 (T1_S1) ON DELETE NO ACTION,
+			) PRIMARY KEY(T2_I1);`,
+			``,
+			true,
+		},
+		"drop tables with named and unnamed foreign keys by alter table referencing each other": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);
+			ALTER TABLE T2 ADD FOREIGN KEY (T2_I2) REFERENCES T1 (T1_I1);`,
+			``,
+			``,
+			true,
+		},
+		"error on dropping tables with unnamed foreign key by alter table and inline foreign key referencing each other": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			  CONSTRAINT FK2 FOREIGN KEY (T2_I2) REFERENCES T1 (T1_I1),
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			``,
+			``,
+			true,
+		},
+		"add unnamed foreign key by alter table again with recreated interleaved table and referenced table": {
+			`
+			CREATE TABLE P1 (
+			  P1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1);
+			CREATE TABLE C1 (
+			  P1_I1 INT64 NOT NULL,
+			  C1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1, C1_I1),
+			  INTERLEAVE IN PARENT P1;
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE C1 ADD FOREIGN KEY (C1_I1) REFERENCES T2 (T2_I1);`,
+			`
+			CREATE TABLE P1 (
+			  P1_I1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(P1_I1);
+			CREATE TABLE C1 (
+			  P1_I1 STRING(MAX) NOT NULL,
+			  C1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1, C1_I1),
+			  INTERLEAVE IN PARENT P1;
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1, T2_I2);
+			ALTER TABLE C1 ADD FOREIGN KEY (C1_I1) REFERENCES T2 (T2_I1);`,
+			``,
+			true,
+		},
+		"recreate named foreign key by alter table with recreated referenced table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1, T2_I2);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			``,
+			true,
+		},
+		"error on recreating referenced table of unnamed foreign key by alter table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1, T2_I2);
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			``,
+			true,
+		},
+		"error on adding constraint to unknown table by alter table in base": {
+			`
+			ALTER TABLE T1 ADD CHECK (T1_I1 > 0);`,
+			``,
+			``,
+			true,
+		},
+		"match constraint added by alter table with table name in different case and backquotes": {
+			"CREATE TABLE T1 (T1_I1 INT64 NOT NULL) PRIMARY KEY(T1_I1);\n" +
+				"ALTER TABLE t1 ADD CHECK (T1_I1 > 0);\n" +
+				"ALTER TABLE `T1` ADD CHECK (T1_I1 < 10);",
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  CHECK (T1_I1 > 0),
+			  CHECK (T1_I1 < 10),
+			) PRIMARY KEY(T1_I1);`,
+			``,
+			true,
+		},
 		"error on dropping unnamed constraint": {
 			`
 			CREATE TABLE T1 (
@@ -2263,10 +2968,114 @@ func TestDiffDeterministic(t *testing.T) {
 	}
 }
 
+func TestDiffIndependentOfAlterTableOrder(t *testing.T) {
+	tables := `
+	CREATE TABLE T1 (
+	  T1_I1 INT64 NOT NULL,
+	) PRIMARY KEY(T1_I1);
+	CREATE TABLE T2 (
+	  T2_I1 INT64 NOT NULL,
+	) PRIMARY KEY(T2_I1);
+	CREATE TABLE T3 (
+	  T3_I1 INT64 NOT NULL,
+	) PRIMARY KEY(T3_I1);`
+	fk2 := `ALTER TABLE T1 ADD FOREIGN KEY (T1_I1) REFERENCES T2 (T2_I1);`
+	fk3 := `ALTER TABLE T1 ADD FOREIGN KEY (T1_I1) REFERENCES T3 (T3_I1);`
+
+	var outputs []string
+	for _, base := range []string{tables + fk2 + fk3, tables + fk3 + fk2} {
+		var buf bytes.Buffer
+		if err := Diff(strings.NewReader(base), strings.NewReader(""), &buf, DiffOption{}); err != nil {
+			t.Fatal(err)
+		}
+		outputs = append(outputs, buf.String())
+	}
+	if diff := cmp.Diff(outputs[0], outputs[1]); diff != "" {
+		t.Fatalf("output changed by the order of ALTER TABLE:\n%s", diff)
+	}
+}
+
+func TestDiffDeterministicWithAlterTable(t *testing.T) {
+	base := `
+	CREATE TABLE T1 (
+	  T1_I1 INT64 NOT NULL,
+	  T1_I2 INT64,
+	  T1_I3 INT64,
+	) PRIMARY KEY(T1_I1);
+	CREATE TABLE T2 (
+	  T2_I1 INT64 NOT NULL,
+	  T2_I2 INT64,
+	) PRIMARY KEY(T2_I1);
+	CREATE TABLE T3 (
+	  T3_I1 INT64 NOT NULL,
+	  T3_I2 INT64,
+	) PRIMARY KEY(T3_I1);
+	ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);
+	ALTER TABLE T1 ADD FOREIGN KEY (T1_I3) REFERENCES T3 (T3_I1);
+	ALTER TABLE T2 ADD CONSTRAINT FK2 FOREIGN KEY (T2_I2) REFERENCES T3 (T3_I1);
+	ALTER TABLE T3 ADD CONSTRAINT C1 CHECK (T3_I2 > 0);`
+	target := `
+	CREATE TABLE T1 (
+	  T1_I1 STRING(MAX) NOT NULL,
+	  T1_I2 INT64,
+	  T1_I3 INT64,
+	) PRIMARY KEY(T1_I1);
+	CREATE TABLE T2 (
+	  T2_I1 INT64 NOT NULL,
+	  T2_I2 INT64,
+	  T2_I3 INT64 NOT NULL,
+	) PRIMARY KEY(T2_I1, T2_I3);
+	CREATE TABLE T3 (
+	  T3_I1 INT64 NOT NULL,
+	  T3_I2 INT64,
+	) PRIMARY KEY(T3_I1);
+	CREATE TABLE T4 (
+	  T4_I1 INT64 NOT NULL,
+	  T4_S1 STRING(MAX),
+	) PRIMARY KEY(T4_I1);
+	ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);
+	ALTER TABLE T1 ADD FOREIGN KEY (T1_I3) REFERENCES T3 (T3_I1);
+	ALTER TABLE T2 ADD CONSTRAINT FK2 FOREIGN KEY (T2_I2) REFERENCES T3 (T3_I1);
+	ALTER TABLE T3 ADD CONSTRAINT C2 CHECK (T3_I2 > 0);
+	ALTER TABLE T4 ADD FOREIGN KEY (T4_S1) REFERENCES T1 (T1_I1);`
+
+	var first string
+	for i := range 50 {
+		var buf bytes.Buffer
+		if err := Diff(strings.NewReader(base), strings.NewReader(target), &buf, DiffOption{}); err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 {
+			first = buf.String()
+			continue
+		}
+		if diff := cmp.Diff(first, buf.String()); diff != "" {
+			t.Fatalf("output changed between runs:\n%s", diff)
+		}
+	}
+}
+
+func TestDiffErrorOnUnsupportedAlterTable(t *testing.T) {
+	var buf bytes.Buffer
+	err := Diff(strings.NewReader(``), strings.NewReader(`ALTER TABLE S1.S2.T1 ADD CHECK (T1_I1 > 0)`), &buf, DiffOption{
+		ErrorOnUnsupportedDDL: true,
+	})
+	if err == nil || !strings.Contains(err.Error(), "unsupported DDL: ALTER TABLE S1.S2.T1 ADD CHECK (T1_I1 > 0)") {
+		t.Fatalf("want unsupported DDL error, got %v", err)
+	}
+}
+
 func TestDiffOnUnsupportedDDL(t *testing.T) {
 	var ignored []string
 	var buf bytes.Buffer
-	err := Diff(strings.NewReader(``), strings.NewReader(`ALTER INDEX IDX1 ADD STORED COLUMN T1_I1`), &buf, DiffOption{
+	target := `
+	CREATE TABLE T1 (
+	  T1_I1 INT64 NOT NULL,
+	) PRIMARY KEY(T1_I1);
+	ALTER TABLE T1 ADD CHECK (T1_I1 > 0);
+	ALTER TABLE S1.S2.T1 ADD CHECK (T1_I1 > 0);
+	ALTER INDEX IDX1 ADD STORED COLUMN T1_I1`
+	err := Diff(strings.NewReader(``), strings.NewReader(target), &buf, DiffOption{
 		OnUnsupportedDDL: func(sql string) {
 			ignored = append(ignored, sql)
 		},
@@ -2274,7 +3083,12 @@ func TestDiffOnUnsupportedDDL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if diff := cmp.Diff([]string{"ALTER INDEX IDX1 ADD STORED COLUMN T1_I1"}, ignored); diff != "" {
+	want := []string{
+		"ALTER TABLE T1 ADD CHECK (T1_I1 > 0)",
+		"ALTER TABLE S1.S2.T1 ADD CHECK (T1_I1 > 0)",
+		"ALTER INDEX IDX1 ADD STORED COLUMN T1_I1",
+	}
+	if diff := cmp.Diff(want, ignored); diff != "" {
 		t.Errorf("diff (+got -want):\n%s", diff)
 	}
 }
