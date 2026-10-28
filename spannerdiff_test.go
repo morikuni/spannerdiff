@@ -144,6 +144,29 @@ func TestDiff(t *testing.T) {
 			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2(T2_S1);`,
 			false,
 		},
+		"add foreign key referencing recreated table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			  CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1),
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1, T2_I2);`,
+			``,
+			true,
+		},
 		"drop foreign key": {
 			`
 			CREATE TABLE T1 (
@@ -317,6 +340,21 @@ func TestDiff(t *testing.T) {
 			ALTER TABLE T1 ADD CONSTRAINT CHK1 CHECK (T1_I1 > 0);`,
 			false,
 		},
+		"add check constraint on recreated column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 STRING(MAX),
+			  CONSTRAINT C1 CHECK (T1_I2 != ''),
+			) PRIMARY KEY(T1_I1);`,
+			``,
+			true,
+		},
 		"drop check constraint": {
 			`
 			CREATE TABLE T1 (
@@ -361,6 +399,20 @@ func TestDiff(t *testing.T) {
 			`
 			ALTER TABLE T1 ADD ROW DELETION POLICY (OLDER_THAN(T1_TS1, INTERVAL 1 DAY));`,
 			false,
+		},
+		"add row deletion policy on recreated column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_TS1 STRING(MAX),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_TS1 TIMESTAMP,
+			) PRIMARY KEY(T1_I1), ROW DELETION POLICY (OLDER_THAN(T1_TS1, INTERVAL 1 DAY));`,
+			``,
+			true,
 		},
 		"drop row deletion policy": {
 			`
@@ -840,6 +892,21 @@ func TestDiff(t *testing.T) {
 			CREATE INDEX IDX1 ON T1(T1_S1);`,
 			false,
 		},
+		"add index on recreated column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 STRING(MAX),
+			) PRIMARY KEY(T1_I1);
+			CREATE INDEX IDX1 ON T1(T1_I2);`,
+			``,
+			true,
+		},
 		"drop index": {
 			`
 			CREATE INDEX IDX1 ON T1(T1_S1)`,
@@ -902,6 +969,23 @@ func TestDiff(t *testing.T) {
 			`
 			CREATE SEARCH INDEX IDX1 ON T1(T1_S1);`,
 			false,
+		},
+		"add search index on recreated table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			  T1_T1 TOKENLIST,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			  T1_T1 TOKENLIST,
+			) PRIMARY KEY(T1_I1, T1_I2);
+			CREATE SEARCH INDEX IDX1 ON T1(T1_T1);`,
+			``,
+			true,
 		},
 		"drop search index": {
 			`
@@ -984,6 +1068,23 @@ func TestDiff(t *testing.T) {
 			CREATE VECTOR INDEX IDX1 ON T1(T1_AF1) OPTIONS (distance_type = 'COSINE');`,
 			false,
 		},
+		"add vector index on recreated table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			  T1_AF1 ARRAY<FLOAT64> NOT NULL,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			  T1_AF1 ARRAY<FLOAT64> NOT NULL,
+			) PRIMARY KEY(T1_I1, T1_I2);
+			CREATE VECTOR INDEX IDX1 ON T1(T1_AF1) OPTIONS (distance_type = 'COSINE');`,
+			``,
+			true,
+		},
 		"drop vector index": {
 			`
 			CREATE VECTOR INDEX IDX1 ON T1(T1_AF1) OPTIONS (distance_type = 'COSINE');`,
@@ -1041,6 +1142,21 @@ func TestDiff(t *testing.T) {
 			`
 			CREATE PROPERTY GRAPH G1 NODE TABLES (T1, T2);`,
 			false,
+		},
+		"add property graph on recreated table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1, T1_I2);
+			CREATE PROPERTY GRAPH G1 NODE TABLES (T1);`,
+			``,
+			true,
 		},
 		"drop property graph": {
 			`
@@ -1119,6 +1235,21 @@ func TestDiff(t *testing.T) {
 			CREATE VIEW V1 SQL SECURITY DEFINER AS SELECT * FROM T1;`,
 			false,
 		},
+		"create view referencing recreated table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1, T1_I2);
+			CREATE VIEW V1 SQL SECURITY INVOKER AS SELECT T1_I1 FROM T1;`,
+			``,
+			true,
+		},
 		"drop view": {
 			`
 			CREATE VIEW V1 SQL SECURITY DEFINER AS SELECT * FROM T1;`,
@@ -1182,6 +1313,28 @@ func TestDiff(t *testing.T) {
 			CREATE CHANGE STREAM S1 FOR ALL;`,
 			`
 			CREATE CHANGE STREAM S1 FOR ALL;`,
+			false,
+		},
+		"add change stream for recreated table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1, T1_I2);
+			CREATE CHANGE STREAM S1 FOR T1;`,
+			`
+			ALTER CHANGE STREAM S1 DROP FOR ALL;
+			DROP TABLE T1;
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1, T1_I2);
+			ALTER CHANGE STREAM S1 SET FOR T1;`,
 			false,
 		},
 		"drop change stream": {
@@ -1676,6 +1829,25 @@ func TestDiff(t *testing.T) {
 			) PRIMARY KEY(P1_I1), INTERLEAVE IN PARENT P1 ON DELETE CASCADE;`,
 			false,
 		},
+		"add queue interleaved in recreated table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1, T1_I2);
+			CREATE QUEUE Q1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(T1_I1, T1_I2), INTERLEAVE IN PARENT T1;`,
+			``,
+			true,
+		},
 		"drop interleaved queue": {
 			`
 			CREATE TABLE P1 (
@@ -1760,6 +1932,21 @@ func TestDiff(t *testing.T) {
 			`
 			GRANT SELECT, UPDATE ON TABLE T1 TO ROLE R1;`,
 			false,
+		},
+		"add table grant on recreated table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1, T1_I2);
+			GRANT SELECT ON TABLE T1 TO ROLE R1;`,
+			``,
+			true,
 		},
 		"drop table grant": {
 			`
@@ -2079,6 +2266,25 @@ func TestDiff(t *testing.T) {
 			  ChildID INT64 NOT NULL,
 			) PRIMARY KEY(ID, ChildID), INTERLEAVE IN PARENT Parent ON DELETE CASCADE;`,
 			false,
+		},
+		"add table interleaved in recreated table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1, T1_I2);
+			CREATE TABLE C1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			  C1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1, T1_I2, C1_I1), INTERLEAVE IN PARENT T1;`,
+			``,
+			true,
 		},
 		"recreate interleaved parent table": {
 			`
