@@ -166,9 +166,7 @@ func newDefinitions(ddls []ast.DDL, option DiffOption) (*definitions, error) {
 		}
 		tc := at.TableAlteration.(*ast.AddTableConstraint).TableConstraint
 		table.constraintsByAlterTable = append(table.constraintsByAlterTable, tc)
-		c := newConstraint(table, tc)
-		c.addedByAlterTable = true
-		add(c)
+		add(newConstraint(table, tc))
 	}
 
 	if duplicated != nil {
@@ -779,16 +777,19 @@ type constraint struct {
 	node  *ast.TableConstraint
 	table *table
 	cid   constraintID
-	// addedByAlterTable reports whether the constraint is defined by ALTER TABLE instead of CREATE TABLE.
-	addedByAlterTable bool
 }
 
 func newConstraint(table *table, tc *ast.TableConstraint) *constraint {
-	return &constraint{tc, table, newConstraintID(table.tableID(), tc), false}
+	return &constraint{tc, table, newConstraintID(table.tableID(), tc)}
 }
 
 func (c *constraint) id() identifier {
 	return c.cid
+}
+
+// addedByAlterTable reports whether the constraint is defined by ALTER TABLE instead of CREATE TABLE.
+func (c *constraint) addedByAlterTable() bool {
+	return slices.Contains(c.table.constraintsByAlterTable, c.node)
 }
 
 // astNode returns the constraint without its name because the name is a part of the identifier.
@@ -904,7 +905,7 @@ func constraintByAlterTable(def optional[definition]) (*constraint, bool) {
 		return nil, false
 	}
 	c := d.(*constraint)
-	return c, c.addedByAlterTable
+	return c, c.addedByAlterTable()
 }
 
 // rowDeletionPolicyOwner is a table or a queue, which can have a row deletion policy.
