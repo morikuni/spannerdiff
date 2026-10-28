@@ -164,8 +164,14 @@ func TestDiff(t *testing.T) {
 			  T2_I1 INT64 NOT NULL,
 			  T2_I2 INT64,
 			) PRIMARY KEY(T2_I1, T2_I2);`,
-			``,
-			true,
+			`
+			DROP TABLE T2;
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64
+			) PRIMARY KEY (T2_I1, T2_I2);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2(T2_I1);`,
+			false,
 		},
 		"drop foreign key": {
 			`
@@ -352,8 +358,11 @@ func TestDiff(t *testing.T) {
 			  T1_I2 STRING(MAX),
 			  CONSTRAINT C1 CHECK (T1_I2 != ''),
 			) PRIMARY KEY(T1_I1);`,
-			``,
-			true,
+			`
+			ALTER TABLE T1 DROP COLUMN T1_I2;
+			ALTER TABLE T1 ADD COLUMN T1_I2 STRING(MAX);
+			ALTER TABLE T1 ADD CONSTRAINT C1 CHECK (T1_I2 != "");`,
+			false,
 		},
 		"drop check constraint": {
 			`
@@ -411,8 +420,11 @@ func TestDiff(t *testing.T) {
 			  T1_I1 INT64 NOT NULL,
 			  T1_TS1 TIMESTAMP,
 			) PRIMARY KEY(T1_I1), ROW DELETION POLICY (OLDER_THAN(T1_TS1, INTERVAL 1 DAY));`,
-			``,
-			true,
+			`
+			ALTER TABLE T1 DROP COLUMN T1_TS1;
+			ALTER TABLE T1 ADD COLUMN T1_TS1 TIMESTAMP;
+			ALTER TABLE T1 ADD ROW DELETION POLICY (OLDER_THAN(T1_TS1, INTERVAL 1 DAY));`,
+			false,
 		},
 		"drop row deletion policy": {
 			`

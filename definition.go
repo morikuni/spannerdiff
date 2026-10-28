@@ -807,12 +807,13 @@ func (c *constraint) onDependencyChange(me, dependency migrationState, m *migrat
 				// CREATE TABLE and DROP TABLE also add and drop constraints.
 				m.updateState(me.updateKind(migrationKindNone))
 			}
-		case me.kind != migrationKindDrop && dependency.kind == migrationKindDropAndAdd:
+		case me.base.valid && me.kind != migrationKindDrop && dependency.kind == migrationKindDropAndAdd:
 			// The referenced table can't be dropped while a foreign key references it.
+			// A constraint not in base doesn't need to be dropped.
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
 		}
 	case *column:
-		if me.kind != migrationKindDrop && dependency.kind == migrationKindDropAndAdd {
+		if me.base.valid && me.kind != migrationKindDrop && dependency.kind == migrationKindDropAndAdd {
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
 		}
 	default:
@@ -891,7 +892,8 @@ func (r *rowDeletionPolicy) onDependencyChange(me, dependency migrationState, m 
 			m.updateState(me.updateKind(migrationKindNone))
 		}
 	case *column:
-		if me.kind != migrationKindDrop && dependency.kind == migrationKindDropAndAdd {
+		// A policy not in base doesn't need to be dropped.
+		if me.base.valid && me.kind != migrationKindDrop && dependency.kind == migrationKindDropAndAdd {
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
 		}
 	default:
