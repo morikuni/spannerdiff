@@ -2402,84 +2402,77 @@ func equalDDLs(t *testing.T, a, b string) {
 	}
 }
 
-func TestDiffDeterministicWithOnDelete(t *testing.T) {
-	base := `
-	CREATE TABLE T1 (
-	  T1_I1 INT64 NOT NULL,
-	  T1_S1 STRING(MAX),
-	  T1_S2 STRING(MAX),
-	  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
-	  CONSTRAINT FK2 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE CASCADE,
-	  FOREIGN KEY (T1_S2) REFERENCES T2 (T2_S1),
-	  FOREIGN KEY (T1_S2) REFERENCES T2 (T2_S1) ON DELETE CASCADE,
-	) PRIMARY KEY(T1_I1)`
-	target := `
-	CREATE TABLE T1 (
-	  T1_I1 INT64 NOT NULL,
-	  T1_S1 STRING(MAX),
-	  T1_S2 STRING(MAX),
-	  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE NO ACTION,
-	  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE CASCADE,
-	  FOREIGN KEY (T1_S2) REFERENCES T2 (T2_S1) ON DELETE NO ACTION,
-	  FOREIGN KEY (T1_S2) REFERENCES T2 (T2_S1) ON DELETE CASCADE,
-	  CONSTRAINT FK3 FOREIGN KEY (T1_S2) REFERENCES T2 (T2_S1) ON DELETE NO ACTION NOT ENFORCED,
-	) PRIMARY KEY(T1_I1)`
-
-	var first string
-	for i := range 50 {
-		var buf bytes.Buffer
-		if err := Diff(strings.NewReader(base), strings.NewReader(target), &buf, DiffOption{}); err != nil {
-			t.Fatal(err)
-		}
-		if i == 0 {
-			first = buf.String()
-			continue
-		}
-		if diff := cmp.Diff(first, buf.String()); diff != "" {
-			t.Fatalf("output changed between runs:\n%s", diff)
-		}
-	}
-}
-
 func TestDiffDeterministic(t *testing.T) {
-	base := `
-	CREATE TABLE T1 (
-	  T1_I1 INT64 NOT NULL,
-	  T1_I2 INT64 NOT NULL,
-	  T1_I3 INT64 NOT NULL,
-	  T1_I4 INT64 NOT NULL,
-	  T1_T1 TIMESTAMP NOT NULL,
-	  CONSTRAINT C1 CHECK (T1_I1 > 0),
-	  CONSTRAINT C2 CHECK (T1_I2 > 0),
-	  SYNONYM(S1),
-	) PRIMARY KEY(T1_I1);
-	CREATE INDEX IDX1 ON T1(T1_I2) STORING (T1_I3, T1_I4);`
-	target := `
-	CREATE TABLE T1 (
-	  T1_I1 INT64 NOT NULL,
-	  T1_I2 INT64 NOT NULL,
-	  T1_I3 INT64 NOT NULL,
-	  T1_I4 INT64 NOT NULL,
-	  T1_T1 TIMESTAMP NOT NULL,
-	  CONSTRAINT C3 CHECK (T1_I3 > 0),
-	  CONSTRAINT C4 CHECK (T1_I4 > 0),
-	  SYNONYM(S2),
-	) PRIMARY KEY(T1_I1), ROW DELETION POLICY (OLDER_THAN(T1_T1, INTERVAL 1 DAY));
-	CREATE INDEX IDX1 ON T1(T1_I2) STORING (T1_T1, T1_I1);`
-
-	var first string
-	for i := range 50 {
-		var buf bytes.Buffer
-		if err := Diff(strings.NewReader(base), strings.NewReader(target), &buf, DiffOption{}); err != nil {
-			t.Fatal(err)
-		}
-		if i == 0 {
-			first = buf.String()
-			continue
-		}
-		if diff := cmp.Diff(first, buf.String()); diff != "" {
-			t.Fatalf("output changed between runs:\n%s", diff)
-		}
+	for name, tt := range map[string]struct {
+		base   string
+		target string
+	}{
+		"constraints, synonyms, row deletion policy and index": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			  T1_I3 INT64 NOT NULL,
+			  T1_I4 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP NOT NULL,
+			  CONSTRAINT C1 CHECK (T1_I1 > 0),
+			  CONSTRAINT C2 CHECK (T1_I2 > 0),
+			  SYNONYM(S1),
+			) PRIMARY KEY(T1_I1);
+			CREATE INDEX IDX1 ON T1(T1_I2) STORING (T1_I3, T1_I4);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			  T1_I3 INT64 NOT NULL,
+			  T1_I4 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP NOT NULL,
+			  CONSTRAINT C3 CHECK (T1_I3 > 0),
+			  CONSTRAINT C4 CHECK (T1_I4 > 0),
+			  SYNONYM(S2),
+			) PRIMARY KEY(T1_I1), ROW DELETION POLICY (OLDER_THAN(T1_T1, INTERVAL 1 DAY));
+			CREATE INDEX IDX1 ON T1(T1_I2) STORING (T1_T1, T1_I1);`,
+		},
+		"foreign keys with on delete": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  T1_S2 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			  CONSTRAINT FK2 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE CASCADE,
+			  FOREIGN KEY (T1_S2) REFERENCES T2 (T2_S1),
+			  FOREIGN KEY (T1_S2) REFERENCES T2 (T2_S1) ON DELETE CASCADE,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  T1_S2 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE NO ACTION,
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE CASCADE,
+			  FOREIGN KEY (T1_S2) REFERENCES T2 (T2_S1) ON DELETE NO ACTION,
+			  FOREIGN KEY (T1_S2) REFERENCES T2 (T2_S1) ON DELETE CASCADE,
+			  CONSTRAINT FK3 FOREIGN KEY (T1_S2) REFERENCES T2 (T2_S1) ON DELETE NO ACTION NOT ENFORCED,
+			) PRIMARY KEY(T1_I1)`,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var first string
+			for i := range 50 {
+				var buf bytes.Buffer
+				if err := Diff(strings.NewReader(tt.base), strings.NewReader(tt.target), &buf, DiffOption{}); err != nil {
+					t.Fatal(err)
+				}
+				if i == 0 {
+					first = buf.String()
+					continue
+				}
+				if diff := cmp.Diff(first, buf.String()); diff != "" {
+					t.Fatalf("output changed between runs:\n%s", diff)
+				}
+			}
+		})
 	}
 }
 
