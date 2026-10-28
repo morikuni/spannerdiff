@@ -354,8 +354,7 @@ func (t *table) dependsOn() []identifier {
 }
 
 func (t *table) onDependencyChange(me, dependency migrationState, m *migration) {
-	switch me.kind {
-	case migrationKindDrop:
+	if me.kind == migrationKindDrop || !me.base.valid {
 		return
 	}
 	switch dep := dependency.definition().(type) {
@@ -807,12 +806,13 @@ func (c *constraint) onDependencyChange(me, dependency migrationState, m *migrat
 				// CREATE TABLE and DROP TABLE also add and drop constraints.
 				m.updateState(me.updateKind(migrationKindNone))
 			}
-		case me.kind != migrationKindDrop && dependency.kind == migrationKindDropAndAdd:
+		case me.base.valid && me.kind != migrationKindDrop && dependency.kind == migrationKindDropAndAdd:
 			// The referenced table can't be dropped while a foreign key references it.
+			// A constraint not in base doesn't need to be dropped.
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
 		}
 	case *column:
-		if me.kind != migrationKindDrop && dependency.kind == migrationKindDropAndAdd {
+		if me.base.valid && me.kind != migrationKindDrop && dependency.kind == migrationKindDropAndAdd {
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
 		}
 	default:
@@ -891,7 +891,8 @@ func (r *rowDeletionPolicy) onDependencyChange(me, dependency migrationState, m 
 			m.updateState(me.updateKind(migrationKindNone))
 		}
 	case *column:
-		if me.kind != migrationKindDrop && dependency.kind == migrationKindDropAndAdd {
+		// A policy not in base doesn't need to be dropped.
+		if me.base.valid && me.kind != migrationKindDrop && dependency.kind == migrationKindDropAndAdd {
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
 		}
 	default:
@@ -1033,8 +1034,7 @@ func (i *index) dependsOn() []identifier {
 }
 
 func (i *index) onDependencyChange(me, dependency migrationState, m *migration) {
-	switch me.kind {
-	case migrationKindDrop:
+	if me.kind == migrationKindDrop || !me.base.valid {
 		return
 	}
 	switch dep := dependency.definition().(type) {
@@ -1165,8 +1165,7 @@ func (si *searchIndex) dependsOn() []identifier {
 }
 
 func (si *searchIndex) onDependencyChange(me, dependency migrationState, m *migration) {
-	switch me.kind {
-	case migrationKindDrop:
+	if me.kind == migrationKindDrop || !me.base.valid {
 		return
 	}
 	switch dep := dependency.definition().(type) {
@@ -1270,8 +1269,7 @@ func (vi *vectorIndex) dependsOn() []identifier {
 }
 
 func (vi *vectorIndex) onDependencyChange(me, dependency migrationState, m *migration) {
-	switch me.kind {
-	case migrationKindDrop:
+	if me.kind == migrationKindDrop || !me.base.valid {
 		return
 	}
 	switch dep := dependency.definition().(type) {
@@ -1374,8 +1372,7 @@ func edgeKeyDependencies(tableID tableID, keys *ast.PropertyGraphColumnNameList,
 }
 
 func (pg *propertyGraph) onDependencyChange(me, dependency migrationState, m *migration) {
-	switch me.kind {
-	case migrationKindDrop:
+	if me.kind == migrationKindDrop || !me.base.valid {
 		return
 	}
 	switch dep := dependency.definition().(type) {
@@ -1452,8 +1449,7 @@ func (v *view) dependsOn() []identifier {
 }
 
 func (v *view) onDependencyChange(me, dependency migrationState, m *migration) {
-	switch me.kind {
-	case migrationKindDrop:
+	if me.kind == migrationKindDrop || !me.base.valid {
 		return
 	}
 	switch dep := dependency.definition().(type) {
@@ -1584,8 +1580,7 @@ func (cs *changeStream) dependsOn() []identifier {
 }
 
 func (cs *changeStream) onDependencyChange(me, dependency migrationState, m *migration) {
-	switch me.kind {
-	case migrationKindDrop:
+	if me.kind == migrationKindDrop || !me.base.valid {
 		return
 	}
 	switch dep := dependency.definition().(type) {
@@ -1889,8 +1884,7 @@ func (q *queue) dependsOn() []identifier {
 }
 
 func (q *queue) onDependencyChange(me, dependency migrationState, m *migration) {
-	switch me.kind {
-	case migrationKindDrop:
+	if me.kind == migrationKindDrop || !me.base.valid {
 		return
 	}
 	switch dep := dependency.definition().(type) {
@@ -2435,8 +2429,7 @@ func (g *grant) dependsOn() []identifier {
 }
 
 func (g *grant) onDependencyChange(me, dependency migrationState, m *migration) {
-	switch me.kind {
-	case migrationKindDrop:
+	if me.kind == migrationKindDrop || !me.base.valid {
 		return
 	}
 	switch dep := dependency.definition().(type) {

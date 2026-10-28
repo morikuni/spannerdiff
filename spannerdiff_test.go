@@ -164,8 +164,14 @@ func TestDiff(t *testing.T) {
 			  T2_I1 INT64 NOT NULL,
 			  T2_I2 INT64,
 			) PRIMARY KEY(T2_I1, T2_I2);`,
-			``,
-			true,
+			`
+			DROP TABLE T2;
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64
+			) PRIMARY KEY (T2_I1, T2_I2);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2(T2_I1);`,
+			false,
 		},
 		"drop foreign key": {
 			`
@@ -352,8 +358,11 @@ func TestDiff(t *testing.T) {
 			  T1_I2 STRING(MAX),
 			  CONSTRAINT C1 CHECK (T1_I2 != ''),
 			) PRIMARY KEY(T1_I1);`,
-			``,
-			true,
+			`
+			ALTER TABLE T1 DROP COLUMN T1_I2;
+			ALTER TABLE T1 ADD COLUMN T1_I2 STRING(MAX);
+			ALTER TABLE T1 ADD CONSTRAINT C1 CHECK (T1_I2 != "");`,
+			false,
 		},
 		"drop check constraint": {
 			`
@@ -411,8 +420,11 @@ func TestDiff(t *testing.T) {
 			  T1_I1 INT64 NOT NULL,
 			  T1_TS1 TIMESTAMP,
 			) PRIMARY KEY(T1_I1), ROW DELETION POLICY (OLDER_THAN(T1_TS1, INTERVAL 1 DAY));`,
-			``,
-			true,
+			`
+			ALTER TABLE T1 DROP COLUMN T1_TS1;
+			ALTER TABLE T1 ADD COLUMN T1_TS1 TIMESTAMP;
+			ALTER TABLE T1 ADD ROW DELETION POLICY (OLDER_THAN(T1_TS1, INTERVAL 1 DAY));`,
+			false,
 		},
 		"drop row deletion policy": {
 			`
@@ -904,8 +916,11 @@ func TestDiff(t *testing.T) {
 			  T1_I2 STRING(MAX),
 			) PRIMARY KEY(T1_I1);
 			CREATE INDEX IDX1 ON T1(T1_I2);`,
-			``,
-			true,
+			`
+			ALTER TABLE T1 DROP COLUMN T1_I2;
+			ALTER TABLE T1 ADD COLUMN T1_I2 STRING(MAX);
+			CREATE INDEX IDX1 ON T1(T1_I2);`,
+			false,
 		},
 		"drop index": {
 			`
@@ -984,8 +999,15 @@ func TestDiff(t *testing.T) {
 			  T1_T1 TOKENLIST,
 			) PRIMARY KEY(T1_I1, T1_I2);
 			CREATE SEARCH INDEX IDX1 ON T1(T1_T1);`,
-			``,
-			true,
+			`
+			DROP TABLE T1;
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			  T1_T1 TOKENLIST,
+			) PRIMARY KEY(T1_I1, T1_I2);
+			CREATE SEARCH INDEX IDX1 ON T1(T1_T1);`,
+			false,
 		},
 		"drop search index": {
 			`
@@ -1082,8 +1104,15 @@ func TestDiff(t *testing.T) {
 			  T1_AF1 ARRAY<FLOAT64> NOT NULL,
 			) PRIMARY KEY(T1_I1, T1_I2);
 			CREATE VECTOR INDEX IDX1 ON T1(T1_AF1) OPTIONS (distance_type = 'COSINE');`,
-			``,
-			true,
+			`
+			DROP TABLE T1;
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			  T1_AF1 ARRAY<FLOAT64> NOT NULL,
+			) PRIMARY KEY(T1_I1, T1_I2);
+			CREATE VECTOR INDEX IDX1 ON T1(T1_AF1) OPTIONS (distance_type = 'COSINE');`,
+			false,
 		},
 		"drop vector index": {
 			`
@@ -1155,8 +1184,14 @@ func TestDiff(t *testing.T) {
 			  T1_I2 INT64 NOT NULL,
 			) PRIMARY KEY(T1_I1, T1_I2);
 			CREATE PROPERTY GRAPH G1 NODE TABLES (T1);`,
-			``,
-			true,
+			`
+			DROP TABLE T1;
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1, T1_I2);
+			CREATE PROPERTY GRAPH G1 NODE TABLES (T1);`,
+			false,
 		},
 		"drop property graph": {
 			`
@@ -1247,8 +1282,14 @@ func TestDiff(t *testing.T) {
 			  T1_I2 INT64 NOT NULL,
 			) PRIMARY KEY(T1_I1, T1_I2);
 			CREATE VIEW V1 SQL SECURITY INVOKER AS SELECT T1_I1 FROM T1;`,
-			``,
-			true,
+			`
+			DROP TABLE T1;
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1, T1_I2);
+			CREATE VIEW V1 SQL SECURITY INVOKER AS SELECT T1_I1 FROM T1;`,
+			false,
 		},
 		"drop view": {
 			`
@@ -1328,13 +1369,12 @@ func TestDiff(t *testing.T) {
 			) PRIMARY KEY(T1_I1, T1_I2);
 			CREATE CHANGE STREAM S1 FOR T1;`,
 			`
-			ALTER CHANGE STREAM S1 DROP FOR ALL;
 			DROP TABLE T1;
 			CREATE TABLE T1 (
 			  T1_I1 INT64 NOT NULL,
 			  T1_I2 INT64 NOT NULL,
 			) PRIMARY KEY(T1_I1, T1_I2);
-			ALTER CHANGE STREAM S1 SET FOR T1;`,
+			CREATE CHANGE STREAM S1 FOR T1;`,
 			false,
 		},
 		"drop change stream": {
@@ -1845,8 +1885,18 @@ func TestDiff(t *testing.T) {
 			  T1_I2 INT64 NOT NULL,
 			  Payload BYTES(MAX) NOT NULL,
 			) PRIMARY KEY(T1_I1, T1_I2), INTERLEAVE IN PARENT T1;`,
-			``,
-			true,
+			`
+			DROP TABLE T1;
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1, T1_I2);
+			CREATE QUEUE Q1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(T1_I1, T1_I2), INTERLEAVE IN PARENT T1;`,
+			false,
 		},
 		"drop interleaved queue": {
 			`
@@ -1945,8 +1995,14 @@ func TestDiff(t *testing.T) {
 			  T1_I2 INT64 NOT NULL,
 			) PRIMARY KEY(T1_I1, T1_I2);
 			GRANT SELECT ON TABLE T1 TO ROLE R1;`,
-			``,
-			true,
+			`
+			DROP TABLE T1;
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1, T1_I2);
+			GRANT SELECT ON TABLE T1 TO ROLE R1;`,
+			false,
 		},
 		"drop table grant": {
 			`
@@ -2283,8 +2339,18 @@ func TestDiff(t *testing.T) {
 			  T1_I2 INT64 NOT NULL,
 			  C1_I1 INT64 NOT NULL,
 			) PRIMARY KEY(T1_I1, T1_I2, C1_I1), INTERLEAVE IN PARENT T1;`,
-			``,
-			true,
+			`
+			DROP TABLE T1;
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1, T1_I2);
+			CREATE TABLE C1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			  C1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1, T1_I2, C1_I1), INTERLEAVE IN PARENT T1;`,
+			false,
 		},
 		"recreate interleaved parent table": {
 			`
