@@ -21,6 +21,10 @@ type dropDependencyOwner interface {
 	dropDependsOn() []identifier
 }
 
+var _ = []dropDependencyOwner{
+	&table{},
+}
+
 func newOperation(def definition, kind operationKind, ddl ast.DDL) operation {
 	dependsOn := def.dependsOn()
 	if d, ok := def.(dropDependencyOwner); ok && kind == operationKindDrop {
