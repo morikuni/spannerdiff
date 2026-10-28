@@ -144,6 +144,29 @@ func TestDiff(t *testing.T) {
 			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2(T2_S1);`,
 			false,
 		},
+		"add foreign key referencing recreated table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			  CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1),
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1, T2_I2);`,
+			``,
+			true,
+		},
 		"drop foreign key": {
 			`
 			CREATE TABLE T1 (
@@ -317,6 +340,21 @@ func TestDiff(t *testing.T) {
 			ALTER TABLE T1 ADD CONSTRAINT CHK1 CHECK (T1_I1 > 0);`,
 			false,
 		},
+		"add check constraint on recreated column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 STRING(MAX),
+			  CONSTRAINT C1 CHECK (T1_I2 != ''),
+			) PRIMARY KEY(T1_I1);`,
+			``,
+			true,
+		},
 		"drop check constraint": {
 			`
 			CREATE TABLE T1 (
@@ -361,6 +399,20 @@ func TestDiff(t *testing.T) {
 			`
 			ALTER TABLE T1 ADD ROW DELETION POLICY (OLDER_THAN(T1_TS1, INTERVAL 1 DAY));`,
 			false,
+		},
+		"add row deletion policy on recreated column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_TS1 STRING(MAX),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_TS1 TIMESTAMP,
+			) PRIMARY KEY(T1_I1), ROW DELETION POLICY (OLDER_THAN(T1_TS1, INTERVAL 1 DAY));`,
+			``,
+			true,
 		},
 		"drop row deletion policy": {
 			`
