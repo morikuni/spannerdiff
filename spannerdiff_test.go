@@ -411,6 +411,140 @@ func TestDiff(t *testing.T) {
 			``,
 			false,
 		},
+		"change enforcement of foreign key from omitted to enforced": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ENFORCED,
+			) PRIMARY KEY(T1_I1)`,
+			``,
+			false,
+		},
+		"change enforcement of unnamed foreign key from enforced to omitted": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ENFORCED,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			``,
+			false,
+		},
+		"recreate foreign key by changing enforcement from omitted to not enforced": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) NOT ENFORCED,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2(T2_S1) NOT ENFORCED;`,
+			false,
+		},
+		"recreate foreign key by changing enforcement from not enforced to omitted": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) NOT ENFORCED,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2(T2_S1);`,
+			false,
+		},
+		"error on changing enforcement of unnamed foreign key": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) NOT ENFORCED,
+			) PRIMARY KEY(T1_I1)`,
+			``,
+			true,
+		},
+		"change named foreign key without enforcement to unnamed enforced one": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ENFORCED,
+			) PRIMARY KEY(T1_I1)`,
+			``,
+			false,
+		},
+		"change named enforced foreign key to unnamed one without enforcement": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ENFORCED,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			``,
+			false,
+		},
+		"change enforcement of unnamed foreign keys on same columns from omitted to enforced": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) NOT ENFORCED,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) NOT ENFORCED,
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ENFORCED,
+			) PRIMARY KEY(T1_I1)`,
+			``,
+			false,
+		},
 		"create referenced table first": {
 			``,
 			`

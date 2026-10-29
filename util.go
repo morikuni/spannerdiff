@@ -49,6 +49,14 @@ func normalizeOnDeleteAction(action ast.OnDeleteAction) ast.OnDeleteAction {
 	return action
 }
 
+// normalizeEnforcement returns ENFORCED for an omitted enforcement clause, which is its default.
+func normalizeEnforcement(e ast.Enforcement) ast.Enforcement {
+	if e == "" {
+		return ast.Enforced
+	}
+	return e
+}
+
 func equalNode(a, b ast.Node) bool {
 	return cmp.Equal(a, b, equalOptions()...)
 }
@@ -64,6 +72,10 @@ func equalOptions() []cmp.Option {
 		// ON DELETE NO ACTION is the default action, so it is the same as no ON DELETE clause.
 		cmp.Comparer(func(a, b ast.OnDeleteAction) bool {
 			return normalizeOnDeleteAction(a) == normalizeOnDeleteAction(b)
+		}),
+		// ENFORCED is the default enforcement of foreign keys, so it is the same as no enforcement clause.
+		cmp.Comparer(func(a, b ast.Enforcement) bool {
+			return normalizeEnforcement(a) == normalizeEnforcement(b)
 		}),
 		// Identifiers are case-insensitive in Spanner.
 		cmp.Comparer(func(a, b *ast.Ident) bool {
