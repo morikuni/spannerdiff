@@ -27,6 +27,7 @@ $ brew install morikuni/tap/spannerdiff
 - `CREATE ROLE`
 - `GRANT`
 - `ALTER DATABASE`
+- `ALTER TABLE ... ADD [CONSTRAINT name] {FOREIGN KEY | CHECK}`
 
 ## Colored Output
 
@@ -93,8 +94,16 @@ Use `--zero-default-for-not-null-columns` to add such a column with the zero val
 Existing rows get the zero value, so make sure that it is valid for the column, e.g. for a `CHECK` constraint, a unique index or a foreign key on the column.
 With the option, spannerdiff still reports the error for `PROTO` and `ENUM` columns, because spannerdiff can't tell a proto from an enum without the proto descriptors, and `0` isn't always a valid enum value.
 
+## Foreign Keys
+
+A constraint is compared in the same way whether it's written in `CREATE TABLE` or added by `ALTER TABLE ... ADD`.
+spannerdiff adds a foreign key referencing another table by `ALTER TABLE ... ADD` after creating the tables, instead of in `CREATE TABLE`, so that tables referencing each other can be created.
+Other constraints are added in `CREATE TABLE` when the table is created.
+
 ## Known Issues & Limitations
 
 - View DDL generation may be incorrect or out of order due to unresolved column names in the view query.
 - Changes that can't be done by `ALTER` statements are migrated by dropping and recreating the object (e.g. changing the type of a column, or the primary key of a table). This deletes the data in it, so review the generated DDL before applying it.
 - An unnamed constraint in the base schema can't be dropped. Spanner names unnamed constraints, so use the schema returned by Spanner (e.g. `gcloud spanner databases ddl describe`) as the base schema.
+  However, Spanner may return unnamed foreign keys as `ALTER TABLE ... ADD FOREIGN KEY` without their names. These foreign keys can't be dropped either, except by dropping their table.
+- Dropping tables whose unnamed foreign keys reference each other fails with `dependency cycle detected`, because neither foreign key can be dropped before the tables.

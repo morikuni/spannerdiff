@@ -52,6 +52,69 @@ type definitions struct {
 	all map[identifier]definition
 }
 
+// normalizeDDLs moves foreign keys referencing other tables out of CREATE TABLE into ALTER TABLE ADD,
+// and other constraints added by ALTER TABLE into CREATE TABLE, so that a constraint is handled in the same way
+// wherever it's written. Spanner returns some foreign keys as ALTER TABLE ADD instead of in CREATE TABLE.
+// The ALTER TABLE statements are placed after all CREATE TABLE statements.
+func normalizeDDLs(ddls []ast.DDL) []ast.DDL {
+	var result, alters []ast.DDL
+	tables := make(map[tableID]*ast.CreateTable)
+	for _, ddl := range ddls {
+		switch ddl := ddl.(type) {
+		case *ast.CreateTable:
+			copied := *ddl // don't modify the parsed AST
+			copied.TableConstraints = nil
+			tables[newTableIDFromPath(ddl.Name)] = &copied
+			result = append(result, &copied)
+		case *ast.AlterTable:
+			if !isAddTableConstraint(ddl) {
+				result = append(result, ddl)
+			}
+		default:
+			result = append(result, ddl)
+		}
+	}
+
+	place := func(tableName *ast.Path, tc *ast.TableConstraint, alter *ast.AlterTable) {
+		if !referencesOtherTable(newTableIDFromPath(tableName), tc) {
+			if ct, ok := tables[newTableIDFromPath(tableName)]; ok {
+				ct.TableConstraints = append(ct.TableConstraints, tc)
+				return
+			}
+		}
+		if alter == nil {
+			alter = &ast.AlterTable{Name: tableName, TableAlteration: &ast.AddTableConstraint{TableConstraint: tc}}
+		}
+		alters = append(alters, alter)
+	}
+	for _, ddl := range ddls {
+		switch ddl := ddl.(type) {
+		case *ast.CreateTable:
+			for _, tc := range ddl.TableConstraints {
+				place(ddl.Name, tc, nil)
+			}
+		case *ast.AlterTable:
+			if isAddTableConstraint(ddl) {
+				place(ddl.Name, ddl.TableAlteration.(*ast.AddTableConstraint).TableConstraint, ddl)
+			}
+		}
+	}
+
+	return append(result, alters...)
+}
+
+// isAddTableConstraint reports whether the DDL is a supported ALTER TABLE ADD of a constraint.
+// A table name with more than two parts is not supported, as in CREATE TABLE.
+func isAddTableConstraint(at *ast.AlterTable) bool {
+	_, ok := at.TableAlteration.(*ast.AddTableConstraint)
+	return ok && len(at.Name.Idents) <= 2
+}
+
+func referencesOtherTable(tableID tableID, tc *ast.TableConstraint) bool {
+	fk, ok := tc.Constraint.(*ast.ForeignKey)
+	return ok && newTableIDFromPath(fk.ReferenceTable) != tableID
+}
+
 func newDefinitions(ddls []ast.DDL, option DiffOption) (*definitions, error) {
 	d := &definitions{
 		make(map[identifier]definition),
@@ -72,8 +135,17 @@ func newDefinitions(ddls []ast.DDL, option DiffOption) (*definitions, error) {
 		}
 		d.all[id] = def
 	}
+	unsupported := func(ddl ast.DDL) error {
+		if option.ErrorOnUnsupportedDDL {
+			return fmt.Errorf("unsupported DDL: %s", ddl.SQL())
+		}
+		if option.OnUnsupportedDDL != nil {
+			option.OnUnsupportedDDL(ddl.SQL())
+		}
+		return nil
+	}
 
-	for _, ddl := range ddls {
+	for _, ddl := range normalizeDDLs(ddls) {
 		switch ddl := ddl.(type) {
 		case *ast.CreateSchema:
 			add(newSchema(ddl))
@@ -129,12 +201,24 @@ func newDefinitions(ddls []ast.DDL, option DiffOption) (*definitions, error) {
 			}
 		case *ast.AlterDatabase:
 			add(newDatabase(ddl))
-		default:
-			if option.ErrorOnUnsupportedDDL {
-				return nil, fmt.Errorf("unsupported DDL: %s", ddl.SQL())
+		case *ast.AlterTable:
+			if !isAddTableConstraint(ddl) {
+				if err := unsupported(ddl); err != nil {
+					return nil, err
+				}
+				continue
 			}
-			if option.OnUnsupportedDDL != nil {
-				option.OnUnsupportedDDL(ddl.SQL())
+			// normalizeDDLs places ALTER TABLE after CREATE TABLE, so the table is already defined.
+			table, ok := d.all[newTableIDFromPath(ddl.Name)].(*table)
+			if !ok {
+				return nil, fmt.Errorf("table not found: %s", ddl.SQL())
+			}
+			tc := ddl.TableAlteration.(*ast.AddTableConstraint).TableConstraint
+			table.foreignKeys = append(table.foreignKeys, tc)
+			add(newConstraint(table, tc))
+		default:
+			if err := unsupported(ddl); err != nil {
+				return nil, err
 			}
 		}
 	}
@@ -189,10 +273,12 @@ func (s *schema) onDependencyChange(me, dependency migrationState, m *migration)
 
 type table struct {
 	node *ast.CreateTable
+	// foreignKeys are foreign keys referencing other tables, which aren't in CREATE TABLE (see normalizeDDLs).
+	foreignKeys []*ast.TableConstraint
 }
 
 func newTable(ct *ast.CreateTable) *table {
-	return &table{ct}
+	return &table{ct, nil}
 }
 
 func (t *table) id() identifier {
@@ -336,15 +422,28 @@ func (t *table) dependsOn() []identifier {
 	for _, col := range t.node.Columns {
 		ids = append(ids, sequencesInColumn(col)...)
 	}
-	// CREATE TABLE contains foreign keys, so referenced tables must exist before the table is created.
-	for _, tc := range t.node.TableConstraints {
-		if fk, ok := tc.Constraint.(*ast.ForeignKey); ok {
-			if refID := newTableIDFromPath(fk.ReferenceTable); refID != t.tableID() {
-				ids = append(ids, refID)
-			}
+	return ids
+}
+
+// dropDependsOn returns the dependencies of DROP TABLE.
+// DROP TABLE also drops unnamed foreign keys referencing other tables, because they can't be dropped by name,
+// so the table must be dropped before the tables and the columns referenced by them.
+func (t *table) dropDependsOn() []identifier {
+	var refs []identifier
+	for _, tc := range t.foreignKeys {
+		if tc.Name != nil {
+			continue
+		}
+		fk := tc.Constraint.(*ast.ForeignKey)
+		refID := newTableIDFromPath(fk.ReferenceTable)
+		refs = append(refs, refID)
+		for _, col := range fk.ReferenceColumns {
+			refs = append(refs, newColumnID(refID, col))
 		}
 	}
-	return ids
+	// The order of dependencies affects the order of operations, so it must not depend on the order of the statements.
+	slices.SortFunc(refs, func(a, b identifier) int { return strings.Compare(a.ID(), b.ID()) })
+	return append(t.dependsOn(), refs...)
 }
 
 func (t *table) onDependencyChange(me, dependency migrationState, m *migration) {
@@ -360,11 +459,7 @@ func (t *table) onDependencyChange(me, dependency migrationState, m *migration) 
 	case *sequence:
 		// The sequence is only used for ordering operations.
 	case *table:
-		// A table referenced by foreign keys is handled by constraint definitions,
-		// so only an interleaved table is recreated along with its parent.
-		if t.node.Cluster == nil || newTableIDFromPath(t.node.Cluster.TableName) != dep.tableID() {
-			return
-		}
+		// The table depends only on its parent table, because foreign keys referencing other tables are constraint definitions.
 		switch dependency.kind {
 		case migrationKindDropAndAdd:
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
@@ -856,16 +951,34 @@ func (c *constraint) onDependencyChange(me, dependency migrationState, m *migrat
 		case dep.tableID() == c.table.tableID():
 			switch dependency.kind {
 			case migrationKindAdd, migrationKindDropAndAdd, migrationKindDrop:
-				// CREATE TABLE and DROP TABLE also add and drop constraints.
-				m.updateState(me.updateKind(migrationKindNone))
+				if !referencesOtherTable(c.table.tableID(), c.node) {
+					// CREATE TABLE and DROP TABLE also add and drop constraints.
+					m.updateState(me.updateKind(migrationKindNone))
+					return
+				}
+				// A foreign key referencing another table isn't in CREATE TABLE, so it's added after the table is created.
+				// A named one is dropped before DROP TABLE, because the referenced table may also be dropped.
+				// An unnamed one can't be dropped by name, so it's dropped by DROP TABLE (see table.dropDependsOn).
+				dropBase := me.base.valid && me.base.mustGet().(*constraint).node.Name != nil
+				addTarget := me.target.valid
+				switch {
+				case dropBase && addTarget:
+					m.updateState(me.updateKind(migrationKindDropAndAdd))
+				case dropBase:
+					m.updateState(me.updateKind(migrationKindDrop))
+				case addTarget:
+					m.updateState(me.updateKind(migrationKindAdd))
+				default:
+					m.updateState(me.updateKind(migrationKindNone))
+				}
 			}
-		case me.base.valid && me.kind != migrationKindDrop && dependency.kind == migrationKindDropAndAdd:
+		case me.base.valid && me.kind != migrationKindDrop && me.kind != migrationKindAdd && dependency.kind == migrationKindDropAndAdd:
 			// The referenced table can't be dropped while a foreign key references it.
-			// A constraint not in base doesn't need to be dropped.
+			// A constraint not in base, or added after its table is recreated, doesn't need to be dropped.
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
 		}
 	case *column:
-		if me.base.valid && me.kind != migrationKindDrop && dependency.kind == migrationKindDropAndAdd {
+		if me.base.valid && me.kind != migrationKindDrop && me.kind != migrationKindAdd && dependency.kind == migrationKindDropAndAdd {
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
 		}
 	default:
