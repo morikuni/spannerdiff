@@ -1223,6 +1223,150 @@ func TestDiff(t *testing.T) {
 			ALTER TABLE T1 ADD COLUMN T1_G1 INT64 NOT NULL AS (T1_I2 + 1) STORED;`,
 			false,
 		},
+		"add column referenced by new generated column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  T1_B1 BOOL AS (T1_S1 IS NOT NULL) STORED,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 ADD COLUMN T1_B1 BOOL AS (T1_S1 IS NOT NULL) STORED;
+			ALTER TABLE T1 ADD COLUMN T1_S1 STRING(MAX);`,
+			false,
+		},
+		"drop generated column and column it references": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  T1_B1 BOOL AS (T1_S1 IS NOT NULL) STORED,
+			) PRIMARY KEY(T1_I1);
+			CREATE INDEX IDX1 ON T1(T1_B1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 DROP COLUMN T1_S1;
+			DROP INDEX IDX1;
+			ALTER TABLE T1 DROP COLUMN T1_B1;`,
+			false,
+		},
+		"change type of column referenced by generated column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  T1_B1 BOOL AS (T1_S1 IS NOT NULL) STORED,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 BYTES(MAX),
+			  T1_B1 BOOL AS (T1_S1 IS NOT NULL) STORED,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 ALTER COLUMN T1_S1 BYTES(MAX);`,
+			false,
+		},
+		"recreate column referenced by generated column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  T1_B1 BOOL AS (T1_S1 IS NOT NULL) STORED,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 INT64,
+			  T1_B1 BOOL AS (T1_S1 IS NOT NULL) STORED,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 DROP COLUMN T1_S1;
+			ALTER TABLE T1 ADD COLUMN T1_S1 INT64;`,
+			false,
+		},
+		"drop column that non-stored generated column stops referencing": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  T1_S2 STRING(MAX),
+			  T1_B1 BOOL AS (T1_S1 IS NOT NULL),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S2 STRING(MAX),
+			  T1_B1 BOOL AS (T1_S2 IS NOT NULL),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 DROP COLUMN T1_S1;
+			ALTER TABLE T1 ALTER COLUMN T1_B1 BOOL AS (T1_S2 IS NOT NULL);`,
+			false,
+		},
+		"recreate column that non-stored generated column stops referencing": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  T1_S2 STRING(MAX),
+			  T1_B1 BOOL AS (T1_S1 IS NOT NULL),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 INT64,
+			  T1_S2 STRING(MAX),
+			  T1_B1 BOOL AS (T1_S2 IS NOT NULL),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 DROP COLUMN T1_S1;
+			ALTER TABLE T1 ALTER COLUMN T1_B1 BOOL AS (T1_S2 IS NOT NULL);
+			ALTER TABLE T1 ADD COLUMN T1_S1 INT64;`,
+			false,
+		},
+		"drop column not referenced by generated column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  T1_S2 STRING(MAX),
+			  T1_B1 BOOL AS (T1_S1 IS NOT NULL) STORED,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  T1_B1 BOOL AS (T1_S1 IS NOT NULL) STORED,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 DROP COLUMN T1_S2;`,
+			false,
+		},
+		"change length of column referenced by generated column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(10),
+			  T1_B1 BOOL AS (T1_S1 IS NOT NULL) STORED,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  T1_B1 BOOL AS (T1_S1 IS NOT NULL) STORED,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 ALTER COLUMN T1_S1 STRING(MAX);`,
+			false,
+		},
 		"error on converting column to identity column": {
 			`
 			CREATE TABLE T1 (
