@@ -2986,6 +2986,169 @@ func TestDiff(t *testing.T) {
 			) PRIMARY KEY(ID, ChildID), INTERLEAVE IN PARENT Parent ON DELETE CASCADE;`,
 			false,
 		},
+		"alter key column of table without interleaved tables": {
+			`
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_S1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_S1 STRING(36) NOT NULL,
+			) PRIMARY KEY(T1_S1);`,
+			`
+			ALTER TABLE T1 ALTER COLUMN T1_S1 STRING(36) NOT NULL;`,
+			false,
+		},
+		"alter key column shared by interleaved tables": {
+			`
+			CREATE TABLE P1 (
+			  P1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(P1_S1);
+			CREATE TABLE C1 (
+			  P1_S1 STRING(MAX) NOT NULL,
+			  C1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_S1, C1_I1), INTERLEAVE IN PARENT P1 ON DELETE CASCADE;`,
+			`
+			CREATE TABLE P1 (
+			  P1_S1 STRING(36) NOT NULL,
+			) PRIMARY KEY(P1_S1);
+			CREATE TABLE C1 (
+			  P1_S1 STRING(36) NOT NULL,
+			  C1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_S1, C1_I1), INTERLEAVE IN PARENT P1 ON DELETE CASCADE;`,
+			`
+			DROP TABLE C1;
+			ALTER TABLE P1 ALTER COLUMN P1_S1 STRING(36) NOT NULL;
+			CREATE TABLE C1 (
+			  P1_S1 STRING(36) NOT NULL,
+			  C1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_S1, C1_I1), INTERLEAVE IN PARENT P1 ON DELETE CASCADE;`,
+			false,
+		},
+		"alter key column shared by interleaved tables with grandchild table": {
+			`
+			CREATE TABLE P1 (
+			  P1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(P1_S1);
+			CREATE TABLE C1 (
+			  P1_S1 STRING(MAX) NOT NULL,
+			  C1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_S1, C1_I1), INTERLEAVE IN PARENT P1;
+			CREATE TABLE G1 (
+			  P1_S1 STRING(MAX) NOT NULL,
+			  C1_I1 INT64 NOT NULL,
+			  G1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_S1, C1_I1, G1_I1), INTERLEAVE IN PARENT C1;`,
+			`
+			CREATE TABLE P1 (
+			  P1_S1 STRING(36) NOT NULL,
+			) PRIMARY KEY(P1_S1);
+			CREATE TABLE C1 (
+			  P1_S1 STRING(36) NOT NULL,
+			  C1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_S1, C1_I1), INTERLEAVE IN PARENT P1;
+			CREATE TABLE G1 (
+			  P1_S1 STRING(36) NOT NULL,
+			  C1_I1 INT64 NOT NULL,
+			  G1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_S1, C1_I1, G1_I1), INTERLEAVE IN PARENT C1;`,
+			`
+			DROP TABLE G1;
+			DROP TABLE C1;
+			ALTER TABLE P1 ALTER COLUMN P1_S1 STRING(36) NOT NULL;
+			CREATE TABLE C1 (
+			  P1_S1 STRING(36) NOT NULL,
+			  C1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_S1, C1_I1), INTERLEAVE IN PARENT P1;
+			CREATE TABLE G1 (
+			  P1_S1 STRING(36) NOT NULL,
+			  C1_I1 INT64 NOT NULL,
+			  G1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_S1, C1_I1, G1_I1), INTERLEAVE IN PARENT C1;`,
+			false,
+		},
+		"add table interleaved in table altering its key column": {
+			`
+			CREATE TABLE P1 (
+			  P1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(P1_S1);`,
+			`
+			CREATE TABLE P1 (
+			  P1_S1 STRING(36) NOT NULL,
+			) PRIMARY KEY(P1_S1);
+			CREATE TABLE C1 (
+			  P1_S1 STRING(36) NOT NULL,
+			  C1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_S1, C1_I1), INTERLEAVE IN PARENT P1;`,
+			`
+			ALTER TABLE P1 ALTER COLUMN P1_S1 STRING(36) NOT NULL;
+			CREATE TABLE C1 (
+			  P1_S1 STRING(36) NOT NULL,
+			  C1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_S1, C1_I1), INTERLEAVE IN PARENT P1;`,
+			false,
+		},
+		"alter key column of table whose interleaved table is dropped": {
+			`
+			CREATE TABLE P1 (
+			  P1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(P1_S1);
+			CREATE TABLE C1 (
+			  P1_S1 STRING(MAX) NOT NULL,
+			  C1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_S1, C1_I1), INTERLEAVE IN PARENT P1 ON DELETE CASCADE;`,
+			`
+			CREATE TABLE P1 (
+			  P1_S1 STRING(36) NOT NULL,
+			) PRIMARY KEY(P1_S1);`,
+			`
+			DROP TABLE C1;
+			ALTER TABLE P1 ALTER COLUMN P1_S1 STRING(36) NOT NULL;`,
+			false,
+		},
+		"alter key column of interleaved table not in parent table": {
+			`
+			CREATE TABLE P1 (
+			  P1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1);
+			CREATE TABLE C1 (
+			  P1_I1 INT64 NOT NULL,
+			  C1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(P1_I1, C1_S1), INTERLEAVE IN PARENT P1;`,
+			`
+			CREATE TABLE P1 (
+			  P1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1);
+			CREATE TABLE C1 (
+			  P1_I1 INT64 NOT NULL,
+			  C1_S1 STRING(36) NOT NULL,
+			) PRIMARY KEY(P1_I1, C1_S1), INTERLEAVE IN PARENT P1;`,
+			`
+			ALTER TABLE C1 ALTER COLUMN C1_S1 STRING(36) NOT NULL;`,
+			false,
+		},
+		"allow commit timestamp in key column shared by interleaved tables": {
+			`
+			CREATE TABLE P1 (
+			  P1_T1 TIMESTAMP NOT NULL,
+			) PRIMARY KEY(P1_T1);
+			CREATE TABLE C1 (
+			  P1_T1 TIMESTAMP NOT NULL,
+			  C1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_T1, C1_I1), INTERLEAVE IN PARENT P1;`,
+			`
+			CREATE TABLE P1 (
+			  P1_T1 TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp = true),
+			) PRIMARY KEY(P1_T1);
+			CREATE TABLE C1 (
+			  P1_T1 TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp = true),
+			  C1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_T1, C1_I1), INTERLEAVE IN PARENT P1;`,
+			`
+			ALTER TABLE C1 ALTER COLUMN P1_T1 SET OPTIONS (allow_commit_timestamp = true);
+			ALTER TABLE P1 ALTER COLUMN P1_T1 SET OPTIONS (allow_commit_timestamp = true);`,
+			false,
+		},
 		"add tables with inline foreign keys referencing each other": {
 			``,
 			`
