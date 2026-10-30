@@ -1602,6 +1602,7 @@ func (v *view) alter(tgt definition, m *migration) {
 
 func (v *view) dependsOn() []identifier {
 	var ids []identifier
+	var tableIDs []tableID
 	paths, idents := tablesOrViewsInQueryExpr(v.node.Query)
 	// Can't distinguish between tables and views, so add both.
 	for _, ident := range idents {
@@ -1609,15 +1610,25 @@ func (v *view) dependsOn() []identifier {
 			newTableIDFromIdent(ident),
 			newViewIDFromIdent(ident),
 		)
+		tableIDs = append(tableIDs, newTableIDFromIdent(ident))
 	}
 	for _, path := range paths {
 		ids = append(ids,
 			newTableIDFromPath(path),
 			newViewIDFromPath(path),
 		)
+		tableIDs = append(tableIDs, newTableIDFromPath(path))
 	}
-	// TODO: Add dependencies on columns.
-	// But it's difficult to extract column names from the query!
+	// Column names can't be resolved without the table definitions, so every identifier in the query
+	// is treated as a column of every referenced table. Identifiers that aren't columns have no state and are ignored.
+	ast.Inspect(v.node.Query, func(n ast.Node) bool {
+		if ident, ok := n.(*ast.Ident); ok {
+			for _, tableID := range tableIDs {
+				ids = append(ids, newColumnID(tableID, ident))
+			}
+		}
+		return true
+	})
 	return ids
 }
 
