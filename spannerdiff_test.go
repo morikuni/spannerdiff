@@ -229,7 +229,9 @@ func TestDiff(t *testing.T) {
 			  T2_S1 STRING(MAX),
 			) PRIMARY KEY(T2_I1);`,
 			`
-			ALTER TABLE T1 ALTER COLUMN T1_S1 STRING(MAX) NOT NULL;`,
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			ALTER TABLE T1 ALTER COLUMN T1_S1 STRING(MAX) NOT NULL;
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2(T2_S1);`,
 			false,
 		},
 		"change not null of referenced column of foreign key": {
@@ -254,7 +256,9 @@ func TestDiff(t *testing.T) {
 			  T2_S1 STRING(MAX) NOT NULL,
 			) PRIMARY KEY(T2_I1);`,
 			`
-			ALTER TABLE T2 ALTER COLUMN T2_S1 STRING(MAX) NOT NULL;`,
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			ALTER TABLE T2 ALTER COLUMN T2_S1 STRING(MAX) NOT NULL;
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2(T2_S1);`,
 			false,
 		},
 		"change not null of column of unnamed foreign key": {
@@ -278,9 +282,8 @@ func TestDiff(t *testing.T) {
 			  T2_I1 INT64 NOT NULL,
 			  T2_S1 STRING(MAX),
 			) PRIMARY KEY(T2_I1);`,
-			`
-			ALTER TABLE T1 ALTER COLUMN T1_S1 STRING(MAX) NOT NULL;`,
-			false,
+			``,
+			true,
 		},
 		"change type of columns of foreign key": {
 			`
@@ -304,8 +307,10 @@ func TestDiff(t *testing.T) {
 			  T2_S1 BYTES(MAX),
 			) PRIMARY KEY(T2_I1);`,
 			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
 			ALTER TABLE T1 ALTER COLUMN T1_S1 BYTES(MAX);
-			ALTER TABLE T2 ALTER COLUMN T2_S1 BYTES(MAX);`,
+			ALTER TABLE T2 ALTER COLUMN T2_S1 BYTES(MAX);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2(T2_S1);`,
 			false,
 		},
 		"change length of column of foreign key": {
