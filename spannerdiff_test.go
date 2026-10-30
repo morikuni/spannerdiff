@@ -1236,7 +1236,9 @@ func TestDiff(t *testing.T) {
 			  T1_I2 INT64,
 			  T1_G1 INT64 AS (T1_I2 + 1),
 			) PRIMARY KEY(T1_I1);`,
-			``,
+			`
+			ALTER TABLE T1 DROP COLUMN T1_G1;
+			ALTER TABLE T1 ADD COLUMN T1_G1 INT64 AS (T1_I2 + 1);`,
 			false,
 		},
 		"add stored to generated column": {
@@ -1252,7 +1254,9 @@ func TestDiff(t *testing.T) {
 			  T1_I2 INT64,
 			  T1_G1 INT64 AS (T1_I2 + 1) STORED,
 			) PRIMARY KEY(T1_I1);`,
-			``,
+			`
+			ALTER TABLE T1 DROP COLUMN T1_G1;
+			ALTER TABLE T1 ADD COLUMN T1_G1 INT64 AS (T1_I2 + 1) STORED;`,
 			false,
 		},
 		"remove stored from indexed generated column": {
@@ -1270,7 +1274,11 @@ func TestDiff(t *testing.T) {
 			  T1_G1 INT64 AS (T1_I2 + 1),
 			) PRIMARY KEY(T1_I1);
 			CREATE INDEX IDX1 ON T1(T1_G1);`,
-			``,
+			`
+			DROP INDEX IDX1;
+			ALTER TABLE T1 DROP COLUMN T1_G1;
+			ALTER TABLE T1 ADD COLUMN T1_G1 INT64 AS (T1_I2 + 1);
+			CREATE INDEX IDX1 ON T1(T1_G1);`,
 			false,
 		},
 		"hide generated column": {
@@ -1286,7 +1294,9 @@ func TestDiff(t *testing.T) {
 			  T1_I2 INT64,
 			  T1_G1 INT64 AS (T1_I2 + 1) STORED HIDDEN,
 			) PRIMARY KEY(T1_I1);`,
-			``,
+			`
+			ALTER TABLE T1 DROP COLUMN T1_G1;
+			ALTER TABLE T1 ADD COLUMN T1_G1 INT64 AS (T1_I2 + 1) STORED HIDDEN;`,
 			false,
 		},
 		"unhide generated column": {
@@ -1302,7 +1312,9 @@ func TestDiff(t *testing.T) {
 			  T1_I2 INT64,
 			  T1_G1 INT64 AS (T1_I2 + 1) STORED,
 			) PRIMARY KEY(T1_I1);`,
-			``,
+			`
+			ALTER TABLE T1 DROP COLUMN T1_G1;
+			ALTER TABLE T1 ADD COLUMN T1_G1 INT64 AS (T1_I2 + 1) STORED;`,
 			false,
 		},
 		"hide column": {
@@ -1317,7 +1329,7 @@ func TestDiff(t *testing.T) {
 			  T1_S1 STRING(MAX) HIDDEN,
 			) PRIMARY KEY(T1_I1);`,
 			``,
-			false,
+			true,
 		},
 		"unhide column": {
 			`
@@ -1331,7 +1343,7 @@ func TestDiff(t *testing.T) {
 			  T1_S1 STRING(MAX),
 			) PRIMARY KEY(T1_I1);`,
 			``,
-			false,
+			true,
 		},
 		"keep hidden stored generated column": {
 			`

@@ -615,6 +615,17 @@ func (c *column) alter(tgt definition, m *migration) {
 		return
 	}
 
+	if base.node.Hidden.Invalid() != target.node.Hidden.Invalid() {
+		// Spanner can't change HIDDEN of an existing column. A generated column is recreated because its values are
+		// computed from other columns, but recreating other columns loses their data, so it is reported as an error.
+		if isGeneratedColumn(base.node) || isGeneratedColumn(target.node) {
+			base.recreate(target, m)
+			return
+		}
+		m.addError(fmt.Errorf("changing HIDDEN of a column that isn't generated is not supported because the column would be recreated and lose its data: %s", target.id()))
+		return
+	}
+
 	if !equalNode(base.node.Type, target.node.Type) || base.node.NotNull != target.node.NotNull || !equalNode(base.node.DefaultSemantics, target.node.DefaultSemantics) {
 		switch {
 		case isGeneratedColumn(base.node) || isGeneratedColumn(target.node):

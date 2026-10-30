@@ -2,12 +2,12 @@ package spannerdiff
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/cloudspannerecosystem/memefish/ast"
 	"github.com/cloudspannerecosystem/memefish/token"
 	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
 type optional[T any] struct {
@@ -61,9 +61,34 @@ func equalNode(a, b ast.Node) bool {
 	return cmp.Equal(a, b, equalOptions()...)
 }
 
+var posType = reflect.TypeOf(token.Pos(0))
+
+// isPresencePos reports whether the path is a position that memefish uses to record whether a keyword is present.
+// Such a position is valid only when the keyword is written, so it is compared by its validity instead of being ignored.
+func isPresencePos(p cmp.Path) bool {
+	sf, ok := p.Last().(cmp.StructField)
+	if !ok || sf.Type() != posType || len(p) < 2 {
+		return false
+	}
+	switch p.Index(-2).Type() {
+	case reflect.TypeOf(ast.ColumnDef{}):
+		return sf.Name() == "Hidden"
+	case reflect.TypeOf(ast.GeneratedColumnExpr{}):
+		return sf.Name() == "Stored"
+	default:
+		return false
+	}
+}
+
 func equalOptions() []cmp.Option {
 	return []cmp.Option{
-		cmpopts.IgnoreTypes(token.Pos(0)),
+		// Positions do not affect the schema, except the positions that record whether HIDDEN or STORED is written.
+		cmp.FilterPath(func(p cmp.Path) bool {
+			return p.Last().Type() == posType && !isPresencePos(p)
+		}, cmp.Ignore()),
+		cmp.FilterPath(isPresencePos, cmp.Comparer(func(a, b token.Pos) bool {
+			return a.Invalid() == b.Invalid()
+		})),
 		// IF NOT EXISTS and OR REPLACE do not affect the resulting schema.
 		cmp.FilterPath(func(p cmp.Path) bool {
 			sf, ok := p.Last().(cmp.StructField)
