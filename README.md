@@ -104,6 +104,7 @@ Other constraints are added in `CREATE TABLE` when the table is created.
 
 - View DDL generation may be incorrect or out of order due to unresolved column names in the view query.
 - Changes that can't be done by `ALTER` statements are migrated by dropping and recreating the object (e.g. changing the type of a column, or the primary key of a table). This deletes the data in it, so review the generated DDL before applying it.
+- Changing `HIDDEN` of a column fails unless the column is generated, because Spanner can't alter `HIDDEN` and recreating the column would delete its data. A generated column is recreated.
 - An unnamed constraint in the base schema can't be dropped. Spanner names unnamed constraints, so use the schema returned by Spanner (e.g. `gcloud spanner databases ddl describe`) as the base schema.
   However, Spanner may return unnamed foreign keys as `ALTER TABLE ... ADD FOREIGN KEY` without their names. These foreign keys can't be dropped either, except by dropping their table.
 - Dropping tables whose unnamed foreign keys reference each other fails with `dependency cycle detected`, because neither foreign key can be dropped before the tables.
