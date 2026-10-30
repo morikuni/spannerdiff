@@ -191,6 +191,21 @@ func columnTypeOf(a ast.SchemaType) columnType {
 	}
 }
 
+// equalTypesIgnoringLength reports whether two column types are the same type.
+// The length of STRING and BYTES is ignored, because Spanner doesn't treat a change of the length as a change of the type.
+func equalTypesIgnoringLength(a, b ast.SchemaType) bool {
+	switch a := a.(type) {
+	case *ast.SizedSchemaType:
+		b, ok := b.(*ast.SizedSchemaType)
+		return ok && a.Name == b.Name
+	case *ast.ArraySchemaType:
+		b, ok := b.(*ast.ArraySchemaType)
+		return ok && equalTypesIgnoringLength(a.Item, b.Item) && equalNodes(a.NamedArgs, b.NamedArgs)
+	default:
+		return equalNode(a, b)
+	}
+}
+
 type columnType interface {
 	isColumnType()
 }
