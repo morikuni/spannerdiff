@@ -1703,7 +1703,8 @@ func (cs *changeStream) alterFor(target *changeStream, m *migration) []operation
 		if target.node.For == nil {
 			return []operation{newDropPhaseOperation(cs, alter(&ast.ChangeStreamDropForAll{}))}
 		}
-		return []operation{newAddPhaseOperation(target, alter(&ast.ChangeStreamSetFor{For: target.node.For}))}
+		// FOR ALL doesn't prevent tables and columns from being dropped, so it's set before the tables and columns of the base are dropped.
+		return []operation{newDropPhaseOperation(cs, alter(&ast.ChangeStreamSetFor{For: target.node.For}))}
 	}
 	if _, ok := cs.node.For.(*ast.ChangeStreamForTables); !ok {
 		return []operation{newAddPhaseOperation(target, alter(&ast.ChangeStreamSetFor{For: target.node.For}))}
@@ -1776,10 +1777,18 @@ func (cs *changeStream) onDependencyChange(me, dependency migrationState, m *mig
 			}
 
 			// Ideally, we should remove the only recreated columns/tables from the change stream's FOR, then add them again after they are recreated.
-			m.updateState(me.updateKind(migrationKindAlter,
-				newOperation(me.definition(), operationKindDrop, &ast.AlterChangeStream{Name: cs.node.Name, ChangeStreamAlteration: &ast.ChangeStreamDropForAll{}}),
-				newOperation(me.definition(), operationKindAdd, &ast.AlterChangeStream{Name: cs.node.Name, ChangeStreamAlteration: &ast.ChangeStreamSetFor{For: cs.node.For}}),
-			))
+			// These operations replace the ones of alter, so the change stream stops watching all the tables and columns of the base
+			// before they are dropped, and the options are changed in the same way as alter.
+			base := me.base.mustGet().(*changeStream)
+			target := me.target.mustGet().(*changeStream)
+			ops := []operation{
+				newOperation(base, operationKindDrop, &ast.AlterChangeStream{Name: target.node.Name, ChangeStreamAlteration: &ast.ChangeStreamDropForAll{}}),
+				newOperation(target, operationKindAdd, &ast.AlterChangeStream{Name: target.node.Name, ChangeStreamAlteration: &ast.ChangeStreamSetFor{For: target.node.For}}),
+			}
+			if options := diffOptions(base.node.Options, target.node.Options); options != nil {
+				ops = append(ops, newAddPhaseOperation(target, &ast.AlterChangeStream{Name: target.node.Name, ChangeStreamAlteration: &ast.ChangeStreamSetOptions{Options: options}}))
+			}
+			m.updateState(me.updateKind(migrationKindAlter, ops...))
 		}
 	default:
 		panic(fmt.Sprintf("unexpected dependency type on change stream: %T", dep))
