@@ -63,8 +63,8 @@ func equalNode(a, b ast.Node) bool {
 
 var posType = reflect.TypeOf(token.Pos(0))
 
-// isPresencePos reports whether the path is a position that memefish uses to record whether a keyword is present.
-// Such a position is valid only when the keyword is written, so it is compared by its validity instead of being ignored.
+// isPresencePos reports whether the path is a position that memefish uses to record whether a keyword or parentheses are present.
+// Such a position is valid only when they are written, so it is compared by its validity instead of being ignored.
 func isPresencePos(p cmp.Path) bool {
 	sf, ok := p.Last().(cmp.StructField)
 	if !ok || sf.Type() != posType || len(p) < 2 {
@@ -75,6 +75,9 @@ func isPresencePos(p cmp.Path) bool {
 		return sf.Name() == "Hidden"
 	case reflect.TypeOf(ast.GeneratedColumnExpr{}):
 		return sf.Name() == "Stored"
+	case reflect.TypeOf(ast.ChangeStreamForTable{}):
+		// FOR T() tracks only the primary key columns, and FOR T tracks all columns.
+		return sf.Name() == "Rparen"
 	default:
 		return false
 	}
@@ -82,7 +85,8 @@ func isPresencePos(p cmp.Path) bool {
 
 func equalOptions() []cmp.Option {
 	return []cmp.Option{
-		// Positions do not affect the schema, except the positions that record whether HIDDEN or STORED is written.
+		// Positions do not affect the schema, except the positions that record whether HIDDEN or STORED,
+		// or the parentheses of FOR T(), are written.
 		cmp.FilterPath(func(p cmp.Path) bool {
 			return p.Last().Type() == posType && !isPresencePos(p)
 		}, cmp.Ignore()),
