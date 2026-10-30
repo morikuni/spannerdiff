@@ -796,6 +796,15 @@ func (c *column) canAlterGeneratedExpr(target *column, m *migration) bool {
 	if !equalNode(c.node.Type, target.node.Type) || c.node.NotNull != target.node.NotNull {
 		return false
 	}
+	// ALTER COLUMN is executed after drops, so the column is recreated if a column that the base expression references
+	// is dropped or changes, because the column may be dropped and re-added before the expression is altered.
+	for _, id := range columnsInGeneratedColumn(c) {
+		base, inBase := m.baseDefs.all[id]
+		target, inTarget := m.targetDefs.all[id]
+		if inBase && (!inTarget || !equalNode(base.astNode(), target.astNode())) {
+			return false
+		}
+	}
 	for _, def := range m.baseDefs.all {
 		switch def.(type) {
 		case *index, *searchIndex, *vectorIndex:
@@ -827,7 +836,26 @@ func isIdentityColumn(col *ast.ColumnDef) bool {
 }
 
 func (c *column) dependsOn() []identifier {
-	return append([]identifier{c.table.id()}, sequencesInColumn(c.node)...)
+	ids := append([]identifier{c.table.id()}, sequencesInColumn(c.node)...)
+	return append(ids, columnsInGeneratedColumn(c)...)
+}
+
+// columnsInGeneratedColumn returns the columns of the same table that the expression of a generated column references.
+// Identifiers in the expression may not be columns, but it's harmless to depend on non-existent columns.
+func columnsInGeneratedColumn(c *column) []identifier {
+	expr, ok := c.node.DefaultSemantics.(*ast.GeneratedColumnExpr)
+	if !ok {
+		return nil
+	}
+	var ids []identifier
+	ast.Inspect(expr.Expr, func(n ast.Node) bool {
+		// A column must not depend on itself, because a change of a dependency is propagated to its dependents.
+		if ident, ok := n.(*ast.Ident); ok && nameOf(ident) != nameOf(c.node.Name) {
+			ids = append(ids, newColumnID(c.table.tableID(), ident))
+		}
+		return true
+	})
+	return ids
 }
 
 // sequencesInColumn returns sequences used by GET_NEXT_SEQUENCE_VALUE in the default value of the column.
@@ -862,6 +890,26 @@ func (c *column) onDependencyChange(me, dependency migrationState, m *migration)
 		}
 	case *sequence:
 		// The sequence is only used for ordering operations.
+	case *column:
+		// Spanner can't drop a column or change its type while a generated column references it,
+		// so the generated column is dropped before the change and added again after it.
+		if !me.base.valid || !me.target.valid || me.kind == migrationKindNone || me.kind == migrationKindDropAndAdd {
+			return
+		}
+		switch dependency.kind {
+		case migrationKindDropAndAdd:
+		case migrationKindAlter:
+			if equalTypesIgnoringLength(dep.node.Type, dependency.base.mustGet().(*column).node.Type) {
+				return
+			}
+		default:
+			return
+		}
+		if c.isPrimaryKey() {
+			c.recreate(me.target.mustGet().(*column), m)
+			return
+		}
+		m.updateState(me.updateKind(migrationKindDropAndAdd))
 	default:
 		panic(fmt.Sprintf("unexpected dependency type on column: %T", dep))
 	}

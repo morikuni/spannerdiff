@@ -1235,8 +1235,8 @@ func TestDiff(t *testing.T) {
 			  T1_B1 BOOL AS (T1_S1 IS NOT NULL) STORED,
 			) PRIMARY KEY(T1_I1);`,
 			`
-			ALTER TABLE T1 ADD COLUMN T1_B1 BOOL AS (T1_S1 IS NOT NULL) STORED;
-			ALTER TABLE T1 ADD COLUMN T1_S1 STRING(MAX);`,
+			ALTER TABLE T1 ADD COLUMN T1_S1 STRING(MAX);
+			ALTER TABLE T1 ADD COLUMN T1_B1 BOOL AS (T1_S1 IS NOT NULL) STORED;`,
 			false,
 		},
 		"drop generated column and column it references": {
@@ -1252,9 +1252,9 @@ func TestDiff(t *testing.T) {
 			  T1_I1 INT64 NOT NULL,
 			) PRIMARY KEY(T1_I1);`,
 			`
-			ALTER TABLE T1 DROP COLUMN T1_S1;
 			DROP INDEX IDX1;
-			ALTER TABLE T1 DROP COLUMN T1_B1;`,
+			ALTER TABLE T1 DROP COLUMN T1_B1;
+			ALTER TABLE T1 DROP COLUMN T1_S1;`,
 			false,
 		},
 		"change type of column referenced by generated column": {
@@ -1271,7 +1271,9 @@ func TestDiff(t *testing.T) {
 			  T1_B1 BOOL AS (T1_S1 IS NOT NULL) STORED,
 			) PRIMARY KEY(T1_I1);`,
 			`
-			ALTER TABLE T1 ALTER COLUMN T1_S1 BYTES(MAX);`,
+			ALTER TABLE T1 DROP COLUMN T1_B1;
+			ALTER TABLE T1 ALTER COLUMN T1_S1 BYTES(MAX);
+			ALTER TABLE T1 ADD COLUMN T1_B1 BOOL AS (T1_S1 IS NOT NULL) STORED;`,
 			false,
 		},
 		"recreate column referenced by generated column": {
@@ -1288,8 +1290,10 @@ func TestDiff(t *testing.T) {
 			  T1_B1 BOOL AS (T1_S1 IS NOT NULL) STORED,
 			) PRIMARY KEY(T1_I1);`,
 			`
+			ALTER TABLE T1 DROP COLUMN T1_B1;
 			ALTER TABLE T1 DROP COLUMN T1_S1;
-			ALTER TABLE T1 ADD COLUMN T1_S1 INT64;`,
+			ALTER TABLE T1 ADD COLUMN T1_S1 INT64;
+			ALTER TABLE T1 ADD COLUMN T1_B1 BOOL AS (T1_S1 IS NOT NULL) STORED;`,
 			false,
 		},
 		"drop column that non-stored generated column stops referencing": {
@@ -1307,8 +1311,9 @@ func TestDiff(t *testing.T) {
 			  T1_B1 BOOL AS (T1_S2 IS NOT NULL),
 			) PRIMARY KEY(T1_I1);`,
 			`
+			ALTER TABLE T1 DROP COLUMN T1_B1;
 			ALTER TABLE T1 DROP COLUMN T1_S1;
-			ALTER TABLE T1 ALTER COLUMN T1_B1 BOOL AS (T1_S2 IS NOT NULL);`,
+			ALTER TABLE T1 ADD COLUMN T1_B1 BOOL AS (T1_S2 IS NOT NULL);`,
 			false,
 		},
 		"recreate column that non-stored generated column stops referencing": {
@@ -1327,8 +1332,9 @@ func TestDiff(t *testing.T) {
 			  T1_B1 BOOL AS (T1_S2 IS NOT NULL),
 			) PRIMARY KEY(T1_I1);`,
 			`
+			ALTER TABLE T1 DROP COLUMN T1_B1;
 			ALTER TABLE T1 DROP COLUMN T1_S1;
-			ALTER TABLE T1 ALTER COLUMN T1_B1 BOOL AS (T1_S2 IS NOT NULL);
+			ALTER TABLE T1 ADD COLUMN T1_B1 BOOL AS (T1_S2 IS NOT NULL);
 			ALTER TABLE T1 ADD COLUMN T1_S1 INT64;`,
 			false,
 		},
