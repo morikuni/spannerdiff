@@ -1110,8 +1110,8 @@ func TestDiff(t *testing.T) {
 			  T1_T1 TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp = true),
 			) PRIMARY KEY(T1_I1);`,
 			`
-			ALTER TABLE T1 ALTER COLUMN T1_T1 SET OPTIONS (allow_commit_timestamp = true);
-			ALTER TABLE T1 ALTER COLUMN T1_T1 DROP DEFAULT;`,
+			ALTER TABLE T1 ALTER COLUMN T1_T1 DROP DEFAULT;
+			ALTER TABLE T1 ALTER COLUMN T1_T1 SET OPTIONS (allow_commit_timestamp = true);`,
 			false,
 		},
 		"disallow commit timestamp and set default value": {
@@ -1142,6 +1142,7 @@ func TestDiff(t *testing.T) {
 			  T1_T1 TIMESTAMP DEFAULT (PENDING_COMMIT_TIMESTAMP()) OPTIONS (allow_commit_timestamp = true),
 			) PRIMARY KEY(T1_I1);`,
 			`
+			ALTER TABLE T1 ALTER COLUMN T1_T1 DROP DEFAULT;
 			ALTER TABLE T1 ALTER COLUMN T1_T1 SET OPTIONS (allow_commit_timestamp = true);
 			ALTER TABLE T1 ALTER COLUMN T1_T1 SET DEFAULT (PENDING_COMMIT_TIMESTAMP());`,
 			false,
@@ -1158,8 +1159,8 @@ func TestDiff(t *testing.T) {
 			  T1_T1 TIMESTAMP,
 			) PRIMARY KEY(T1_I1);`,
 			`
-			ALTER TABLE T1 ALTER COLUMN T1_T1 SET OPTIONS (allow_commit_timestamp = null);
-			ALTER TABLE T1 ALTER COLUMN T1_T1 DROP DEFAULT;`,
+			ALTER TABLE T1 ALTER COLUMN T1_T1 DROP DEFAULT;
+			ALTER TABLE T1 ALTER COLUMN T1_T1 SET OPTIONS (allow_commit_timestamp = null);`,
 			false,
 		},
 		"allow commit timestamp and add not null to column with default value": {
@@ -1174,9 +1175,9 @@ func TestDiff(t *testing.T) {
 			  T1_T1 TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp = true),
 			) PRIMARY KEY(T1_I1);`,
 			`
-			ALTER TABLE T1 ALTER COLUMN T1_T1 TIMESTAMP NOT NULL;
+			ALTER TABLE T1 ALTER COLUMN T1_T1 DROP DEFAULT;
 			ALTER TABLE T1 ALTER COLUMN T1_T1 SET OPTIONS (allow_commit_timestamp = true);
-			ALTER TABLE T1 ALTER COLUMN T1_T1 DROP DEFAULT;`,
+			ALTER TABLE T1 ALTER COLUMN T1_T1 TIMESTAMP NOT NULL;`,
 			false,
 		},
 		"disallow commit timestamp and add not null with default value": {
@@ -1191,8 +1192,8 @@ func TestDiff(t *testing.T) {
 			  T1_T1 TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP()),
 			) PRIMARY KEY(T1_I1);`,
 			`
-			ALTER TABLE T1 ALTER COLUMN T1_T1 TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP());
-			ALTER TABLE T1 ALTER COLUMN T1_T1 SET OPTIONS (allow_commit_timestamp = null);`,
+			ALTER TABLE T1 ALTER COLUMN T1_T1 SET OPTIONS (allow_commit_timestamp = null);
+			ALTER TABLE T1 ALTER COLUMN T1_T1 TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP());`,
 			false,
 		},
 		"drop default value and set allow_commit_timestamp to false": {

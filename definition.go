@@ -636,18 +636,18 @@ func (c *column) alter(tgt definition, m *migration) {
 	}
 
 	if equalNode(base.node.Type, target.node.Type) {
-		var ddls []ast.DDL
+		var notNullDDLs, optionsDDLs []ast.DDL
 		var defaultSet bool
 		if base.node.NotNull != target.node.NotNull {
 			// We don't set default values for columns that will be NOT NULL from NULL-able.
 			if target.node.DefaultSemantics == nil {
-				ddls = append(ddls, &ast.AlterTable{Name: target.table.node.Name, TableAlteration: &ast.AlterColumn{Name: target.node.Name, Alteration: &ast.AlterColumnType{
+				notNullDDLs = append(notNullDDLs, &ast.AlterTable{Name: target.table.node.Name, TableAlteration: &ast.AlterColumn{Name: target.node.Name, Alteration: &ast.AlterColumnType{
 					Type:    target.node.Type,
 					NotNull: target.node.NotNull,
 				}}})
 			} else if defaultExpr, ok := target.node.DefaultSemantics.(*ast.ColumnDefaultExpr); ok {
 				defaultSet = true
-				ddls = append(ddls, &ast.AlterTable{Name: target.table.node.Name, TableAlteration: &ast.AlterColumn{Name: target.node.Name, Alteration: &ast.AlterColumnType{
+				notNullDDLs = append(notNullDDLs, &ast.AlterTable{Name: target.table.node.Name, TableAlteration: &ast.AlterColumn{Name: target.node.Name, Alteration: &ast.AlterColumnType{
 					Type:        target.node.Type,
 					NotNull:     target.node.NotNull,
 					DefaultExpr: defaultExpr,
@@ -656,14 +656,39 @@ func (c *column) alter(tgt definition, m *migration) {
 		}
 
 		if options := diffOptions(base.node.Options, target.node.Options); options != nil {
-			ddls = append(ddls, &ast.AlterTable{Name: target.table.node.Name, TableAlteration: &ast.AlterColumn{Name: target.node.Name, Alteration: &ast.AlterColumnSetOptions{Options: options}}})
+			optionsDDLs = append(optionsDDLs, &ast.AlterTable{Name: target.table.node.Name, TableAlteration: &ast.AlterColumn{Name: target.node.Name, Alteration: &ast.AlterColumnSetOptions{Options: options}}})
 		}
 
-		if !defaultSet && !equalNode(base.node.DefaultSemantics, target.node.DefaultSemantics) {
-			if target.node.DefaultSemantics == nil {
-				ddls = append(ddls, &ast.AlterTable{Name: target.table.node.Name, TableAlteration: &ast.AlterColumn{Name: target.node.Name, Alteration: &ast.AlterColumnDropDefault{}}})
-			} else if defaultExpr, ok := target.node.DefaultSemantics.(*ast.ColumnDefaultExpr); ok {
-				ddls = append(ddls, &ast.AlterTable{Name: target.table.node.Name, TableAlteration: &ast.AlterColumn{Name: target.node.Name, Alteration: &ast.AlterColumnSetDefault{DefaultExpr: defaultExpr}}})
+		dropDefault := &ast.AlterTable{Name: target.table.node.Name, TableAlteration: &ast.AlterColumn{Name: target.node.Name, Alteration: &ast.AlterColumnDropDefault{}}}
+		var setDefault ast.DDL
+		if defaultExpr, ok := target.node.DefaultSemantics.(*ast.ColumnDefaultExpr); ok {
+			setDefault = &ast.AlterTable{Name: target.table.node.Name, TableAlteration: &ast.AlterColumn{Name: target.node.Name, Alteration: &ast.AlterColumnSetDefault{DefaultExpr: defaultExpr}}}
+		}
+		defaultChanged := !defaultSet && !equalNode(base.node.DefaultSemantics, target.node.DefaultSemantics)
+
+		var ddls []ast.DDL
+		if allowsCommitTimestamp(base.node) == allowsCommitTimestamp(target.node) {
+			ddls = append(ddls, notNullDDLs...)
+			ddls = append(ddls, optionsDDLs...)
+			if defaultChanged {
+				if target.node.DefaultSemantics == nil {
+					ddls = append(ddls, dropDefault)
+				} else if setDefault != nil {
+					ddls = append(ddls, setDefault)
+				}
+			}
+		} else {
+			// Spanner rejects a column that allows commit timestamps with a default value other than PENDING_COMMIT_TIMESTAMP(),
+			// and PENDING_COMMIT_TIMESTAMP() as the default value of a column that doesn't allow commit timestamps.
+			// So the default value of the base is dropped before allow_commit_timestamp changes,
+			// and the default value of the target is set after it, including by the NOT NULL alteration.
+			if base.node.DefaultSemantics != nil && !equalNode(base.node.DefaultSemantics, target.node.DefaultSemantics) {
+				ddls = append(ddls, dropDefault)
+			}
+			ddls = append(ddls, optionsDDLs...)
+			ddls = append(ddls, notNullDDLs...)
+			if defaultChanged && setDefault != nil {
+				ddls = append(ddls, setDefault)
 			}
 		}
 		m.updateStateIfUndefined(newAlterState(base, target, ddls...))
@@ -824,6 +849,20 @@ func isIdentityColumn(col *ast.ColumnDef) bool {
 	default:
 		return false
 	}
+}
+
+// allowsCommitTimestamp reports whether the column has allow_commit_timestamp = true in its options.
+func allowsCommitTimestamp(col *ast.ColumnDef) bool {
+	if col.Options == nil {
+		return false
+	}
+	for _, r := range col.Options.Records {
+		if nameOf(r.Name) == "allow_commit_timestamp" {
+			b, ok := r.Value.(*ast.BoolLiteral)
+			return ok && b.Value
+		}
+	}
+	return false
 }
 
 func (c *column) dependsOn() []identifier {
