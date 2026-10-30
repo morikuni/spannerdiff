@@ -2047,6 +2047,73 @@ func TestDiff(t *testing.T) {
 			DROP TABLE T1;`,
 			false,
 		},
+		"track only primary key columns in change stream": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE CHANGE STREAM CS1 FOR T1;`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE CHANGE STREAM CS1 FOR T1();`,
+			`
+			ALTER CHANGE STREAM CS1 SET FOR T1();`,
+			false,
+		},
+		"track all columns instead of only primary key columns in change stream": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE CHANGE STREAM CS1 FOR T1();`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE CHANGE STREAM CS1 FOR T1;`,
+			`
+			ALTER CHANGE STREAM CS1 SET FOR T1;`,
+			false,
+		},
+		"track only primary key columns instead of dropped column in change stream": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE CHANGE STREAM CS1 FOR T1(T1_I2);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);
+			CREATE CHANGE STREAM CS1 FOR T1();`,
+			`
+			ALTER CHANGE STREAM CS1 SET FOR T1();
+			ALTER TABLE T1 DROP COLUMN T1_I2;`,
+			false,
+		},
+		"keep tracking only primary key columns in change stream": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE CHANGE STREAM CS1 FOR T1();`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE CHANGE STREAM CS1 FOR T1();`,
+			``,
+			false,
+		},
 		"add sequence": {
 			``,
 			`

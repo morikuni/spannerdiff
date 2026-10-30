@@ -123,6 +123,14 @@ func equalOptions() []cmp.Option {
 			}
 			return cmp.Equal(aVal, bVal, equalOptions()...)
 		}),
+		// FOR T() tracks only the primary key columns, and FOR T tracks all columns.
+		// The parentheses are kept only as the position of ")", which is ignored above.
+		cmp.Comparer(func(a, b *ast.ChangeStreamForTable) bool {
+			if a == nil || b == nil {
+				return a == b
+			}
+			return a.Rparen.Invalid() == b.Rparen.Invalid() && cmp.Equal(*a, *b, equalOptions()...)
+		}),
 	}
 }
 
