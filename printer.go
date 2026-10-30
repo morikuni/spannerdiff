@@ -80,21 +80,26 @@ func NewColorMode(s string) (ColorMode, bool) {
 	}
 }
 
-func DetectTerminalPrinter(mode ColorMode, stdout *os.File) Printer {
-	var p Printer
+func DetectColor(mode ColorMode, out io.Writer) bool {
 	switch mode {
 	case ColorAlways:
-		p = NewColorTerminalPrinter()
+		return true
 	case ColorNever:
-		p = NoStylePrinter{}
+		return false
 	case ColorAuto:
-		if isatty.IsTerminal(stdout.Fd()) {
-			p = NewColorTerminalPrinter()
-		} else {
-			p = NoStylePrinter{}
-		}
+		f, ok := out.(*os.File)
+		return ok && isatty.IsTerminal(f.Fd())
 	default:
 		panic(fmt.Sprintf("unexpected color mode: %s", mode))
+	}
+}
+
+func DetectTerminalPrinter(mode ColorMode, stdout *os.File) Printer {
+	var p Printer
+	if DetectColor(mode, stdout) {
+		p = NewColorTerminalPrinter()
+	} else {
+		p = NoStylePrinter{}
 	}
 	return WithSpacer("\n", p)
 }

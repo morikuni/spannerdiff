@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -38,6 +39,16 @@ func TestRealMain(t *testing.T) {
 			stdin:      "CREATE SCHEMA S1",
 			wantCode:   0,
 			wantStdout: "DROP SCHEMA S1;\n",
+		},
+		"help": {
+			args:       []string{"--help"},
+			wantCode:   0,
+			wantStderr: "Usage:",
+		},
+		"unknown flag": {
+			args:       []string{"--foo"},
+			wantCode:   2,
+			wantStderr: "unknown flag: --foo",
 		},
 		"invalid color": {
 			args:       []string{"--color", "foo"},
@@ -84,6 +95,11 @@ func TestRealMain(t *testing.T) {
 			wantCode:   1,
 			wantStderr: "failed to parse target SQL",
 		},
+		"color always": {
+			args:       []string{"--color", "always", "--target", "CREATE"},
+			wantCode:   1,
+			wantStderr: "\x1b[31mfailed to parse target SQL",
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			stdout, err := os.CreateTemp(t.TempDir(), "stdout")
@@ -112,6 +128,9 @@ func TestRealMain(t *testing.T) {
 			}
 			if !strings.Contains(stderr.String(), tt.wantStderr) {
 				t.Errorf("want stderr to contain %q, got %q", tt.wantStderr, stderr.String())
+			}
+			if !slices.Contains(tt.args, "--color") && strings.Contains(stderr.String(), "\x1b[") {
+				t.Errorf("want stderr not to contain escape sequences, got %q", stderr.String())
 			}
 		})
 	}
