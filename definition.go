@@ -1181,8 +1181,15 @@ func (i *index) alter(tgt definition, m *migration) {
 
 func (i *index) dependsOn() []identifier {
 	var ids []identifier
-	for _, col := range i.node.Keys {
-		ids = append(ids, newColumnID(newTableIDFromPath(i.node.TableName), col.Name))
+	for _, key := range i.node.Keys {
+		// A key is a column name or an expression.
+		// Identifiers in the expression may not be columns, but it's harmless to depend on non-existent columns.
+		ast.Inspect(key, func(n ast.Node) bool {
+			if ident, ok := n.(*ast.Ident); ok {
+				ids = append(ids, newColumnID(newTableIDFromPath(i.node.TableName), ident))
+			}
+			return true
+		})
 	}
 	if i.node.Storing != nil {
 		for _, col := range i.node.Storing.Columns {
