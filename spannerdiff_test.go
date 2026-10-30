@@ -1418,6 +1418,68 @@ func TestDiff(t *testing.T) {
 			ALTER TABLE T1 DROP COLUMN T1_S2;`,
 			false,
 		},
+		"add expression index": {
+			``,
+			`
+			CREATE INDEX IDX1 ON T1(T1_I1, (T1_S1 != ''))`,
+			`
+			CREATE INDEX IDX1 ON T1(T1_I1, (T1_S1 != ""));`,
+			false,
+		},
+		"drop expression index": {
+			`
+			CREATE INDEX IDX1 ON T1(T1_I1, (T1_S1 != ''))`,
+			``,
+			`
+			DROP INDEX IDX1;`,
+			false,
+		},
+		"recreate expression index": {
+			`
+			CREATE INDEX IDX1 ON T1(T1_I1, (T1_S1 != ''))`,
+			`
+			CREATE INDEX IDX1 ON T1(T1_I1, (T1_S1 = ''))`,
+			`
+			DROP INDEX IDX1;
+			CREATE INDEX IDX1 ON T1(T1_I1, (T1_S1 = ""));`,
+			false,
+		},
+		"recreate expression index on recreated column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE INDEX IDX1 ON T1((T1_I2 IS NULL));`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 STRING(MAX),
+			) PRIMARY KEY(T1_I1);
+			CREATE INDEX IDX1 ON T1((T1_I2 IS NULL));`,
+			`
+			DROP INDEX IDX1;
+			ALTER TABLE T1 DROP COLUMN T1_I2;
+			ALTER TABLE T1 ADD COLUMN T1_I2 STRING(MAX);
+			CREATE INDEX IDX1 ON T1((T1_I2 IS NULL));`,
+			false,
+		},
+		"drop expression index before column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			) PRIMARY KEY(T1_I1);
+			CREATE INDEX IDX1 ON T1((T1_S1 != ''));`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			DROP INDEX IDX1;
+			ALTER TABLE T1 DROP COLUMN T1_S1;`,
+			false,
+		},
 		"add search index": {
 			``,
 			`
@@ -2655,6 +2717,7 @@ func TestDiff(t *testing.T) {
 			  SYNONYM(S1),
 			) PRIMARY KEY(T1_I1);
 			CREATE INDEX IDX1 ON T1(T1_S1) STORING (T1_I1);
+			CREATE INDEX IDX2 ON T1((T1_S1 != ''));
 			CREATE VIEW V1 SQL SECURITY INVOKER AS SELECT T1.T1_I1 FROM T1;
 			CREATE QUEUE Q1 (
 			  T1_I1 INT64 NOT NULL,
@@ -2669,6 +2732,7 @@ func TestDiff(t *testing.T) {
 			  synonym(s1),
 			) primary key(t1_i1);
 			create index idx1 on t1(t1_s1) storing (t1_i1);
+			create index idx2 on t1((t1_s1 != ''));
 			create view v1 sql security invoker as select t1.t1_i1 from t1;
 			create queue q1 (
 			  t1_i1 int64 not null,
