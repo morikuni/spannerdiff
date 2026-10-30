@@ -1223,6 +1223,132 @@ func TestDiff(t *testing.T) {
 			ALTER TABLE T1 ADD COLUMN T1_G1 INT64 NOT NULL AS (T1_I2 + 1) STORED;`,
 			false,
 		},
+		"remove stored from generated column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			  T1_G1 INT64 AS (T1_I2 + 1) STORED,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			  T1_G1 INT64 AS (T1_I2 + 1),
+			) PRIMARY KEY(T1_I1);`,
+			``,
+			false,
+		},
+		"add stored to generated column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			  T1_G1 INT64 AS (T1_I2 + 1),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			  T1_G1 INT64 AS (T1_I2 + 1) STORED,
+			) PRIMARY KEY(T1_I1);`,
+			``,
+			false,
+		},
+		"remove stored from indexed generated column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			  T1_G1 INT64 AS (T1_I2 + 1) STORED,
+			) PRIMARY KEY(T1_I1);
+			CREATE INDEX IDX1 ON T1(T1_G1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			  T1_G1 INT64 AS (T1_I2 + 1),
+			) PRIMARY KEY(T1_I1);
+			CREATE INDEX IDX1 ON T1(T1_G1);`,
+			``,
+			false,
+		},
+		"hide generated column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			  T1_G1 INT64 AS (T1_I2 + 1) STORED,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			  T1_G1 INT64 AS (T1_I2 + 1) STORED HIDDEN,
+			) PRIMARY KEY(T1_I1);`,
+			``,
+			false,
+		},
+		"unhide generated column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			  T1_G1 INT64 AS (T1_I2 + 1) STORED HIDDEN,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			  T1_G1 INT64 AS (T1_I2 + 1) STORED,
+			) PRIMARY KEY(T1_I1);`,
+			``,
+			false,
+		},
+		"hide column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX) HIDDEN,
+			) PRIMARY KEY(T1_I1);`,
+			``,
+			false,
+		},
+		"unhide column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX) HIDDEN,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			) PRIMARY KEY(T1_I1);`,
+			``,
+			false,
+		},
+		"keep hidden stored generated column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			  T1_G1 INT64 AS (T1_I2 + 1) STORED HIDDEN,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  t1_i1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			  T1_G1 INT64 AS (T1_I2 + 1) STORED HIDDEN,
+			) PRIMARY KEY(T1_I1);`,
+			``,
+			false,
+		},
 		"error on converting column to identity column": {
 			`
 			CREATE TABLE T1 (
