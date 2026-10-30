@@ -1962,7 +1962,8 @@ func TestDiff(t *testing.T) {
 			  T1_I2 INT64,
 			) PRIMARY KEY(T1_I1);
 			CREATE CHANGE STREAM CS1 FOR T1();`,
-			``,
+			`
+			ALTER CHANGE STREAM CS1 SET FOR T1();`,
 			false,
 		},
 		"track all columns instead of only primary key columns in change stream": {
@@ -1978,7 +1979,8 @@ func TestDiff(t *testing.T) {
 			  T1_I2 INT64,
 			) PRIMARY KEY(T1_I1);
 			CREATE CHANGE STREAM CS1 FOR T1;`,
-			``,
+			`
+			ALTER CHANGE STREAM CS1 SET FOR T1;`,
 			false,
 		},
 		"track only primary key columns instead of dropped column in change stream": {
