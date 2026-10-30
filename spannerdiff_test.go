@@ -1098,6 +1098,134 @@ func TestDiff(t *testing.T) {
 			ALTER TABLE T1 ALTER COLUMN T1_T1 SET OPTIONS (allow_commit_timestamp = null);`,
 			false,
 		},
+		"allow commit timestamp on column with default value": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP()),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp = true),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 ALTER COLUMN T1_T1 SET OPTIONS (allow_commit_timestamp = true);
+			ALTER TABLE T1 ALTER COLUMN T1_T1 DROP DEFAULT;`,
+			false,
+		},
+		"disallow commit timestamp and set default value": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp = true),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP()),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 ALTER COLUMN T1_T1 SET OPTIONS (allow_commit_timestamp = null);
+			ALTER TABLE T1 ALTER COLUMN T1_T1 SET DEFAULT (CURRENT_TIMESTAMP());`,
+			false,
+		},
+		"allow commit timestamp and change default value to pending commit timestamp": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP DEFAULT (CURRENT_TIMESTAMP()),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP DEFAULT (PENDING_COMMIT_TIMESTAMP()) OPTIONS (allow_commit_timestamp = true),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 ALTER COLUMN T1_T1 SET OPTIONS (allow_commit_timestamp = true);
+			ALTER TABLE T1 ALTER COLUMN T1_T1 SET DEFAULT (PENDING_COMMIT_TIMESTAMP());`,
+			false,
+		},
+		"disallow commit timestamp and drop pending commit timestamp default value": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP DEFAULT (PENDING_COMMIT_TIMESTAMP()) OPTIONS (allow_commit_timestamp = true),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 ALTER COLUMN T1_T1 SET OPTIONS (allow_commit_timestamp = null);
+			ALTER TABLE T1 ALTER COLUMN T1_T1 DROP DEFAULT;`,
+			false,
+		},
+		"allow commit timestamp and add not null to column with default value": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP DEFAULT (CURRENT_TIMESTAMP()),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp = true),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 ALTER COLUMN T1_T1 TIMESTAMP NOT NULL;
+			ALTER TABLE T1 ALTER COLUMN T1_T1 SET OPTIONS (allow_commit_timestamp = true);
+			ALTER TABLE T1 ALTER COLUMN T1_T1 DROP DEFAULT;`,
+			false,
+		},
+		"disallow commit timestamp and add not null with default value": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP OPTIONS (allow_commit_timestamp = true),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP()),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 ALTER COLUMN T1_T1 TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP());
+			ALTER TABLE T1 ALTER COLUMN T1_T1 SET OPTIONS (allow_commit_timestamp = null);`,
+			false,
+		},
+		"drop default value and set allow_commit_timestamp to false": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP DEFAULT (CURRENT_TIMESTAMP()),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP OPTIONS (allow_commit_timestamp = false),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 ALTER COLUMN T1_T1 SET OPTIONS (allow_commit_timestamp = false);
+			ALTER TABLE T1 ALTER COLUMN T1_T1 DROP DEFAULT;`,
+			false,
+		},
+		"change default value and add not null": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX) DEFAULT ('a'),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX) NOT NULL DEFAULT ('b'),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 ALTER COLUMN T1_S1 STRING(MAX) NOT NULL DEFAULT ('b');`,
+			false,
+		},
 		"recreate column": {
 			`
 			CREATE TABLE T1 (
