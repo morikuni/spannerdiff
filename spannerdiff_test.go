@@ -1146,8 +1146,7 @@ func TestDiff(t *testing.T) {
 			  T1_A1 ARRAY<BYTES(MAX)>,
 			) PRIMARY KEY(T1_I1)`,
 			`
-			ALTER TABLE T1 DROP COLUMN T1_A1;
-			ALTER TABLE T1 ADD COLUMN T1_A1 ARRAY<BYTES(MAX)>;`,
+			ALTER TABLE T1 ALTER COLUMN T1_A1 ARRAY<BYTES(MAX)>;`,
 			false,
 		},
 		"change element type of array column from bytes to string": {
@@ -1162,8 +1161,7 @@ func TestDiff(t *testing.T) {
 			  T1_A1 ARRAY<STRING(MAX)>,
 			) PRIMARY KEY(T1_I1)`,
 			`
-			ALTER TABLE T1 DROP COLUMN T1_A1;
-			ALTER TABLE T1 ADD COLUMN T1_A1 ARRAY<STRING(MAX)>;`,
+			ALTER TABLE T1 ALTER COLUMN T1_A1 ARRAY<STRING(MAX)>;`,
 			false,
 		},
 		"change element type and length of array column": {
@@ -1178,8 +1176,7 @@ func TestDiff(t *testing.T) {
 			  T1_A1 ARRAY<BYTES(MAX)>,
 			) PRIMARY KEY(T1_I1)`,
 			`
-			ALTER TABLE T1 DROP COLUMN T1_A1;
-			ALTER TABLE T1 ADD COLUMN T1_A1 ARRAY<BYTES(MAX)>;`,
+			ALTER TABLE T1 ALTER COLUMN T1_A1 ARRAY<BYTES(MAX)>;`,
 			false,
 		},
 		"change element type of not null array column with default": {
@@ -1194,8 +1191,7 @@ func TestDiff(t *testing.T) {
 			  T1_A1 ARRAY<BYTES(MAX)> NOT NULL DEFAULT ([]),
 			) PRIMARY KEY(T1_I1)`,
 			`
-			ALTER TABLE T1 DROP COLUMN T1_A1;
-			ALTER TABLE T1 ADD COLUMN T1_A1 ARRAY<BYTES(MAX)> NOT NULL DEFAULT ([]);`,
+			ALTER TABLE T1 ALTER COLUMN T1_A1 ARRAY<BYTES(MAX)> NOT NULL DEFAULT ([]);`,
 			false,
 		},
 		"change element type of not null array column": {
@@ -1209,8 +1205,9 @@ func TestDiff(t *testing.T) {
 			  T1_I1 INT64 NOT NULL,
 			  T1_A1 ARRAY<BYTES(MAX)> NOT NULL,
 			) PRIMARY KEY(T1_I1)`,
-			``,
-			true,
+			`
+			ALTER TABLE T1 ALTER COLUMN T1_A1 ARRAY<BYTES(MAX)> NOT NULL;`,
+			false,
 		},
 		"change element type of array columns between proto and bytes": {
 			`
@@ -1226,10 +1223,8 @@ func TestDiff(t *testing.T) {
 			  T1_A2 ARRAY<examples.Message>,
 			) PRIMARY KEY(T1_I1)`,
 			`
-			ALTER TABLE T1 DROP COLUMN T1_A2;
-			ALTER TABLE T1 DROP COLUMN T1_A1;
-			ALTER TABLE T1 ADD COLUMN T1_A1 ARRAY<BYTES(MAX)>;
-			ALTER TABLE T1 ADD COLUMN T1_A2 ARRAY<examples.Message>;`,
+			ALTER TABLE T1 ALTER COLUMN T1_A1 ARRAY<BYTES(MAX)>;
+			ALTER TABLE T1 ALTER COLUMN T1_A2 ARRAY<examples.Message>;`,
 			false,
 		},
 		"change element type of array column to int64": {
@@ -4170,9 +4165,7 @@ func TestDiffZeroDefaultForNotNullColumns(t *testing.T) {
 			  T1_A1 ARRAY<BYTES(MAX)> NOT NULL,
 			) PRIMARY KEY(T1_I1)`,
 			`
-			ALTER TABLE T1 DROP COLUMN T1_A1;
-			ALTER TABLE T1 ADD COLUMN T1_A1 ARRAY<BYTES(MAX)> NOT NULL DEFAULT (ARRAY[]);
-			ALTER TABLE T1 ALTER COLUMN T1_A1 DROP DEFAULT;`,
+			ALTER TABLE T1 ALTER COLUMN T1_A1 ARRAY<BYTES(MAX)> NOT NULL;`,
 			false,
 		},
 	} {
