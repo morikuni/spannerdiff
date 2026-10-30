@@ -47,6 +47,17 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 	rootFlags.AddFlagSet(baseFlags)
 	rootFlags.AddFlagSet(targetFlags)
 
+	colorize := func(ansi aec.ANSI, s string) string {
+		cm, ok := spannerdiff.NewColorMode(*color)
+		if !ok {
+			cm = spannerdiff.ColorAuto
+		}
+		if !spannerdiff.DetectColor(cm, stderr) {
+			return s
+		}
+		return ansi.Apply(s)
+	}
+
 	rootFlags.Usage = func() {
 		_, _ = fmt.Fprintf(stderr, `%s:
       spannerdiff [flags] [base-flags] [target-flags]
@@ -61,14 +72,14 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
       > $ spannerdiff --base "CREATE TABLE t1 (c1 INT64) PRIMARY KEY(c1)" --target "CREATE TABLE t1 (c1 INT64, c2 INT64) PRIMARY KEY (c1)"
       > ALTER TABLE t1 ADD COLUMN c2 INT64;
 `,
-			aec.Bold.Apply("Usage"),
-			aec.Bold.Apply("Flags"),
+			colorize(aec.Bold, "Usage"),
+			colorize(aec.Bold, "Flags"),
 			globalFlags.FlagUsages(),
-			aec.Bold.Apply("Base Flags"),
+			colorize(aec.Bold, "Base Flags"),
 			baseFlags.FlagUsages(),
-			aec.Bold.Apply("Target Flags"),
+			colorize(aec.Bold, "Target Flags"),
 			targetFlags.FlagUsages(),
-			aec.Bold.Apply("Example"),
+			colorize(aec.Bold, "Example"),
 		)
 	}
 
@@ -76,7 +87,7 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 		if errors.Is(err, pflag.ErrHelp) {
 			return 0
 		}
-		_, _ = fmt.Fprintln(stderr, aec.RedF.Apply(err.Error()))
+		_, _ = fmt.Fprintln(stderr, colorize(aec.RedF, err.Error()))
 		return 2
 	}
 
@@ -86,7 +97,7 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 	}
 
 	usageError := func(msg string) int {
-		_, _ = fmt.Fprintln(stderr, aec.RedF.Apply(msg))
+		_, _ = fmt.Fprintln(stderr, colorize(aec.RedF, msg))
 		return 2
 	}
 
@@ -133,7 +144,7 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 		target = f
 	}
 	if base == nil && *baseDDL == "" && target == nil && *targetDDL == "" {
-		_, _ = fmt.Fprintln(stderr, aec.YellowF.Apply("both base and target schema are not specified"))
+		_, _ = fmt.Fprintln(stderr, colorize(aec.YellowF, "both base and target schema are not specified"))
 	}
 	if base == nil {
 		base = strings.NewReader(*baseDDL)
@@ -145,13 +156,13 @@ func realMain(args []string, stdin io.Reader, stdout *os.File, stderr io.Writer)
 	err := spannerdiff.Diff(base, target, stdout, spannerdiff.DiffOption{
 		ErrorOnUnsupportedDDL: *errorOnUnsupportedDDL,
 		OnUnsupportedDDL: func(sql string) {
-			_, _ = fmt.Fprintln(stderr, aec.YellowF.Apply(fmt.Sprintf("ignored unsupported DDL: %s", sql)))
+			_, _ = fmt.Fprintln(stderr, colorize(aec.YellowF, fmt.Sprintf("ignored unsupported DDL: %s", sql)))
 		},
 		ZeroDefaultForNotNullColumns: *zeroDefaultForNotNullColumns,
 		Printer:                      spannerdiff.DetectTerminalPrinter(cm, stdout),
 	})
 	if err != nil {
-		_, _ = fmt.Fprintln(stderr, aec.RedF.Apply(err.Error()))
+		_, _ = fmt.Fprintln(stderr, colorize(aec.RedF, err.Error()))
 		return 1
 	}
 
