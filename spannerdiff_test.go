@@ -1134,6 +1134,120 @@ func TestDiff(t *testing.T) {
 			ALTER TABLE T1 ADD COLUMN T1_U2 examples.Message;`,
 			false,
 		},
+		"change element type of array column from string to bytes": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_A1 ARRAY<STRING(MAX)>,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_A1 ARRAY<BYTES(MAX)>,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 DROP COLUMN T1_A1;
+			ALTER TABLE T1 ADD COLUMN T1_A1 ARRAY<BYTES(MAX)>;`,
+			false,
+		},
+		"change element type of array column from bytes to string": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_A1 ARRAY<BYTES(MAX)>,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_A1 ARRAY<STRING(MAX)>,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 DROP COLUMN T1_A1;
+			ALTER TABLE T1 ADD COLUMN T1_A1 ARRAY<STRING(MAX)>;`,
+			false,
+		},
+		"change element type and length of array column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_A1 ARRAY<STRING(10)>,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_A1 ARRAY<BYTES(MAX)>,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 DROP COLUMN T1_A1;
+			ALTER TABLE T1 ADD COLUMN T1_A1 ARRAY<BYTES(MAX)>;`,
+			false,
+		},
+		"change element type of not null array column with default": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_A1 ARRAY<STRING(MAX)> NOT NULL DEFAULT ([]),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_A1 ARRAY<BYTES(MAX)> NOT NULL DEFAULT ([]),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 DROP COLUMN T1_A1;
+			ALTER TABLE T1 ADD COLUMN T1_A1 ARRAY<BYTES(MAX)> NOT NULL DEFAULT ([]);`,
+			false,
+		},
+		"change element type of not null array column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_A1 ARRAY<STRING(MAX)> NOT NULL,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_A1 ARRAY<BYTES(MAX)> NOT NULL,
+			) PRIMARY KEY(T1_I1)`,
+			``,
+			true,
+		},
+		"change element type of array columns between proto and bytes": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_A1 ARRAY<examples.Message>,
+			  T1_A2 ARRAY<BYTES(MAX)>,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_A1 ARRAY<BYTES(MAX)>,
+			  T1_A2 ARRAY<examples.Message>,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 DROP COLUMN T1_A2;
+			ALTER TABLE T1 DROP COLUMN T1_A1;
+			ALTER TABLE T1 ADD COLUMN T1_A1 ARRAY<BYTES(MAX)>;
+			ALTER TABLE T1 ADD COLUMN T1_A2 ARRAY<examples.Message>;`,
+			false,
+		},
+		"change element type of array column to int64": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_A1 ARRAY<STRING(MAX)>,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_A1 ARRAY<INT64>,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 DROP COLUMN T1_A1;
+			ALTER TABLE T1 ADD COLUMN T1_A1 ARRAY<INT64>;`,
+			false,
+		},
 		"recreate generated column": {
 			`
 			CREATE TABLE T1 (
@@ -4042,6 +4156,23 @@ func TestDiffZeroDefaultForNotNullColumns(t *testing.T) {
 			ALTER TABLE T1 DROP COLUMN T1_S1;
 			ALTER TABLE T1 ADD COLUMN T1_S1 INT64 NOT NULL DEFAULT (0);
 			ALTER TABLE T1 ALTER COLUMN T1_S1 DROP DEFAULT;`,
+			false,
+		},
+		"change element type of not null array column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_A1 ARRAY<STRING(MAX)> NOT NULL,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_A1 ARRAY<BYTES(MAX)> NOT NULL,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 DROP COLUMN T1_A1;
+			ALTER TABLE T1 ADD COLUMN T1_A1 ARRAY<BYTES(MAX)> NOT NULL DEFAULT (ARRAY[]);
+			ALTER TABLE T1 ALTER COLUMN T1_A1 DROP DEFAULT;`,
 			false,
 		},
 	} {
