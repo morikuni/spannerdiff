@@ -313,6 +313,34 @@ func TestDiff(t *testing.T) {
 			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2(T2_S1);`,
 			false,
 		},
+		"change proto type of columns of foreign key": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_P1 examples.Message1,
+			  CONSTRAINT FK1 FOREIGN KEY (T1_P1) REFERENCES T2 (T2_P1),
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_P1 examples.Message1,
+			) PRIMARY KEY(T2_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_P1 examples.Message2,
+			  CONSTRAINT FK1 FOREIGN KEY (T1_P1) REFERENCES T2 (T2_P1),
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_P1 examples.Message2,
+			) PRIMARY KEY(T2_I1);`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			ALTER TABLE T1 ALTER COLUMN T1_P1 examples.Message2;
+			ALTER TABLE T2 ALTER COLUMN T2_P1 examples.Message2;
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_P1) REFERENCES T2(T2_P1);`,
+			false,
+		},
 		"change length of column of foreign key": {
 			`
 			CREATE TABLE T1 (

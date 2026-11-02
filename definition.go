@@ -1045,10 +1045,9 @@ func (c *constraint) onDependencyChange(me, dependency migrationState, m *migrat
 }
 
 // changesNullabilityOrType reports whether the migration of a column changes NOT NULL or the type of the column.
-// A change of the length of STRING or BYTES doesn't change the type.
 func changesNullabilityOrType(ms migrationState) bool {
 	base, target := ms.base.mustGet().(*column), ms.target.mustGet().(*column)
-	return base.node.NotNull != target.node.NotNull || columnTypeOf(base.node.Type) != columnTypeOf(target.node.Type)
+	return base.node.NotNull != target.node.NotNull || !equalTypesIgnoringLength(base.node.Type, target.node.Type)
 }
 
 // rowDeletionPolicyOwner is a table or a queue, which can have a row deletion policy.
