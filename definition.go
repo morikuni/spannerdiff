@@ -2,6 +2,7 @@ package spannerdiff
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -416,7 +417,14 @@ func (t *table) dependsOn() []identifier {
 		ids = append(ids, schemaID)
 	}
 	if t.node.Cluster != nil {
-		ids = append(ids, newTableIDFromPath(t.node.Cluster.TableName))
+		parentID := newTableIDFromPath(t.node.Cluster.TableName)
+		ids = append(ids, parentID)
+		// The key columns of an interleaved table must match those of its parent table,
+		// so the table is created after the key columns of the parent table are altered.
+		// Key columns that aren't in the parent table have no migration state and are ignored.
+		for _, key := range t.primaryKeys() {
+			ids = append(ids, newColumnID(parentID, key.Name))
+		}
 	}
 	// CREATE TABLE contains default values, so sequences used by them must exist before the table is created.
 	for _, col := range t.node.Columns {
@@ -458,6 +466,9 @@ func (t *table) onDependencyChange(me, dependency migrationState, m *migration) 
 		}
 	case *sequence:
 		// The sequence is only used for ordering operations.
+	case *column:
+		// The key columns of the parent table are only used for ordering operations.
+		// Recreating a key column recreates the parent table, which is handled as a dependency on the table.
 	case *table:
 		// The table depends only on its parent table, because foreign keys referencing other tables are constraint definitions.
 		switch dependency.kind {
@@ -615,6 +626,18 @@ func (c *column) alter(tgt definition, m *migration) {
 		return
 	}
 
+	// Spanner rejects altering a key column that a parent table and its interleaved tables share,
+	// except for allow_commit_timestamp.
+	if base.isPrimaryKey() && !onlyCommitTimestampChanged(base.node, target.node) {
+		if base.isInheritedKey(m) {
+			// The table is recreated with the new key column after the key column of the parent table is altered.
+			base.recreate(target, m)
+			return
+		}
+		// The interleaved tables are recreated, so the key column is altered while they don't exist.
+		base.recreateInterleavedTables(m)
+	}
+
 	if !equalNode(base.node.Type, target.node.Type) || base.node.NotNull != target.node.NotNull || !equalNode(base.node.DefaultSemantics, target.node.DefaultSemantics) {
 		switch {
 		case isGeneratedColumn(base.node) || isGeneratedColumn(target.node):
@@ -725,6 +748,52 @@ func (c *column) isPrimaryKey() bool {
 		}
 	}
 	return false
+}
+
+// isInheritedKey reports whether the column is a key column of the parent table in the base schema,
+// and the parent table remains in the target schema.
+func (c *column) isInheritedKey(m *migration) bool {
+	if c.table.node.Cluster == nil {
+		return false
+	}
+	parentID := newTableIDFromPath(c.table.node.Cluster.TableName)
+	parent, ok := m.baseDefs.all[parentID].(*table)
+	if !ok {
+		return false
+	}
+	if _, ok := m.targetDefs.all[parentID]; !ok {
+		return false
+	}
+	return slices.ContainsFunc(parent.primaryKeys(), func(key *ast.IndexKey) bool {
+		return equalNode(key.Name, c.node.Name)
+	})
+}
+
+// recreateInterleavedTables recreates the tables interleaved in the table of the key column,
+// so they are dropped before the key column is altered.
+// The tables dropped in the target schema are dropped anyway.
+func (c *column) recreateInterleavedTables(m *migration) {
+	for _, id := range slices.SortedFunc(maps.Keys(m.baseDefs.all), func(a, b identifier) int { return strings.Compare(a.ID(), b.ID()) }) {
+		child, ok := m.baseDefs.all[id].(*table)
+		if !ok || child.node.Cluster == nil || newTableIDFromPath(child.node.Cluster.TableName) != c.table.tableID() {
+			continue
+		}
+		if _, ok := m.targetDefs.all[id]; !ok {
+			continue
+		}
+		switch state := m.states[id]; state.kind {
+		case migrationKindUndefined, migrationKindAlter:
+			m.updateState(state.updateKind(migrationKindDropAndAdd))
+		}
+	}
+}
+
+// onlyCommitTimestampChanged reports whether only allow_commit_timestamp differs between the column definitions.
+func onlyCommitTimestampChanged(base, target *ast.ColumnDef) bool {
+	b, t := *base, *target
+	b.PrimaryKey, t.PrimaryKey = false, false
+	b.Options, t.Options = nil, nil
+	return equalNode(&b, &t) && onlyOptions(diffOptions(base.Options, target.Options), "allow_commit_timestamp")
 }
 
 // alterIdentity migrates a column whose base or target is an identity column.
