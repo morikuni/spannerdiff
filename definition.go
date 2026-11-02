@@ -609,6 +609,8 @@ func (c *column) alter(tgt definition, m *migration) {
 	// - Increase or decrease the length limit for an ARRAY<STRING>, ARRAY<BYTES>, or ARRAY<PROTO> column to the maximum allowed.
 	// - Enable or disable commit timestamps in value and primary key columns.
 	// - Set, change or drop the default value of a column.
+	// --- not documented ---
+	// - Change the element type of an ARRAY column between STRING and BYTES, or between PROTO and BYTES, as the emulator allows.
 
 	if m.kind(base.id()) == migrationKindNone {
 		// The table is added or created, so column is also added or created.
@@ -676,6 +678,10 @@ func (c *column) alter(tgt definition, m *migration) {
 			tupleOf(protoOrEnum{}, protoOrEnum{}),
 			tupleOf(scalar{ast.StringTypeName}, scalar{ast.StringTypeName}),
 			tupleOf(scalar{ast.BytesTypeName}, scalar{ast.BytesTypeName}),
+			tupleOf(array{scalar{ast.StringTypeName}}, array{scalar{ast.BytesTypeName}}),
+			tupleOf(array{scalar{ast.BytesTypeName}}, array{scalar{ast.StringTypeName}}),
+			tupleOf(array{protoOrEnum{}}, array{scalar{ast.BytesTypeName}}),
+			tupleOf(array{scalar{ast.BytesTypeName}}, array{protoOrEnum{}}),
 			tupleOf(array{scalar{ast.StringTypeName}}, array{scalar{ast.StringTypeName}}),
 			tupleOf(array{scalar{ast.BytesTypeName}}, array{scalar{ast.BytesTypeName}}),
 			tupleOf(array{protoOrEnum{}}, array{protoOrEnum{}}):
