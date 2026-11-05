@@ -1037,12 +1037,28 @@ func (c *constraint) onDependencyChange(me, dependency migrationState, m *migrat
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
 		}
 	case *column:
-		if me.base.valid && me.kind != migrationKindDrop && me.kind != migrationKindAdd && dependency.kind == migrationKindDropAndAdd {
+		if !me.base.valid || me.kind == migrationKindDrop || me.kind == migrationKindAdd {
+			return
+		}
+		switch dependency.kind {
+		case migrationKindDropAndAdd:
 			m.updateState(me.updateKind(migrationKindDropAndAdd))
+		case migrationKindAlter:
+			// Spanner can't change NOT NULL or the type of a column used by a foreign key,
+			// so the foreign key is dropped before the column is altered and added again after it.
+			if _, ok := me.base.mustGet().(*constraint).node.Constraint.(*ast.ForeignKey); ok && changesNullabilityOrType(dependency) {
+				m.updateState(me.updateKind(migrationKindDropAndAdd))
+			}
 		}
 	default:
 		panic(fmt.Sprintf("unexpected dependency type on constraint: %T", dep))
 	}
+}
+
+// changesNullabilityOrType reports whether the migration of a column changes NOT NULL or the type of the column.
+func changesNullabilityOrType(ms migrationState) bool {
+	base, target := ms.base.mustGet().(*column), ms.target.mustGet().(*column)
+	return base.node.NotNull != target.node.NotNull || !equalTypesIgnoringLength(base.node.Type, target.node.Type)
 }
 
 // rowDeletionPolicyOwner is a table or a queue, which can have a row deletion policy.
