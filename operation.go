@@ -41,6 +41,16 @@ const (
 	operationKindDrop  operationKind = "drop"
 )
 
+// sortOperations sorts operations into the order to execute them.
+//
+// When the dependencies between definitions have no cycle, the result satisfies the following,
+// and no dependency cycle is reported. These are proved with a Lean model of this function and
+// topologicalSort in https://github.com/morikuni/spannerdiff/pull/74, assuming that toposort.Sorter.Sort
+// puts every operation after the operations it depends on.
+//   - Drop operations come before add and alter operations.
+//   - A drop operation comes before the drop operations of the definitions it depends on.
+//   - An add or alter operation comes after the add and alter operations of the definitions it depends on.
+//   - Operations of the same definition and the same kind keep the order in which they are generated.
 func sortOperations(ops []operation) ([]operation, error) {
 	// sort operations before topological sort to fix the sorted result.
 	// The sort must be stable to keep the order of operations generated for the same definition.
