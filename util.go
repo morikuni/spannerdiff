@@ -157,6 +157,10 @@ func equalOptions() []cmp.Option {
 
 // diffOptions returns the options to set to change base options into target options.
 // SET OPTIONS keeps options that are not specified, so options only in base are reset to null.
+// The last value of a duplicated option name is used, the same as equalOptions.
+//
+// Applying the result to base with SET OPTIONS gives the options of target, even if option names are duplicated.
+// This is proved with a Lean model of this function in https://github.com/morikuni/spannerdiff/pull/72.
 func diffOptions(base, target *ast.Options) *ast.Options {
 	records := func(o *ast.Options) []*ast.OptionsDef {
 		if o == nil {
@@ -169,17 +173,23 @@ func diffOptions(base, target *ast.Options) *ast.Options {
 	for _, r := range records(base) {
 		baseValues[nameOf(r.Name)] = r.Value
 	}
-	targetNames := make(map[string]struct{})
+	lastIndexes := make(map[string]int)
+	for i, r := range records(target) {
+		lastIndexes[nameOf(r.Name)] = i
+	}
 	var result []*ast.OptionsDef
-	for _, r := range records(target) {
-		targetNames[nameOf(r.Name)] = struct{}{}
+	for i, r := range records(target) {
+		if lastIndexes[nameOf(r.Name)] != i {
+			// A later record of the same name overrides this record.
+			continue
+		}
 		if v, ok := baseValues[nameOf(r.Name)]; ok && cmp.Equal(v, r.Value, equalOptions()...) {
 			continue
 		}
 		result = append(result, r)
 	}
 	for _, r := range records(base) {
-		if _, ok := targetNames[nameOf(r.Name)]; !ok {
+		if _, ok := lastIndexes[nameOf(r.Name)]; !ok {
 			result = append(result, &ast.OptionsDef{Name: r.Name, Value: &ast.NullLiteral{}})
 		}
 	}

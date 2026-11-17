@@ -28,6 +28,23 @@ func TestDiffDatabase(t *testing.T) {
 			ALTER DATABASE D1 SET OPTIONS (version_retention_period = '2d', optimizer_version = null);`,
 			false,
 		},
+		"duplicated option name without other changes": {
+			`
+			ALTER DATABASE D1 SET OPTIONS (optimizer_version = 2);`,
+			`
+			ALTER DATABASE D1 SET OPTIONS (optimizer_version = 1, optimizer_version = 2);`,
+			``,
+			false,
+		},
+		"duplicated option name with other changes": {
+			`
+			ALTER DATABASE D1 SET OPTIONS (optimizer_version = 2);`,
+			`
+			ALTER DATABASE D1 SET OPTIONS (optimizer_version = 1, optimizer_version = 2, version_retention_period = '7d');`,
+			`
+			ALTER DATABASE D1 SET OPTIONS (version_retention_period = '7d');`,
+			false,
+		},
 		"alter database with different name": {
 			`
 			ALTER DATABASE D1 SET OPTIONS (version_retention_period = '1d');`,
