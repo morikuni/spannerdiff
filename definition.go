@@ -666,7 +666,7 @@ func (c *column) alter(tgt definition, m *migration) {
 			base.recreate(target, m)
 			return
 		}
-		m.addError(fmt.Errorf("changing HIDDEN of a column that isn't generated is not supported because the column would be recreated and lose its data: %s", target.id()))
+		m.addError(target.id(), fmt.Errorf("changing HIDDEN of a column that isn't generated is not supported because the column would be recreated and lose its data: %s", target.id()))
 		return
 	}
 
@@ -875,16 +875,16 @@ func onlyCommitTimestampChanged(base, target *ast.ColumnDef) bool {
 func (c *column) alterIdentity(target *column, m *migration) {
 	switch {
 	case !isIdentityColumn(c.node) || !isIdentityColumn(target.node):
-		m.addError(fmt.Errorf("converting a column to or from an identity column is not supported: %s", target.id()))
+		m.addError(target.id(), fmt.Errorf("converting a column to or from an identity column is not supported: %s", target.id()))
 		return
 	case !equalNode(c.node.Type, target.node.Type) || c.node.NotNull != target.node.NotNull:
-		m.addError(fmt.Errorf("changing the type or NOT NULL of an identity column is not supported: %s", target.id()))
+		m.addError(target.id(), fmt.Errorf("changing the type or NOT NULL of an identity column is not supported: %s", target.id()))
 		return
 	}
 
 	base, tgt := identityParamsOf(c.node), identityParamsOf(target.node)
 	if !equalNode(base.startCounterWith, tgt.startCounterWith) {
-		m.addError(fmt.Errorf("changing START COUNTER WITH of an identity column is not supported: %s", target.id()))
+		m.addError(target.id(), fmt.Errorf("changing START COUNTER WITH of an identity column is not supported: %s", target.id()))
 		return
 	}
 	if equalNode(base.skipRange, tgt.skipRange) {
