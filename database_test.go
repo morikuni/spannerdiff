@@ -28,6 +28,16 @@ func TestDiffDatabase(t *testing.T) {
 			ALTER DATABASE D1 SET OPTIONS (version_retention_period = '2d', optimizer_version = null);`,
 			false,
 		},
+		// An option set to null in target is the same as an option not in base, but the option is still reset.
+		"null option not in base": {
+			`
+			ALTER DATABASE D1 SET OPTIONS (optimizer_version = 1);`,
+			`
+			ALTER DATABASE D1 SET OPTIONS (optimizer_version = 1, version_retention_period = null);`,
+			`
+			ALTER DATABASE D1 SET OPTIONS (version_retention_period = null);`,
+			false,
+		},
 		"alter database with different name": {
 			`
 			ALTER DATABASE D1 SET OPTIONS (version_retention_period = '1d');`,
