@@ -120,23 +120,9 @@ func equalOptions() []cmp.Option {
 			}
 			return a.SQL() == b.SQL()
 		}),
+		// Compare the values of options without order, where null is the same as an option that is not set.
 		cmp.Comparer(func(a, b *ast.Options) bool {
-			if a == nil && b == nil {
-				return true
-			}
-			if (a == nil) != (b == nil) {
-				return false
-			}
-			// compare ast.Options.Records without order.
-			ma := make(map[string]ast.Expr)
-			mb := make(map[string]ast.Expr)
-			for _, o := range a.Records {
-				ma[nameOf(o.Name)] = o.Value
-			}
-			for _, o := range b.Records {
-				mb[nameOf(o.Name)] = o.Value
-			}
-			return cmp.Equal(ma, mb, equalOptions()...)
+			return cmp.Equal(optionValues(a), optionValues(b), equalOptions()...)
 		}),
 		cmp.Comparer(func(a, b *ast.IndexKey) bool {
 			if a == nil || b == nil {
@@ -155,8 +141,37 @@ func equalOptions() []cmp.Option {
 	}
 }
 
+// optionValues returns the values of the options that are not null, by their names.
+// Null resets an option to its default, so it is the same as an option that is not set.
+// The last value of a duplicated option name is used.
+func optionValues(o *ast.Options) map[string]ast.Expr {
+	values := make(map[string]ast.Expr)
+	if o == nil {
+		return values
+	}
+	for _, r := range o.Records {
+		if isNullLiteral(r.Value) {
+			delete(values, nameOf(r.Name))
+			continue
+		}
+		values[nameOf(r.Name)] = r.Value
+	}
+	return values
+}
+
+func isNullLiteral(e ast.Expr) bool {
+	_, ok := e.(*ast.NullLiteral)
+	return ok
+}
+
 // diffOptions returns the options to set to change base options into target options.
 // SET OPTIONS keeps options that are not specified, so options only in base are reset to null.
+// Null is the same as an option that is not set.
+//
+// When option names in target are not duplicated, the following hold.
+// These are proved with a Lean model of this function in https://github.com/morikuni/spannerdiff/pull/73.
+//   - Applying the result to base with SET OPTIONS gives the options of target.
+//   - The result is nil if and only if equalOptions regards base and target as equal.
 func diffOptions(base, target *ast.Options) *ast.Options {
 	records := func(o *ast.Options) []*ast.OptionsDef {
 		if o == nil {
@@ -165,21 +180,22 @@ func diffOptions(base, target *ast.Options) *ast.Options {
 		return o.Records
 	}
 
-	baseValues := make(map[string]ast.Expr)
-	for _, r := range records(base) {
-		baseValues[nameOf(r.Name)] = r.Value
-	}
+	baseValues := optionValues(base)
 	targetNames := make(map[string]struct{})
 	var result []*ast.OptionsDef
 	for _, r := range records(target) {
 		targetNames[nameOf(r.Name)] = struct{}{}
-		if v, ok := baseValues[nameOf(r.Name)]; ok && cmp.Equal(v, r.Value, equalOptions()...) {
+		v, ok := baseValues[nameOf(r.Name)]
+		if ok && cmp.Equal(v, r.Value, equalOptions()...) || !ok && isNullLiteral(r.Value) {
 			continue
 		}
 		result = append(result, r)
 	}
 	for _, r := range records(base) {
-		if _, ok := targetNames[nameOf(r.Name)]; !ok {
+		if _, ok := targetNames[nameOf(r.Name)]; ok {
+			continue
+		}
+		if _, ok := baseValues[nameOf(r.Name)]; ok {
 			result = append(result, &ast.OptionsDef{Name: r.Name, Value: &ast.NullLiteral{}})
 		}
 	}
