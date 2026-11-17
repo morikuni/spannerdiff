@@ -2201,125 +2201,55 @@ type grant struct {
 	grantID grantID
 }
 
+// newGrant splits GRANT into the definitions of each pair of a role and an object,
+// because privileges are granted and revoked for each pair.
 func newGrant(g *ast.Grant) ([]definition, error) {
 	var grants []definition
-	switch t := g.Privilege.(type) {
-	case *ast.PrivilegeOnTable:
-		for _, r := range g.Roles {
-			for _, tableName := range t.Names {
-				grants = append(
-					grants,
-					&grant{
-						&ast.Grant{
-							Roles: []*ast.Ident{r},
-							Privilege: &ast.PrivilegeOnTable{
-								Privileges: t.Privileges,
-								Names:      []*ast.Path{tableName},
-							},
-						},
-						newGrantID(newRoleID(r), newTableIDFromPath(tableName)),
-					},
-				)
-			}
+	for _, r := range g.Roles {
+		roleID := newRoleID(r)
+		// The privilege is created for each definition, because merge modifies it.
+		add := func(id grantID, privilege ast.Privilege) {
+			grants = append(grants, &grant{&ast.Grant{Roles: []*ast.Ident{r}, Privilege: privilege}, id})
 		}
-	case *ast.SelectPrivilegeOnView:
-		for _, r := range g.Roles {
-			for _, viewName := range t.Names {
-				grants = append(grants, &grant{
-					&ast.Grant{
-						Roles: []*ast.Ident{r},
-						Privilege: &ast.SelectPrivilegeOnView{
-							Names: []*ast.Path{viewName},
-						},
-					},
-					newGrantID(newRoleID(r), newViewIDFromPath(viewName)),
-				})
+		switch t := g.Privilege.(type) {
+		case *ast.PrivilegeOnTable:
+			for _, name := range t.Names {
+				add(newGrantID(roleID, newTableIDFromPath(name)), &ast.PrivilegeOnTable{Privileges: t.Privileges, Names: []*ast.Path{name}})
 			}
-		}
-	case *ast.SelectPrivilegeOnChangeStream:
-		for _, r := range g.Roles {
-			for _, csName := range t.Names {
-				grants = append(grants, &grant{
-					&ast.Grant{
-						Roles: []*ast.Ident{r},
-						Privilege: &ast.SelectPrivilegeOnChangeStream{
-							Names: []*ast.Path{csName},
-						},
-					},
-					newGrantID(newRoleID(r), newChangeStreamIDFromPath(csName)),
-				})
+		case *ast.SelectPrivilegeOnView:
+			for _, name := range t.Names {
+				add(newGrantID(roleID, newViewIDFromPath(name)), &ast.SelectPrivilegeOnView{Names: []*ast.Path{name}})
 			}
-		}
-	case *ast.ExecutePrivilegeOnTableFunction:
-		for _, r := range g.Roles {
-			for _, csrfName := range t.Names {
-				grants = append(grants, &grant{
-					&ast.Grant{
-						Roles: []*ast.Ident{r},
-						Privilege: &ast.ExecutePrivilegeOnTableFunction{
-							Names: []*ast.Path{csrfName},
-						},
-					},
-					newGrantID(newRoleID(r), newChangeStreamReadFunctionIDFromPath(csrfName)),
-				})
+		case *ast.SelectPrivilegeOnChangeStream:
+			for _, name := range t.Names {
+				add(newGrantID(roleID, newChangeStreamIDFromPath(name)), &ast.SelectPrivilegeOnChangeStream{Names: []*ast.Path{name}})
 			}
-		}
-	case *ast.RolePrivilege:
-		for _, r := range g.Roles {
-			for _, roleName := range t.Names {
-				grants = append(grants, &grant{
-					&ast.Grant{
-						Roles: []*ast.Ident{r},
-						Privilege: &ast.RolePrivilege{
-							Names: []*ast.Ident{roleName},
-						},
-					},
-					newGrantID(newRoleID(r), newRoleID(roleName)),
-				})
+		case *ast.ExecutePrivilegeOnTableFunction:
+			for _, name := range t.Names {
+				add(newGrantID(roleID, newChangeStreamReadFunctionIDFromPath(name)), &ast.ExecutePrivilegeOnTableFunction{Names: []*ast.Path{name}})
 			}
-		}
-	case *ast.PrivilegeOnSequence:
-		for _, r := range g.Roles {
-			for _, seqName := range t.Names {
-				grants = append(grants, &grant{
-					&ast.Grant{
-						Roles: []*ast.Ident{r},
-						Privilege: &ast.PrivilegeOnSequence{
-							Privileges: t.Privileges,
-							Names:      []*ast.Path{seqName},
-						},
-					},
-					newGrantID(newRoleID(r), newSequenceID(seqName)),
-				})
+		case *ast.RolePrivilege:
+			for _, name := range t.Names {
+				add(newGrantID(roleID, newRoleID(name)), &ast.RolePrivilege{Names: []*ast.Ident{name}})
 			}
-		}
-	case *ast.UsagePrivilegeOnSchema:
-		for _, r := range g.Roles {
+		case *ast.PrivilegeOnSequence:
+			for _, name := range t.Names {
+				add(newGrantID(roleID, newSequenceID(name)), &ast.PrivilegeOnSequence{Privileges: t.Privileges, Names: []*ast.Path{name}})
+			}
+		case *ast.UsagePrivilegeOnSchema:
 			if !t.Default.Invalid() {
-				grants = append(grants, &grant{
-					&ast.Grant{
-						Roles:     []*ast.Ident{r},
-						Privilege: &ast.UsagePrivilegeOnSchema{Default: t.Default},
-					},
-					newGrantID(newRoleID(r), newDefaultSchemaID()),
-				})
+				add(newGrantID(roleID, newDefaultSchemaID()), &ast.UsagePrivilegeOnSchema{Default: t.Default})
 				continue
 			}
-			for _, schemaName := range t.Schemas {
-				grants = append(grants, &grant{
-					&ast.Grant{
-						Roles:     []*ast.Ident{r},
-						Privilege: &ast.UsagePrivilegeOnSchema{Default: token.InvalidPos, Schemas: []*ast.Path{schemaName}},
-					},
-					newGrantID(newRoleID(r), schemaIDOfGrant(schemaName)),
-				})
+			for _, name := range t.Schemas {
+				add(newGrantID(roleID, schemaIDOfGrant(name)), &ast.UsagePrivilegeOnSchema{Default: token.InvalidPos, Schemas: []*ast.Path{name}})
 			}
+		case *ast.PrivilegeOnAllTablesInSchema, *ast.PrivilegeOnAllSequencesInSchema, *ast.SelectPrivilegeOnAllViewsInSchema, *ast.SelectPrivilegeOnAllChangeStreamsInSchema:
+			// Spanner applies these privileges to each object, so they can't be compared with the base schema.
+			return nil, fmt.Errorf("GRANT ON ALL ... IN SCHEMA is not supported, grant privileges on each object instead: %s", g.SQL())
+		default:
+			return nil, fmt.Errorf("unsupported GRANT: %s", g.SQL())
 		}
-	case *ast.PrivilegeOnAllTablesInSchema, *ast.PrivilegeOnAllSequencesInSchema, *ast.SelectPrivilegeOnAllViewsInSchema, *ast.SelectPrivilegeOnAllChangeStreamsInSchema:
-		// Spanner applies these privileges to each object, so they can't be compared with the base schema.
-		return nil, fmt.Errorf("GRANT ON ALL ... IN SCHEMA is not supported, grant privileges on each object instead: %s", g.SQL())
-	default:
-		return nil, fmt.Errorf("unsupported GRANT: %s", g.SQL())
 	}
 	return grants, nil
 }
@@ -2329,93 +2259,102 @@ func schemaIDOfGrant(path *ast.Path) schemaID {
 	return newSchemaID(path.Idents[len(path.Idents)-1])
 }
 
-// sequencePrivileges returns whether SELECT and UPDATE are granted on a sequence.
-func sequencePrivileges(privileges []ast.TablePrivilege) (hasSelect, hasUpdate bool) {
-	for _, p := range privileges {
-		switch p.(type) {
-		case *ast.SelectPrivilege:
-			hasSelect = true
-		case *ast.UpdatePrivilege:
-			hasUpdate = true
-		}
-	}
-	return hasSelect, hasUpdate
+// columnPrivilege is a privilege that can be granted on a whole table and on its columns.
+type columnPrivilege struct {
+	all     bool
+	columns []*ast.Ident
 }
 
-func newSequencePrivileges(hasSelect, hasUpdate bool) []ast.TablePrivilege {
-	var privileges []ast.TablePrivilege
-	if hasSelect {
-		privileges = append(privileges, &ast.SelectPrivilege{})
+func (p columnPrivilege) grant(columns []*ast.Ident) columnPrivilege {
+	if len(columns) == 0 {
+		p.all = true
+		return p
 	}
-	if hasUpdate {
-		privileges = append(privileges, &ast.UpdatePrivilege{})
+	p.columns = uniqueIdent(slices.Concat(p.columns, columns))
+	return p
+}
+
+// minus returns the privilege in p that is not in other.
+func (p columnPrivilege) minus(other columnPrivilege) columnPrivilege {
+	names := make(map[string]struct{}, len(other.columns))
+	for _, col := range other.columns {
+		names[nameOf(col)] = struct{}{}
+	}
+	result := columnPrivilege{all: p.all && !other.all}
+	for _, col := range p.columns {
+		if _, ok := names[nameOf(col)]; !ok {
+			result.columns = append(result.columns, col)
+		}
+	}
+	return result
+}
+
+// tablePrivileges is the set of privileges on a table or a sequence, where the same privilege may be written many times.
+// A sequence has only SELECT and UPDATE without columns.
+type tablePrivileges struct {
+	sel, update, insert columnPrivilege
+	delete              bool
+}
+
+func newTablePrivileges(privileges []ast.TablePrivilege) tablePrivileges {
+	var p tablePrivileges
+	for _, privilege := range privileges {
+		switch t := privilege.(type) {
+		case *ast.SelectPrivilege:
+			p.sel = p.sel.grant(t.Columns)
+		case *ast.UpdatePrivilege:
+			p.update = p.update.grant(t.Columns)
+		case *ast.InsertPrivilege:
+			p.insert = p.insert.grant(t.Columns)
+		case *ast.DeletePrivilege:
+			p.delete = true
+		default:
+			panic(fmt.Sprintf("unexpected privilege type: %T", privilege))
+		}
+	}
+	return p
+}
+
+// minus returns the privileges in p that are not in other.
+func (p tablePrivileges) minus(other tablePrivileges) tablePrivileges {
+	return tablePrivileges{
+		sel:    p.sel.minus(other.sel),
+		update: p.update.minus(other.update),
+		insert: p.insert.minus(other.insert),
+		delete: p.delete && !other.delete,
+	}
+}
+
+func (p tablePrivileges) privileges() []ast.TablePrivilege {
+	var privileges []ast.TablePrivilege
+	add := func(cp columnPrivilege, newPrivilege func(columns []*ast.Ident) ast.TablePrivilege) {
+		if cp.all {
+			privileges = append(privileges, newPrivilege(nil))
+		}
+		if len(cp.columns) > 0 {
+			privileges = append(privileges, newPrivilege(cp.columns))
+		}
+	}
+	add(p.sel, func(columns []*ast.Ident) ast.TablePrivilege { return &ast.SelectPrivilege{Columns: columns} })
+	add(p.update, func(columns []*ast.Ident) ast.TablePrivilege { return &ast.UpdatePrivilege{Columns: columns} })
+	add(p.insert, func(columns []*ast.Ident) ast.TablePrivilege { return &ast.InsertPrivilege{Columns: columns} })
+	if p.delete {
+		privileges = append(privileges, &ast.DeletePrivilege{})
 	}
 	return privileges
 }
 
+// merge merges the privileges granted to the same role on the same object by another GRANT.
 func (g *grant) merge(other definition) bool {
 	oth := other.(*grant)
 	switch p1 := g.node.Privilege.(type) {
 	case *ast.PrivilegeOnTable:
 		p2 := oth.node.Privilege.(*ast.PrivilegeOnTable)
-		var hasSelect, hasUpdate, hasInsert, hasDelete bool
-		var selectWithColumn, updateWithColumn, insertWithColumn []*ast.Ident
-		for _, p := range append(p1.Privileges, p2.Privileges...) {
-			switch t := p.(type) {
-			case *ast.SelectPrivilege:
-				if len(t.Columns) == 0 {
-					hasSelect = true
-				} else {
-					selectWithColumn = append(selectWithColumn, t.Columns...)
-				}
-			case *ast.UpdatePrivilege:
-				if len(t.Columns) == 0 {
-					hasUpdate = true
-				} else {
-					updateWithColumn = append(updateWithColumn, t.Columns...)
-				}
-			case *ast.InsertPrivilege:
-				if len(t.Columns) == 0 {
-					hasInsert = true
-				} else {
-					insertWithColumn = append(insertWithColumn, t.Columns...)
-				}
-			case *ast.DeletePrivilege:
-				hasDelete = true
-			}
-		}
-		selectWithColumn = uniqueIdent(selectWithColumn)
-		updateWithColumn = uniqueIdent(updateWithColumn)
-		insertWithColumn = uniqueIdent(insertWithColumn)
-		var privileges []ast.TablePrivilege
-		if hasSelect {
-			privileges = append(privileges, &ast.SelectPrivilege{})
-		}
-		if len(selectWithColumn) > 0 {
-			privileges = append(privileges, &ast.SelectPrivilege{Columns: selectWithColumn})
-		}
-		if hasUpdate {
-			privileges = append(privileges, &ast.UpdatePrivilege{})
-		}
-		if len(updateWithColumn) > 0 {
-			privileges = append(privileges, &ast.UpdatePrivilege{Columns: updateWithColumn})
-		}
-		if hasInsert {
-			privileges = append(privileges, &ast.InsertPrivilege{})
-		}
-		if len(insertWithColumn) > 0 {
-			privileges = append(privileges, &ast.InsertPrivilege{Columns: insertWithColumn})
-		}
-		if hasDelete {
-			privileges = append(privileges, &ast.DeletePrivilege{})
-		}
-		p1.Privileges = privileges
+		p1.Privileges = newTablePrivileges(slices.Concat(p1.Privileges, p2.Privileges)).privileges()
 		return true
 	case *ast.PrivilegeOnSequence:
 		p2 := oth.node.Privilege.(*ast.PrivilegeOnSequence)
-		hasSelect1, hasUpdate1 := sequencePrivileges(p1.Privileges)
-		hasSelect2, hasUpdate2 := sequencePrivileges(p2.Privileges)
-		p1.Privileges = newSequencePrivileges(hasSelect1 || hasSelect2, hasUpdate1 || hasUpdate2)
+		p1.Privileges = newTablePrivileges(slices.Concat(p1.Privileges, p2.Privileges)).privileges()
 		return true
 	case *ast.SelectPrivilegeOnView, *ast.SelectPrivilegeOnChangeStream, *ast.ExecutePrivilegeOnTableFunction, *ast.RolePrivilege, *ast.UsagePrivilegeOnSchema:
 		// no additional parameters exist
@@ -2448,183 +2387,31 @@ func (g *grant) alter(tgt definition, m *migration) {
 	base := g
 	target := tgt.(*grant)
 
+	// alter revokes the privileges only in base and grants the privileges only in target.
+	alter := func(basePrivileges, targetPrivileges []ast.TablePrivilege, newPrivilege func([]ast.TablePrivilege) ast.Privilege) {
+		basePs, targetPs := newTablePrivileges(basePrivileges), newTablePrivileges(targetPrivileges)
+		var ops []operation
+		if dropped := basePs.minus(targetPs).privileges(); len(dropped) > 0 {
+			// Privileges must be revoked before the columns are dropped.
+			ops = append(ops, newDropPhaseOperation(base, &ast.Revoke{Roles: target.node.Roles, Privilege: newPrivilege(dropped)}))
+		}
+		if added := targetPs.minus(basePs).privileges(); len(added) > 0 {
+			ops = append(ops, newAddPhaseOperation(target, &ast.Grant{Roles: target.node.Roles, Privilege: newPrivilege(added)}))
+		}
+		m.updateStateIfUndefined(newAlterStateWithOperations(base, target, ops...))
+	}
+
 	switch baseP := base.node.Privilege.(type) {
 	case *ast.PrivilegeOnTable:
 		targetP := target.node.Privilege.(*ast.PrivilegeOnTable)
-		processPrivilegeDetails := func(privileges []ast.TablePrivilege) (hasSelect, hasUpdate, hasInsert, hasDelete bool, selectColumnIDs, updateColumnIDs, insertColumnIDs []columnID, selectWithColumn, updateWithColumn, insertWithColumn map[columnID]*ast.Ident) {
-			selectWithColumn = make(map[columnID]*ast.Ident)
-			updateWithColumn = make(map[columnID]*ast.Ident)
-			insertWithColumn = make(map[columnID]*ast.Ident)
-
-			for _, p := range privileges {
-				switch t := p.(type) {
-				case *ast.SelectPrivilege:
-					if len(t.Columns) == 0 {
-						hasSelect = true
-					} else {
-						for _, col := range t.Columns {
-							colID := newColumnID(newTableIDFromPath(baseP.Names[0]), col)
-							if _, ok := selectWithColumn[colID]; !ok {
-								selectWithColumn[colID] = col
-								selectColumnIDs = append(selectColumnIDs, colID)
-							}
-						}
-					}
-				case *ast.UpdatePrivilege:
-					if len(t.Columns) == 0 {
-						hasUpdate = true
-					} else {
-						for _, col := range t.Columns {
-							colID := newColumnID(newTableIDFromPath(baseP.Names[0]), col)
-							if _, ok := updateWithColumn[colID]; !ok {
-								updateWithColumn[colID] = col
-								updateColumnIDs = append(updateColumnIDs, colID)
-							}
-						}
-					}
-				case *ast.InsertPrivilege:
-					if len(t.Columns) == 0 {
-						hasInsert = true
-					} else {
-						for _, col := range t.Columns {
-							colID := newColumnID(newTableIDFromPath(baseP.Names[0]), col)
-							if _, ok := insertWithColumn[colID]; !ok {
-								insertWithColumn[colID] = col
-								insertColumnIDs = append(insertColumnIDs, colID)
-							}
-						}
-					}
-				case *ast.DeletePrivilege:
-					hasDelete = true
-				}
-			}
-
-			return hasSelect, hasUpdate, hasInsert, hasDelete, selectColumnIDs, updateColumnIDs, insertColumnIDs, selectWithColumn, updateWithColumn, insertWithColumn
-		}
-
-		baseHasSelect, baseHasUpdate, baseHasInsert, baseHasDelete, baseSelectColumIDs, baseUpdateColumnIDs, baseInsertColumnIDs, baseSelectWithColumn, baseUpdateWithColumn, baseInsertWithColumn := processPrivilegeDetails(baseP.Privileges)
-		targetHasSelect, targetHasUpdate, targetHasInsert, targetHasDelete, targetSelectColumIDs, targetUpdateColumnIDs, targetInsertColumnIDs, targetSelectWithColumn, targetUpdateWithColumn, targetInsertWithColumn := processPrivilegeDetails(targetP.Privileges)
-
-		var added, dropped []ast.TablePrivilege
-		if baseHasSelect != targetHasSelect {
-			if targetHasSelect {
-				added = append(added, &ast.SelectPrivilege{})
-			} else {
-				dropped = append(dropped, &ast.SelectPrivilege{})
-			}
-		}
-		if !slices.Equal(baseSelectColumIDs, targetSelectColumIDs) {
-			var addedColumns, droppedColumns []*ast.Ident
-			for _, colID := range targetSelectColumIDs {
-				if _, ok := baseSelectWithColumn[colID]; !ok {
-					addedColumns = append(addedColumns, targetSelectWithColumn[colID])
-				}
-			}
-			for _, colID := range baseSelectColumIDs {
-				if _, ok := targetSelectWithColumn[colID]; !ok {
-					droppedColumns = append(droppedColumns, baseSelectWithColumn[colID])
-				}
-			}
-			if len(addedColumns) > 0 {
-				added = append(added, &ast.SelectPrivilege{Columns: addedColumns})
-			}
-			if len(droppedColumns) > 0 {
-				dropped = append(dropped, &ast.SelectPrivilege{Columns: droppedColumns})
-			}
-		}
-		if baseHasUpdate != targetHasUpdate {
-			if targetHasUpdate {
-				added = append(added, &ast.UpdatePrivilege{})
-			} else {
-				dropped = append(dropped, &ast.UpdatePrivilege{})
-			}
-		}
-		if !slices.Equal(baseUpdateColumnIDs, targetUpdateColumnIDs) {
-			var addedColumns, droppedColumns []*ast.Ident
-			for _, colID := range targetUpdateColumnIDs {
-				if _, ok := baseUpdateWithColumn[colID]; !ok {
-					addedColumns = append(addedColumns, targetUpdateWithColumn[colID])
-				}
-			}
-			for _, colID := range baseUpdateColumnIDs {
-				if _, ok := targetUpdateWithColumn[colID]; !ok {
-					droppedColumns = append(droppedColumns, baseUpdateWithColumn[colID])
-				}
-			}
-			if len(addedColumns) > 0 {
-				added = append(added, &ast.UpdatePrivilege{Columns: addedColumns})
-			}
-			if len(droppedColumns) > 0 {
-				dropped = append(dropped, &ast.UpdatePrivilege{Columns: droppedColumns})
-			}
-		}
-		if baseHasInsert != targetHasInsert {
-			if targetHasInsert {
-				added = append(added, &ast.InsertPrivilege{})
-			} else {
-				dropped = append(dropped, &ast.InsertPrivilege{})
-			}
-		}
-		if !slices.Equal(baseInsertColumnIDs, targetInsertColumnIDs) {
-			var addedColumns, droppedColumns []*ast.Ident
-			for _, colID := range targetInsertColumnIDs {
-				if _, ok := baseInsertWithColumn[colID]; !ok {
-					addedColumns = append(addedColumns, targetInsertWithColumn[colID])
-				}
-			}
-			for _, colID := range baseInsertColumnIDs {
-				if _, ok := targetInsertWithColumn[colID]; !ok {
-					droppedColumns = append(droppedColumns, baseInsertWithColumn[colID])
-				}
-			}
-			if len(addedColumns) > 0 {
-				added = append(added, &ast.InsertPrivilege{Columns: addedColumns})
-			}
-			if len(droppedColumns) > 0 {
-				dropped = append(dropped, &ast.InsertPrivilege{Columns: droppedColumns})
-			}
-		}
-		if baseHasDelete != targetHasDelete {
-			if targetHasDelete {
-				added = append(added, &ast.DeletePrivilege{})
-			} else {
-				dropped = append(dropped, &ast.DeletePrivilege{})
-			}
-		}
-		var ops []operation
-		if len(dropped) > 0 {
-			// Privileges must be revoked before the columns are dropped.
-			ops = append(ops, newDropPhaseOperation(base, &ast.Revoke{
-				Roles:     target.node.Roles,
-				Privilege: &ast.PrivilegeOnTable{Privileges: dropped, Names: targetP.Names},
-			}))
-		}
-		if len(added) > 0 {
-			ops = append(ops, newAddPhaseOperation(target, &ast.Grant{
-				Roles:     target.node.Roles,
-				Privilege: &ast.PrivilegeOnTable{Privileges: added, Names: targetP.Names},
-			}))
-		}
-
-		m.updateStateIfUndefined(newAlterStateWithOperations(base, target, ops...))
+		alter(baseP.Privileges, targetP.Privileges, func(privileges []ast.TablePrivilege) ast.Privilege {
+			return &ast.PrivilegeOnTable{Privileges: privileges, Names: targetP.Names}
+		})
 	case *ast.PrivilegeOnSequence:
 		targetP := target.node.Privilege.(*ast.PrivilegeOnSequence)
-		baseSelect, baseUpdate := sequencePrivileges(baseP.Privileges)
-		targetSelect, targetUpdate := sequencePrivileges(targetP.Privileges)
-		var ops []operation
-		if dropped := newSequencePrivileges(baseSelect && !targetSelect, baseUpdate && !targetUpdate); len(dropped) > 0 {
-			ops = append(ops, newDropPhaseOperation(base, &ast.Revoke{
-				Roles:     target.node.Roles,
-				Privilege: &ast.PrivilegeOnSequence{Privileges: dropped, Names: targetP.Names},
-			}))
-		}
-		if added := newSequencePrivileges(!baseSelect && targetSelect, !baseUpdate && targetUpdate); len(added) > 0 {
-			ops = append(ops, newAddPhaseOperation(target, &ast.Grant{
-				Roles:     target.node.Roles,
-				Privilege: &ast.PrivilegeOnSequence{Privileges: added, Names: targetP.Names},
-			}))
-		}
-		m.updateStateIfUndefined(newAlterStateWithOperations(base, target, ops...))
+		alter(baseP.Privileges, targetP.Privileges, func(privileges []ast.TablePrivilege) ast.Privilege {
+			return &ast.PrivilegeOnSequence{Privileges: privileges, Names: targetP.Names}
+		})
 	case *ast.SelectPrivilegeOnView, *ast.SelectPrivilegeOnChangeStream, *ast.ExecutePrivilegeOnTableFunction, *ast.RolePrivilege, *ast.UsagePrivilegeOnSchema:
 		// never come here, because grant type handles only single target name (1 view, change stream, table function or role per grant type)
 		panic(fmt.Sprintf("unsupported GRANT alteration on: %s", target.node.SQL()))
