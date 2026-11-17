@@ -304,3 +304,16 @@ func tablesOrViewsInQueryExpr(expr ast.QueryExpr) ([]*ast.Path, []*ast.Ident) {
 	})
 	return paths, idents
 }
+
+// onlyOptions reports whether options contain only the given names.
+func onlyOptions(options *ast.Options, names ...string) bool {
+	if options == nil {
+		return true
+	}
+	for _, r := range options.Records {
+		if !slices.Contains(names, nameOf(r.Name)) {
+			return false
+		}
+	}
+	return true
+}
