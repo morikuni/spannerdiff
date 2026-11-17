@@ -1340,15 +1340,9 @@ func (i *index) alter(tgt definition, m *migration) {
 	targetCopy.Storing = nil
 
 	if equalNode(&baseCopy, &targetCopy) {
-		added, dropped := diffStoring(base.tableID(), base.node.Storing, target.node.Storing)
-		var ops []operation
-		for _, col := range dropped {
-			// Stored columns must be dropped from the index before the columns are dropped.
-			ops = append(ops, newDropPhaseOperation(base, &ast.AlterIndex{Name: target.node.Name, IndexAlteration: &ast.DropStoredColumn{Name: col}}))
-		}
-		for _, col := range added {
-			ops = append(ops, newAddPhaseOperation(target, &ast.AlterIndex{Name: target.node.Name, IndexAlteration: &ast.AddStoredColumn{Name: col}}))
-		}
+		ops := alterStoring(base, target, base.tableID(), base.node.Storing, target.node.Storing, func(a storedColumnAlteration) ast.DDL {
+			return &ast.AlterIndex{Name: target.node.Name, IndexAlteration: a}
+		})
 		m.updateStateIfUndefined(newAlterStateWithOperations(base, target, ops...))
 		return
 	}
@@ -1382,7 +1376,15 @@ func (i *index) dependsOn() []dependency {
 	return newDependencies(dependencyKindRecreate, ids)
 }
 
-func diffStoring(tableID tableID, base, target *ast.Storing) (added, dropped []*ast.Ident) {
+// storedColumnAlteration is an alteration of the stored columns, which the ALTER statements of all kinds of indexes accept.
+type storedColumnAlteration interface {
+	ast.IndexAlteration
+	ast.VectorIndexAlteration
+}
+
+// alterStoring returns the operations to change the stored columns of an index, a search index or a vector index.
+// alter returns the ALTER statement of the index with the alteration.
+func alterStoring(base, target definition, tableID tableID, baseStoring, targetStoring *ast.Storing, alter func(storedColumnAlteration) ast.DDL) []operation {
 	columns := func(s *ast.Storing) []*ast.Ident {
 		if s == nil {
 			return nil
@@ -1396,18 +1398,21 @@ func diffStoring(tableID tableID, base, target *ast.Storing) (added, dropped []*
 		}
 		return set
 	}
-	baseSet, targetSet := toSet(columns(base)), toSet(columns(target))
-	for _, col := range columns(target) {
-		if _, ok := baseSet[newColumnID(tableID, col)]; !ok {
-			added = append(added, col)
-		}
-	}
-	for _, col := range columns(base) {
+	baseSet, targetSet := toSet(columns(baseStoring)), toSet(columns(targetStoring))
+
+	var ops []operation
+	for _, col := range columns(baseStoring) {
 		if _, ok := targetSet[newColumnID(tableID, col)]; !ok {
-			dropped = append(dropped, col)
+			// Stored columns must be dropped from the index before the columns are dropped.
+			ops = append(ops, newDropPhaseOperation(base, alter(&ast.DropStoredColumn{Name: col})))
 		}
 	}
-	return added, dropped
+	for _, col := range columns(targetStoring) {
+		if _, ok := baseSet[newColumnID(tableID, col)]; !ok {
+			ops = append(ops, newAddPhaseOperation(target, alter(&ast.AddStoredColumn{Name: col})))
+		}
+	}
+	return ops
 }
 
 type searchIndex struct {
@@ -1453,15 +1458,9 @@ func (si *searchIndex) alter(tgt definition, m *migration) {
 	targetCopy.Storing = nil
 
 	if equalNode(&baseCopy, &targetCopy) {
-		added, dropped := diffStoring(base.tableID(), base.node.Storing, target.node.Storing)
-		var ops []operation
-		for _, col := range dropped {
-			// Stored columns must be dropped from the index before the columns are dropped.
-			ops = append(ops, newDropPhaseOperation(base, &ast.AlterSearchIndex{Name: target.node.Name, IndexAlteration: &ast.DropStoredColumn{Name: col}}))
-		}
-		for _, col := range added {
-			ops = append(ops, newAddPhaseOperation(target, &ast.AlterSearchIndex{Name: target.node.Name, IndexAlteration: &ast.AddStoredColumn{Name: col}}))
-		}
+		ops := alterStoring(base, target, base.tableID(), base.node.Storing, target.node.Storing, func(a storedColumnAlteration) ast.DDL {
+			return &ast.AlterSearchIndex{Name: target.node.Name, IndexAlteration: a}
+		})
 		m.updateStateIfUndefined(newAlterStateWithOperations(base, target, ops...))
 		return
 	}
@@ -1542,15 +1541,9 @@ func (vi *vectorIndex) alter(tgt definition, m *migration) {
 	}
 
 	name := &ast.Path{Idents: []*ast.Ident{target.node.Name}}
-	added, dropped := diffStoring(base.tableID(), base.node.Storing, target.node.Storing)
-	var ops []operation
-	for _, col := range dropped {
-		// Stored columns must be dropped from the index before the columns are dropped.
-		ops = append(ops, newDropPhaseOperation(base, &ast.AlterVectorIndex{Name: name, Alteration: &ast.DropStoredColumn{Name: col}}))
-	}
-	for _, col := range added {
-		ops = append(ops, newAddPhaseOperation(target, &ast.AlterVectorIndex{Name: name, Alteration: &ast.AddStoredColumn{Name: col}}))
-	}
+	ops := alterStoring(base, target, base.tableID(), base.node.Storing, target.node.Storing, func(a storedColumnAlteration) ast.DDL {
+		return &ast.AlterVectorIndex{Name: name, Alteration: a}
+	})
 	if options != nil {
 		ops = append(ops, newAddPhaseOperation(target, &ast.AlterVectorIndex{Name: name, Alteration: &ast.VectorIndexSetOptions{Options: options}}))
 	}
