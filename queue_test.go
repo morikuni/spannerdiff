@@ -1,0 +1,423 @@
+package spannerdiff
+
+import "testing"
+
+func TestDiffQueue(t *testing.T) {
+	runDiffTests(t, DiffOption{ErrorOnUnsupportedDDL: true}, map[string]diffTest{
+		"add queue": {
+			``,
+			`
+			CREATE QUEUE Q1 (
+			  Q1_I1 INT64 NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(Q1_I1)`,
+			`
+			CREATE QUEUE Q1 (
+			  Q1_I1 INT64 NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(Q1_I1);`,
+			false,
+		},
+		"drop queue": {
+			`
+			CREATE QUEUE Q1 (
+			  Q1_I1 INT64 NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(Q1_I1)`,
+			``,
+			`
+			DROP QUEUE Q1;`,
+			false,
+		},
+		"recreate queue": {
+			`
+			CREATE QUEUE Q1 (
+			  Q1_I1 INT64 NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(Q1_I1)`,
+			`
+			CREATE QUEUE Q1 (
+			  Q1_I1 INT64 NOT NULL,
+			  Payload JSON NOT NULL,
+			) PRIMARY KEY(Q1_I1)`,
+			`
+			DROP QUEUE Q1;
+			CREATE QUEUE Q1 (
+			  Q1_I1 INT64 NOT NULL,
+			  Payload JSON NOT NULL,
+			) PRIMARY KEY(Q1_I1);`,
+			false,
+		},
+		"recreate queue by changing primary key": {
+			`
+			CREATE QUEUE Q1 (
+			  Q1_I1 INT64 NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(Q1_I1)`,
+			`
+			CREATE QUEUE Q1 (
+			  Q1_I1 INT64 NOT NULL,
+			  Q1_S1 STRING(36) NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(Q1_I1, Q1_S1 DESC)`,
+			`
+			DROP QUEUE Q1;
+			CREATE QUEUE Q1 (
+			  Q1_I1 INT64 NOT NULL,
+			  Q1_S1 STRING(36) NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(Q1_I1, Q1_S1 DESC);`,
+			false,
+		},
+		"ignore column order and default clauses of queue": {
+			`
+			CREATE TABLE P1 (
+			  P1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1);
+			CREATE QUEUE Q1 (
+			  P1_I1 INT64 NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(P1_I1 ASC), INTERLEAVE IN PARENT P1 ON DELETE NO ACTION, OPTIONS (receive_mode = 'PULL');`,
+			`
+			CREATE TABLE P1 (
+			  P1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1);
+			CREATE QUEUE Q1 (
+			  Payload BYTES(MAX) NOT NULL,
+			  P1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1), INTERLEAVE IN PARENT P1, OPTIONS (receive_mode = 'PULL');`,
+			``,
+			false,
+		},
+		"alter queue options": {
+			`
+			CREATE QUEUE Q1 (
+			  Q1_I1 INT64 NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(Q1_I1), OPTIONS (receive_mode = 'PULL', locality_group = 'ssd')`,
+			`
+			CREATE QUEUE Q1 (
+			  Q1_I1 INT64 NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(Q1_I1), OPTIONS (receive_mode = 'PULL', disable_send = true)`,
+			`
+			ALTER QUEUE Q1 SET OPTIONS (disable_send = true, locality_group = null);`,
+			false,
+		},
+		"add queue row deletion policy": {
+			`
+			CREATE QUEUE Q1 (
+			  Q1_I1 INT64 NOT NULL,
+			  Q1_T1 TIMESTAMP NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(Q1_I1, Q1_T1)`,
+			`
+			CREATE QUEUE Q1 (
+			  Q1_I1 INT64 NOT NULL,
+			  Q1_T1 TIMESTAMP NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(Q1_I1, Q1_T1), ROW DELETION POLICY (OLDER_THAN(Q1_T1, INTERVAL 7 DAY))`,
+			`
+			ALTER QUEUE Q1 ADD ROW DELETION POLICY (OLDER_THAN(Q1_T1, INTERVAL 7 DAY));`,
+			false,
+		},
+		"replace queue row deletion policy": {
+			`
+			CREATE QUEUE Q1 (
+			  Q1_I1 INT64 NOT NULL,
+			  Q1_T1 TIMESTAMP NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(Q1_I1, Q1_T1), ROW DELETION POLICY (OLDER_THAN(Q1_T1, INTERVAL 7 DAY))`,
+			`
+			CREATE QUEUE Q1 (
+			  Q1_I1 INT64 NOT NULL,
+			  Q1_T1 TIMESTAMP NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(Q1_I1, Q1_T1), ROW DELETION POLICY (OLDER_THAN(Q1_T1, INTERVAL 1 DAY))`,
+			`
+			ALTER QUEUE Q1 REPLACE ROW DELETION POLICY (OLDER_THAN(Q1_T1, INTERVAL 1 DAY));`,
+			false,
+		},
+		"drop queue row deletion policy": {
+			`
+			CREATE QUEUE Q1 (
+			  Q1_I1 INT64 NOT NULL,
+			  Q1_T1 TIMESTAMP NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(Q1_I1, Q1_T1), ROW DELETION POLICY (OLDER_THAN(Q1_T1, INTERVAL 7 DAY))`,
+			`
+			CREATE QUEUE Q1 (
+			  Q1_I1 INT64 NOT NULL,
+			  Q1_T1 TIMESTAMP NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(Q1_I1, Q1_T1)`,
+			`
+			ALTER QUEUE Q1 DROP ROW DELETION POLICY;`,
+			false,
+		},
+		"drop queue with row deletion policy": {
+			`
+			CREATE QUEUE Q1 (
+			  Q1_I1 INT64 NOT NULL,
+			  Q1_T1 TIMESTAMP NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(Q1_I1, Q1_T1), ROW DELETION POLICY (OLDER_THAN(Q1_T1, INTERVAL 7 DAY))`,
+			``,
+			`
+			DROP QUEUE Q1;`,
+			false,
+		},
+		"recreate queue with row deletion policy": {
+			`
+			CREATE QUEUE Q1 (
+			  Q1_I1 INT64 NOT NULL,
+			  Q1_T1 TIMESTAMP NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(Q1_I1, Q1_T1), ROW DELETION POLICY (OLDER_THAN(Q1_T1, INTERVAL 7 DAY))`,
+			`
+			CREATE QUEUE Q1 (
+			  Q1_I1 INT64 NOT NULL,
+			  Q1_T1 TIMESTAMP NOT NULL,
+			  Payload JSON NOT NULL,
+			) PRIMARY KEY(Q1_I1, Q1_T1), ROW DELETION POLICY (OLDER_THAN(Q1_T1, INTERVAL 1 DAY))`,
+			`
+			DROP QUEUE Q1;
+			CREATE QUEUE Q1 (
+			  Q1_I1 INT64 NOT NULL,
+			  Q1_T1 TIMESTAMP NOT NULL,
+			  Payload JSON NOT NULL,
+			) PRIMARY KEY(Q1_I1, Q1_T1), ROW DELETION POLICY (OLDER_THAN(Q1_T1, INTERVAL 1 DAY));`,
+			false,
+		},
+		"alter on delete action of interleaved queue": {
+			`
+			CREATE TABLE P1 (
+			  P1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1);
+			CREATE QUEUE Q1 (
+			  P1_I1 INT64 NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(P1_I1), INTERLEAVE IN PARENT P1;`,
+			`
+			CREATE TABLE P1 (
+			  P1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1);
+			CREATE QUEUE Q1 (
+			  P1_I1 INT64 NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(P1_I1), INTERLEAVE IN PARENT P1 ON DELETE CASCADE;`,
+			`
+			ALTER QUEUE Q1 SET ON DELETE CASCADE;`,
+			false,
+		},
+		"alter queue interleave in to interleave in parent": {
+			`
+			CREATE TABLE P1 (
+			  P1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1);
+			CREATE QUEUE Q1 (
+			  P1_I1 INT64 NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(P1_I1), INTERLEAVE IN P1;`,
+			`
+			CREATE TABLE P1 (
+			  P1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1);
+			CREATE QUEUE Q1 (
+			  P1_I1 INT64 NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(P1_I1), INTERLEAVE IN PARENT P1;`,
+			`
+			ALTER QUEUE Q1 SET INTERLEAVE IN PARENT P1;`,
+			false,
+		},
+		"alter queue interleave in parent to interleave in": {
+			`
+			CREATE TABLE P1 (
+			  P1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1);
+			CREATE QUEUE Q1 (
+			  P1_I1 INT64 NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(P1_I1), INTERLEAVE IN PARENT P1 ON DELETE CASCADE;`,
+			`
+			CREATE TABLE P1 (
+			  P1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1);
+			CREATE QUEUE Q1 (
+			  P1_I1 INT64 NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(P1_I1), INTERLEAVE IN P1;`,
+			`
+			ALTER QUEUE Q1 SET INTERLEAVE IN P1;`,
+			false,
+		},
+		"recreate queue on interleave parent change": {
+			`
+			CREATE TABLE P1 (
+			  P1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1);
+			CREATE TABLE P2 (
+			  P1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1);
+			CREATE QUEUE Q1 (
+			  P1_I1 INT64 NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(P1_I1), INTERLEAVE IN P1;`,
+			`
+			CREATE TABLE P1 (
+			  P1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1);
+			CREATE TABLE P2 (
+			  P1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1);
+			CREATE QUEUE Q1 (
+			  P1_I1 INT64 NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(P1_I1), INTERLEAVE IN P2;`,
+			`
+			DROP QUEUE Q1;
+			CREATE QUEUE Q1 (
+			  P1_I1 INT64 NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(P1_I1), INTERLEAVE IN P2;`,
+			false,
+		},
+		"recreate queue on adding interleave": {
+			`
+			CREATE TABLE P1 (
+			  P1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1);
+			CREATE QUEUE Q1 (
+			  P1_I1 INT64 NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(P1_I1);`,
+			`
+			CREATE TABLE P1 (
+			  P1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1);
+			CREATE QUEUE Q1 (
+			  P1_I1 INT64 NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(P1_I1), INTERLEAVE IN P1;`,
+			`
+			DROP QUEUE Q1;
+			CREATE QUEUE Q1 (
+			  P1_I1 INT64 NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(P1_I1), INTERLEAVE IN P1;`,
+			false,
+		},
+		"add interleaved queue": {
+			``,
+			`
+			CREATE QUEUE Q1 (
+			  P1_I1 INT64 NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(P1_I1), INTERLEAVE IN PARENT P1 ON DELETE CASCADE;
+			CREATE TABLE P1 (
+			  P1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1);`,
+			`
+			CREATE TABLE P1 (
+			  P1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1);
+			CREATE QUEUE Q1 (
+			  P1_I1 INT64 NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(P1_I1), INTERLEAVE IN PARENT P1 ON DELETE CASCADE;`,
+			false,
+		},
+		"add queue interleaved in recreated table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1, T1_I2);
+			CREATE QUEUE Q1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(T1_I1, T1_I2), INTERLEAVE IN PARENT T1;`,
+			`
+			DROP TABLE T1;
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1, T1_I2);
+			CREATE QUEUE Q1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64 NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(T1_I1, T1_I2), INTERLEAVE IN PARENT T1;`,
+			false,
+		},
+		"drop interleaved queue": {
+			`
+			CREATE TABLE P1 (
+			  P1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1);
+			CREATE QUEUE Q1 (
+			  P1_I1 INT64 NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(P1_I1), INTERLEAVE IN PARENT P1 ON DELETE CASCADE;`,
+			``,
+			`
+			DROP QUEUE Q1;
+			DROP TABLE P1;`,
+			false,
+		},
+		"recreate interleaved queue by recreating parent table": {
+			`
+			CREATE TABLE G1 (
+			  G1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(G1_I1);
+			CREATE TABLE G2 (
+			  G1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(G1_I1);
+			CREATE TABLE P1 (
+			  G1_I1 INT64 NOT NULL,
+			  P1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(G1_I1, P1_I1), INTERLEAVE IN G1;
+			CREATE QUEUE Q1 (
+			  G1_I1 INT64 NOT NULL,
+			  P1_I1 INT64 NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(G1_I1, P1_I1), INTERLEAVE IN PARENT P1;`,
+			`
+			CREATE TABLE G1 (
+			  G1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(G1_I1);
+			CREATE TABLE G2 (
+			  G1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(G1_I1);
+			CREATE TABLE P1 (
+			  G1_I1 INT64 NOT NULL,
+			  P1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(G1_I1, P1_I1), INTERLEAVE IN G2;
+			CREATE QUEUE Q1 (
+			  G1_I1 INT64 NOT NULL,
+			  P1_I1 INT64 NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(G1_I1, P1_I1), INTERLEAVE IN PARENT P1;`,
+			`
+			DROP QUEUE Q1;
+			DROP TABLE P1;
+			CREATE TABLE P1 (
+			  G1_I1 INT64 NOT NULL,
+			  P1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(G1_I1, P1_I1), INTERLEAVE IN G2;
+			CREATE QUEUE Q1 (
+			  G1_I1 INT64 NOT NULL,
+			  P1_I1 INT64 NOT NULL,
+			  Payload BYTES(MAX) NOT NULL,
+			) PRIMARY KEY(G1_I1, P1_I1), INTERLEAVE IN PARENT P1;`,
+			false,
+		},
+	})
+}

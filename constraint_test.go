@@ -1,0 +1,1785 @@
+package spannerdiff
+
+import "testing"
+
+func TestDiffConstraint(t *testing.T) {
+	runDiffTests(t, DiffOption{ErrorOnUnsupportedDDL: true}, map[string]diffTest{
+		"add foreign key": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1);
+			`,
+			`
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2(T2_S1);`,
+			false,
+		},
+		"add foreign key referencing recreated table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			  CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1),
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1, T2_I2);`,
+			`
+			DROP TABLE T2;
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64
+			) PRIMARY KEY (T2_I1, T2_I2);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2(T2_I1);`,
+			false,
+		},
+		"drop foreign key": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX)
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;`,
+			false,
+		},
+		"recreate foreign key": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2(T2_S1);`,
+			false,
+		},
+		"change not null of referencing column of foreign key": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX),
+			) PRIMARY KEY(T2_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX) NOT NULL,
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX),
+			) PRIMARY KEY(T2_I1);`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			ALTER TABLE T1 ALTER COLUMN T1_S1 STRING(MAX) NOT NULL;
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2(T2_S1);`,
+			false,
+		},
+		"change not null of referenced column of foreign key": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX),
+			) PRIMARY KEY(T2_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T2_I1);`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			ALTER TABLE T2 ALTER COLUMN T2_S1 STRING(MAX) NOT NULL;
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2(T2_S1);`,
+			false,
+		},
+		"change not null of column of unnamed foreign key": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX),
+			) PRIMARY KEY(T2_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX) NOT NULL,
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX),
+			) PRIMARY KEY(T2_I1);`,
+			``,
+			true,
+		},
+		"change type of columns of foreign key": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX),
+			) PRIMARY KEY(T2_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 BYTES(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 BYTES(MAX),
+			) PRIMARY KEY(T2_I1);`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			ALTER TABLE T1 ALTER COLUMN T1_S1 BYTES(MAX);
+			ALTER TABLE T2 ALTER COLUMN T2_S1 BYTES(MAX);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2(T2_S1);`,
+			false,
+		},
+		"change proto type of columns of foreign key": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_P1 examples.Message1,
+			  CONSTRAINT FK1 FOREIGN KEY (T1_P1) REFERENCES T2 (T2_P1),
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_P1 examples.Message1,
+			) PRIMARY KEY(T2_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_P1 examples.Message2,
+			  CONSTRAINT FK1 FOREIGN KEY (T1_P1) REFERENCES T2 (T2_P1),
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_P1 examples.Message2,
+			) PRIMARY KEY(T2_I1);`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			ALTER TABLE T1 ALTER COLUMN T1_P1 examples.Message2;
+			ALTER TABLE T2 ALTER COLUMN T2_P1 examples.Message2;
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_P1) REFERENCES T2(T2_P1);`,
+			false,
+		},
+		"change length of column of foreign key": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX),
+			) PRIMARY KEY(T2_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(100),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX),
+			) PRIMARY KEY(T2_I1);`,
+			`
+			ALTER TABLE T1 ALTER COLUMN T1_S1 STRING(100);`,
+			false,
+		},
+		"match foreign key without on delete with on delete no action": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE NO ACTION,
+			) PRIMARY KEY(T1_I1)`,
+			``,
+			false,
+		},
+		"match unnamed foreign key with on delete no action with one without on delete": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE NO ACTION,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			``,
+			false,
+		},
+		"recreate foreign key by changing on delete from omitted to cascade": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE CASCADE,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2(T2_S1) ON DELETE CASCADE;`,
+			false,
+		},
+		"recreate foreign key by changing on delete from no action to cascade": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE NO ACTION,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE CASCADE,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2(T2_S1) ON DELETE CASCADE;`,
+			false,
+		},
+		"recreate foreign key by changing on delete from cascade to omitted": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE CASCADE,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2(T2_S1);`,
+			false,
+		},
+		"match named foreign key without on delete with unnamed one with on delete no action": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE NO ACTION,
+			) PRIMARY KEY(T1_I1)`,
+			``,
+			false,
+		},
+		"error on changing on delete of unnamed foreign key from omitted to cascade": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE CASCADE,
+			) PRIMARY KEY(T1_I1)`,
+			``,
+			true,
+		},
+		"match unnamed foreign key without on delete with one with on delete no action": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE NO ACTION,
+			) PRIMARY KEY(T1_I1)`,
+			``,
+			false,
+		},
+		"match named foreign key with on delete no action with unnamed one without on delete": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE NO ACTION,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			``,
+			false,
+		},
+		"match foreign key with on delete no action with one without on delete": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE NO ACTION,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			``,
+			false,
+		},
+		"match foreign keys on same columns by on delete action": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			  CONSTRAINT FK2 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE CASCADE,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE CASCADE,
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE NO ACTION,
+			) PRIMARY KEY(T1_I1)`,
+			``,
+			false,
+		},
+		"match not enforced foreign key without on delete with on delete no action": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  T1_S2 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) NOT ENFORCED,
+			  FOREIGN KEY (T1_S2) REFERENCES T2 (T2_S1) NOT ENFORCED,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  T1_S2 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ON DELETE NO ACTION NOT ENFORCED,
+			  FOREIGN KEY (T1_S2) REFERENCES T2 (T2_S1) ON DELETE NO ACTION NOT ENFORCED,
+			) PRIMARY KEY(T1_I1)`,
+			``,
+			false,
+		},
+		"change enforcement of foreign key from omitted to enforced": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ENFORCED,
+			) PRIMARY KEY(T1_I1)`,
+			``,
+			false,
+		},
+		"change enforcement of unnamed foreign key from enforced to omitted": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ENFORCED,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			``,
+			false,
+		},
+		"recreate foreign key by changing enforcement from omitted to not enforced": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) NOT ENFORCED,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2(T2_S1) NOT ENFORCED;`,
+			false,
+		},
+		"recreate foreign key by changing enforcement from not enforced to omitted": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) NOT ENFORCED,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2(T2_S1);`,
+			false,
+		},
+		"error on changing enforcement of unnamed foreign key": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) NOT ENFORCED,
+			) PRIMARY KEY(T1_I1)`,
+			``,
+			true,
+		},
+		"change named foreign key without enforcement to unnamed enforced one": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ENFORCED,
+			) PRIMARY KEY(T1_I1)`,
+			``,
+			false,
+		},
+		"change named enforced foreign key to unnamed one without enforcement": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ENFORCED,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T1_I1)`,
+			``,
+			false,
+		},
+		"change enforcement of unnamed foreign keys on same columns from omitted to enforced": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) NOT ENFORCED,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) NOT ENFORCED,
+			  FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1) ENFORCED,
+			) PRIMARY KEY(T1_I1)`,
+			``,
+			false,
+		},
+		"add foreign key after creating referenced table": {
+			``,
+			`
+			CREATE TABLE B1 (
+			  B1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(B1_I1);
+			CREATE TABLE A1 (
+			  A1_I1 INT64 NOT NULL,
+			  B1_I1 INT64,
+			  CONSTRAINT FK1 FOREIGN KEY (B1_I1) REFERENCES B1 (B1_I1),
+			) PRIMARY KEY(A1_I1);`,
+			`
+			CREATE TABLE A1 (
+			  A1_I1 INT64 NOT NULL,
+			  B1_I1 INT64,
+			) PRIMARY KEY(A1_I1);
+			CREATE TABLE B1 (
+			  B1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(B1_I1);
+			ALTER TABLE A1 ADD CONSTRAINT FK1 FOREIGN KEY (B1_I1) REFERENCES B1 (B1_I1);`,
+			false,
+		},
+		"drop foreign key before dropping referenced table": {
+			`
+			CREATE TABLE B1 (
+			  B1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(B1_I1);
+			CREATE TABLE A1 (
+			  A1_I1 INT64 NOT NULL,
+			  B1_I1 INT64,
+			  CONSTRAINT FK1 FOREIGN KEY (B1_I1) REFERENCES B1 (B1_I1),
+			) PRIMARY KEY(A1_I1);`,
+			``,
+			`
+			ALTER TABLE A1 DROP CONSTRAINT FK1;
+			DROP TABLE B1;
+			DROP TABLE A1;`,
+			false,
+		},
+		"recreate foreign key by recreating referenced table": {
+			`
+			CREATE TABLE B1 (
+			  B1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(B1_I1);
+			CREATE TABLE A1 (
+			  A1_I1 INT64 NOT NULL,
+			  B1_I1 INT64,
+			  CONSTRAINT FK1 FOREIGN KEY (B1_I1) REFERENCES B1 (B1_I1),
+			) PRIMARY KEY(A1_I1);`,
+			`
+			CREATE TABLE B1 (
+			  B1_I1 INT64 NOT NULL,
+			  B1_I2 INT64 NOT NULL,
+			) PRIMARY KEY(B1_I1, B1_I2);
+			CREATE TABLE A1 (
+			  A1_I1 INT64 NOT NULL,
+			  B1_I1 INT64,
+			  CONSTRAINT FK1 FOREIGN KEY (B1_I1) REFERENCES B1 (B1_I1),
+			) PRIMARY KEY(A1_I1);`,
+			`
+			ALTER TABLE A1 DROP CONSTRAINT FK1;
+			DROP TABLE B1;
+			CREATE TABLE B1 (
+			  B1_I1 INT64 NOT NULL,
+			  B1_I2 INT64 NOT NULL,
+			) PRIMARY KEY(B1_I1, B1_I2);
+			ALTER TABLE A1 ADD CONSTRAINT FK1 FOREIGN KEY (B1_I1) REFERENCES B1 (B1_I1);`,
+			false,
+		},
+		"match unnamed constraint with named constraint": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  CONSTRAINT CK_GENERATED CHECK (T1_I1 > 0),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  CHECK (T1_I1 > 0),
+			) PRIMARY KEY(T1_I1);`,
+			``,
+			false,
+		},
+		"add unnamed constraint": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  CHECK (T1_I1 > 0),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 ADD CHECK (T1_I1 > 0);`,
+			false,
+		},
+		"error on dropping unnamed constraint": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  CHECK (T1_I1 > 0),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);`,
+			``,
+			true,
+		},
+		"drop check constraint before column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			  CONSTRAINT C1 CHECK (T1_I2 > 0),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT C1;
+			ALTER TABLE T1 DROP COLUMN T1_I2;`,
+			false,
+		},
+		"add check constraint": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  CONSTRAINT CHK1 CHECK (T1_I1 > 0)
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 ADD CONSTRAINT CHK1 CHECK (T1_I1 > 0);`,
+			false,
+		},
+		"add check constraint on recreated column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 STRING(MAX),
+			  CONSTRAINT C1 CHECK (T1_I2 != ''),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 DROP COLUMN T1_I2;
+			ALTER TABLE T1 ADD COLUMN T1_I2 STRING(MAX);
+			ALTER TABLE T1 ADD CONSTRAINT C1 CHECK (T1_I2 != "");`,
+			false,
+		},
+		"drop check constraint": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  CONSTRAINT CHK1 CHECK (T1_I1 > 0)
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT CHK1;`,
+			false,
+		},
+		"recreate check constraint": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  CONSTRAINT CHK1 CHECK (T1_I1 > 0)
+			) PRIMARY KEY(T1_I1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  CONSTRAINT CHK1 CHECK (T1_I1 > 1)
+			) PRIMARY KEY(T1_I1)`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT CHK1;
+			ALTER TABLE T1 ADD CONSTRAINT CHK1 CHECK (T1_I1 > 1);`,
+			false,
+		},
+		"add tables with inline foreign keys referencing each other": {
+			``,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			  CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1),
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			  CONSTRAINT FK2 FOREIGN KEY (T2_I2) REFERENCES T1 (T1_I1),
+			) PRIMARY KEY(T2_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64
+			) PRIMARY KEY (T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64
+			) PRIMARY KEY (T2_I1);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);
+			ALTER TABLE T2 ADD CONSTRAINT FK2 FOREIGN KEY (T2_I2) REFERENCES T1 (T1_I1);`,
+			false,
+		},
+		"drop tables with inline foreign keys referencing each other": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			  CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1),
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			  CONSTRAINT FK2 FOREIGN KEY (T2_I2) REFERENCES T1 (T1_I1),
+			) PRIMARY KEY(T2_I1);`,
+			``,
+			`
+			ALTER TABLE T2 DROP CONSTRAINT FK2;
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			DROP TABLE T2;
+			DROP TABLE T1;`,
+			false,
+		},
+		"match unnamed foreign key added by alter table with inline foreign key": {
+			`
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_S1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T2 ADD FOREIGN KEY(T2_S1) REFERENCES T1(T1_S1) ON DELETE NO ACTION;`,
+			`
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_S1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX) NOT NULL,
+			  FOREIGN KEY (T2_S1) REFERENCES T1 (T1_S1) ON DELETE NO ACTION,
+			) PRIMARY KEY(T2_I1);`,
+			``,
+			false,
+		},
+		"match unnamed check constraint added by alter table with inline check constraint": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);
+			ALTER TABLE T1 ADD CHECK (T1_I1 > 0);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  CHECK (T1_I1 > 0),
+			) PRIMARY KEY(T1_I1);`,
+			``,
+			false,
+		},
+		"match constraint added by alter table before create table": {
+			`
+			ALTER TABLE T1 ADD CHECK (T1_I1 > 0);
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  CHECK (T1_I1 > 0),
+			) PRIMARY KEY(T1_I1);`,
+			``,
+			false,
+		},
+		"drop named foreign key added by alter table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			) PRIMARY KEY(T1_I1);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;`,
+			false,
+		},
+		"add foreign key by alter table in target": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX),
+			) PRIMARY KEY(T1_I1);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2 (T2_S1);`,
+			`
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_S1) REFERENCES T2(T2_S1);`,
+			false,
+		},
+		"error on adding constraint to unknown table by alter table": {
+			``,
+			`
+			ALTER TABLE T1 ADD CHECK (T1_I1 > 0);`,
+			``,
+			true,
+		},
+		"match constraint added by alter table on table in named schema": {
+			`
+			CREATE SCHEMA S1;
+			CREATE TABLE S1.T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);
+			ALTER TABLE S1.T1 ADD CHECK (T1_I1 > 0);`,
+			`
+			CREATE SCHEMA S1;
+			CREATE TABLE S1.T1 (
+			  T1_I1 INT64 NOT NULL,
+			  CHECK (T1_I1 > 0),
+			) PRIMARY KEY(T1_I1);`,
+			``,
+			false,
+		},
+		"add constraints by alter table with new table": {
+			`
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_S1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_S1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T2 ADD CONSTRAINT FK1 FOREIGN KEY (T2_S1) REFERENCES T1 (T1_S1);
+			ALTER TABLE T2 ADD CHECK (T2_I1 > 0);`,
+			`
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX) NOT NULL,
+			  CHECK (T2_I1 > 0)
+			) PRIMARY KEY (T2_I1);
+			ALTER TABLE T2 ADD CONSTRAINT FK1 FOREIGN KEY (T2_S1) REFERENCES T1(T1_S1);`,
+			false,
+		},
+		"add constraint by alter table again with recreated table": {
+			`
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_S1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T2 ADD CONSTRAINT FK1 FOREIGN KEY (T2_S1) REFERENCES T1 (T1_S1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_S1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T2_I1, T2_S1);
+			ALTER TABLE T2 ADD CONSTRAINT FK1 FOREIGN KEY (T2_S1) REFERENCES T1 (T1_S1);`,
+			`
+			ALTER TABLE T2 DROP CONSTRAINT FK1;
+			DROP TABLE T2;
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX) NOT NULL
+			) PRIMARY KEY (T2_I1, T2_S1);
+			ALTER TABLE T2 ADD CONSTRAINT FK1 FOREIGN KEY (T2_S1) REFERENCES T1(T1_S1);`,
+			false,
+		},
+		"add constraint by alter table with new table referencing recreated table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_I1, T1_S1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T2 ADD CONSTRAINT FK1 FOREIGN KEY (T2_S1) REFERENCES T1 (T1_S1);`,
+			`
+			DROP TABLE T1;
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_S1 STRING(MAX) NOT NULL
+			) PRIMARY KEY (T1_I1, T1_S1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX) NOT NULL
+			) PRIMARY KEY (T2_I1);
+			ALTER TABLE T2 ADD CONSTRAINT FK1 FOREIGN KEY (T2_S1) REFERENCES T1(T1_S1);`,
+			false,
+		},
+		"add foreign key by alter table again with recreated tables": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T2 ADD CONSTRAINT FK1 FOREIGN KEY (T2_I1) REFERENCES T1 (T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T2 ADD CONSTRAINT FK1 FOREIGN KEY (T2_I1) REFERENCES T1 (T1_I1);`,
+			`
+			ALTER TABLE T2 DROP CONSTRAINT FK1;
+			DROP TABLE T2;
+			DROP TABLE T1;
+			CREATE TABLE T1 (
+			  T1_I1 STRING(MAX) NOT NULL
+			) PRIMARY KEY (T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 STRING(MAX) NOT NULL
+			) PRIMARY KEY (T2_I1);
+			ALTER TABLE T2 ADD CONSTRAINT FK1 FOREIGN KEY (T2_I1) REFERENCES T1(T1_I1);`,
+			false,
+		},
+		"add circular foreign keys by alter table with new tables": {
+			``,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);
+			ALTER TABLE T2 ADD CONSTRAINT FK2 FOREIGN KEY (T2_I2) REFERENCES T1 (T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64
+			) PRIMARY KEY (T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64
+			) PRIMARY KEY (T2_I1);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2(T2_I1);
+			ALTER TABLE T2 ADD CONSTRAINT FK2 FOREIGN KEY (T2_I2) REFERENCES T1(T1_I1);`,
+			false,
+		},
+		"add constraint by alter table again with recreated interleaved table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T1_I1 INT64 NOT NULL,
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1, T2_I1),
+			  INTERLEAVE IN PARENT T1 ON DELETE CASCADE;
+			ALTER TABLE T2 ADD CHECK (T2_I1 > 0);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T1_I1 STRING(MAX) NOT NULL,
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1, T2_I1),
+			  INTERLEAVE IN PARENT T1 ON DELETE CASCADE;
+			ALTER TABLE T2 ADD CHECK (T2_I1 > 0);`,
+			`
+			DROP TABLE T2;
+			DROP TABLE T1;
+			CREATE TABLE T1 (
+			  T1_I1 STRING(MAX) NOT NULL
+			) PRIMARY KEY (T1_I1);
+			CREATE TABLE T2 (
+			  T1_I1 STRING(MAX) NOT NULL,
+			  T2_I1 INT64 NOT NULL,
+			  CHECK (T2_I1 > 0)
+			) PRIMARY KEY (T1_I1, T2_I1),
+			  INTERLEAVE IN PARENT T1 ON DELETE CASCADE;`,
+			false,
+		},
+		"drop named foreign key by alter table before dropping tables": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			``,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			DROP TABLE T2;
+			DROP TABLE T1;`,
+			false,
+		},
+		"drop table with unnamed foreign key by alter table before referenced table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			``,
+			`
+			DROP TABLE T1;
+			DROP TABLE T2;`,
+			false,
+		},
+		"recreate tables with unnamed foreign key by alter table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 STRING(MAX) NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1, T2_I2);
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			`
+			DROP TABLE T1;
+			DROP TABLE T2;
+			CREATE TABLE T1 (
+			  T1_I1 STRING(MAX) NOT NULL,
+			  T1_I2 INT64
+			) PRIMARY KEY (T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64
+			) PRIMARY KEY (T2_I1, T2_I2);
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2(T2_I1);`,
+			false,
+		},
+		"drop table with unnamed foreign key by alter table before referenced table in schema": {
+			`
+			CREATE SCHEMA S1;
+			CREATE TABLE S1.T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE S1.T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			`
+			CREATE TABLE T2 (
+			  T2_I1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T2_I1);`,
+			`
+			DROP TABLE S1.T1;
+			DROP TABLE T2;
+			DROP SCHEMA S1;
+			CREATE TABLE T2 (
+			  T2_I1 STRING(MAX) NOT NULL
+			) PRIMARY KEY (T2_I1);`,
+			false,
+		},
+		"drop circular named foreign keys by alter table before dropping tables": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);
+			ALTER TABLE T2 ADD CONSTRAINT FK2 FOREIGN KEY (T2_I2) REFERENCES T1 (T1_I1);`,
+			``,
+			`
+			ALTER TABLE T2 DROP CONSTRAINT FK2;
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			DROP TABLE T2;
+			DROP TABLE T1;`,
+			false,
+		},
+		"error on dropping tables with circular unnamed foreign keys by alter table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);
+			ALTER TABLE T2 ADD FOREIGN KEY (T2_I2) REFERENCES T1 (T1_I1);`,
+			``,
+			``,
+			true,
+		},
+		"recreate table with named foreign key by alter table into inline foreign key": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 STRING(MAX) NOT NULL,
+			  T1_I2 INT64,
+			  CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1),
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			DROP TABLE T1;
+			CREATE TABLE T1 (
+			  T1_I1 STRING(MAX) NOT NULL,
+			  T1_I2 INT64
+			) PRIMARY KEY (T1_I1);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			false,
+		},
+		"add foreign key by alter table referencing recreated table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1, T2_I2);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			`
+			DROP TABLE T2;
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64
+			) PRIMARY KEY (T2_I1, T2_I2);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2(T2_I1);`,
+			false,
+		},
+		"add check constraint by alter table on recreated column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 STRING(MAX),
+			) PRIMARY KEY(T1_I1);
+			ALTER TABLE T1 ADD CONSTRAINT C1 CHECK (T1_I2 != '');`,
+			`
+			ALTER TABLE T1 DROP COLUMN T1_I2;
+			ALTER TABLE T1 ADD COLUMN T1_I2 STRING(MAX);
+			ALTER TABLE T1 ADD CONSTRAINT C1 CHECK (T1_I2 != "");`,
+			false,
+		},
+		"drop table with unnamed foreign key by alter table before referenced column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I2);`,
+			`
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);`,
+			`
+			DROP TABLE T1;
+			ALTER TABLE T2 DROP COLUMN T2_I2;`,
+			false,
+		},
+		"drop table with unnamed foreign key by alter table before recreating referenced column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I2);`,
+			`
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 STRING(MAX),
+			) PRIMARY KEY(T2_I1);`,
+			`
+			DROP TABLE T1;
+			ALTER TABLE T2 DROP COLUMN T2_I2;
+			ALTER TABLE T2 ADD COLUMN T2_I2 STRING(MAX);`,
+			false,
+		},
+		"drop table with named check constraint by alter table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);
+			ALTER TABLE T1 ADD CONSTRAINT C1 CHECK (T1_I1 > 0);`,
+			``,
+			`
+			DROP TABLE T1;`,
+			false,
+		},
+		"drop table with named self-referencing foreign key by alter table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T1 (T1_I1);`,
+			``,
+			`
+			DROP TABLE T1;`,
+			false,
+		},
+		"recreate table with named foreign key by alter table into unnamed inline foreign key": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD CONSTRAINT FK_T1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 STRING(MAX) NOT NULL,
+			  T1_I2 INT64,
+			  FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1),
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK_T1;
+			DROP TABLE T1;
+			CREATE TABLE T1 (
+			  T1_I1 STRING(MAX) NOT NULL,
+			  T1_I2 INT64
+			) PRIMARY KEY (T1_I1);
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			false,
+		},
+		"recreate table with named inline foreign key into unnamed foreign key by alter table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			  CONSTRAINT FK_T1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1),
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 STRING(MAX) NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK_T1;
+			DROP TABLE T1;
+			CREATE TABLE T1 (
+			  T1_I1 STRING(MAX) NOT NULL,
+			  T1_I2 INT64
+			) PRIMARY KEY (T1_I1);
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2(T2_I1);`,
+			false,
+		},
+		"match named foreign key by alter table with unnamed foreign key by alter table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD CONSTRAINT FK_T1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			``,
+			false,
+		},
+		"match named foreign key added by alter table with unnamed inline foreign key": {
+			`
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_S1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T2 ADD CONSTRAINT FK_T2 FOREIGN KEY(T2_S1) REFERENCES T1(T1_S1) ON DELETE NO ACTION;`,
+			`
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_S1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX) NOT NULL,
+			  FOREIGN KEY (T2_S1) REFERENCES T1 (T1_S1) ON DELETE NO ACTION,
+			) PRIMARY KEY(T2_I1);`,
+			``,
+			false,
+		},
+		"drop named foreign key by alter table with the same definition as unnamed foreign key by alter table": {
+			`
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_S1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T2 ADD FOREIGN KEY(T2_S1) REFERENCES T1(T1_S1) ON DELETE NO ACTION;
+			ALTER TABLE T2 ADD CONSTRAINT FK_T2 FOREIGN KEY(T2_S1) REFERENCES T1(T1_S1) ON DELETE NO ACTION;`,
+			`
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_S1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX) NOT NULL,
+			  FOREIGN KEY (T2_S1) REFERENCES T1 (T1_S1) ON DELETE NO ACTION,
+			) PRIMARY KEY(T2_I1);`,
+			`
+			ALTER TABLE T2 DROP CONSTRAINT FK_T2;`,
+			false,
+		},
+		"error on naming unnamed foreign key added by alter table": {
+			`
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_S1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T2 ADD FOREIGN KEY(T2_S1) REFERENCES T1(T1_S1) ON DELETE NO ACTION;`,
+			`
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(T1_S1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX) NOT NULL,
+			  CONSTRAINT FK_T2 FOREIGN KEY (T2_S1) REFERENCES T1 (T1_S1) ON DELETE NO ACTION,
+			) PRIMARY KEY(T2_I1);`,
+			``,
+			true,
+		},
+		"drop tables with named and unnamed foreign keys by alter table referencing each other": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);
+			ALTER TABLE T2 ADD FOREIGN KEY (T2_I2) REFERENCES T1 (T1_I1);`,
+			``,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			DROP TABLE T2;
+			DROP TABLE T1;`,
+			false,
+		},
+		"drop tables with unnamed foreign key by alter table and named inline foreign key referencing each other": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			  CONSTRAINT FK2 FOREIGN KEY (T2_I2) REFERENCES T1 (T1_I1),
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			``,
+			`
+			ALTER TABLE T2 DROP CONSTRAINT FK2;
+			DROP TABLE T1;
+			DROP TABLE T2;`,
+			false,
+		},
+		"add unnamed foreign key by alter table again with recreated interleaved table and referenced table": {
+			`
+			CREATE TABLE P1 (
+			  P1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1);
+			CREATE TABLE C1 (
+			  P1_I1 INT64 NOT NULL,
+			  C1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1, C1_I1),
+			  INTERLEAVE IN PARENT P1;
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE C1 ADD FOREIGN KEY (C1_I1) REFERENCES T2 (T2_I1);`,
+			`
+			CREATE TABLE P1 (
+			  P1_I1 STRING(MAX) NOT NULL,
+			) PRIMARY KEY(P1_I1);
+			CREATE TABLE C1 (
+			  P1_I1 STRING(MAX) NOT NULL,
+			  C1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(P1_I1, C1_I1),
+			  INTERLEAVE IN PARENT P1;
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1, T2_I2);
+			ALTER TABLE C1 ADD FOREIGN KEY (C1_I1) REFERENCES T2 (T2_I1);`,
+			`
+			DROP TABLE C1;
+			DROP TABLE T2;
+			DROP TABLE P1;
+			CREATE TABLE P1 (
+			  P1_I1 STRING(MAX) NOT NULL
+			) PRIMARY KEY (P1_I1);
+			CREATE TABLE C1 (
+			  P1_I1 STRING(MAX) NOT NULL,
+			  C1_I1 INT64 NOT NULL
+			) PRIMARY KEY (P1_I1, C1_I1),
+			  INTERLEAVE IN PARENT P1;
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64 NOT NULL
+			) PRIMARY KEY (T2_I1, T2_I2);
+			ALTER TABLE C1 ADD FOREIGN KEY (C1_I1) REFERENCES T2(T2_I1);`,
+			false,
+		},
+		"recreate named foreign key by alter table with recreated referenced table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1, T2_I2);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			`
+			ALTER TABLE T1 DROP CONSTRAINT FK1;
+			DROP TABLE T2;
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64
+			) PRIMARY KEY (T2_I1, T2_I2);
+			ALTER TABLE T1 ADD CONSTRAINT FK1 FOREIGN KEY (T1_I2) REFERENCES T2(T2_I1);`,
+			false,
+		},
+		"error on recreating referenced table of unnamed foreign key by alter table": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1);
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_I2 INT64,
+			) PRIMARY KEY(T1_I1);
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_I2 INT64,
+			) PRIMARY KEY(T2_I1, T2_I2);
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_I2) REFERENCES T2 (T2_I1);`,
+			``,
+			true,
+		},
+		"error on adding constraint to unknown table by alter table in base": {
+			`
+			ALTER TABLE T1 ADD CHECK (T1_I1 > 0);`,
+			``,
+			``,
+			true,
+		},
+		"match constraint added by alter table with table name in different case and backquotes": {
+			"CREATE TABLE T1 (T1_I1 INT64 NOT NULL) PRIMARY KEY(T1_I1);\n" +
+				"ALTER TABLE t1 ADD CHECK (T1_I1 > 0);\n" +
+				"ALTER TABLE `T1` ADD CHECK (T1_I1 < 10);",
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  CHECK (T1_I1 > 0),
+			  CHECK (T1_I1 < 10),
+			) PRIMARY KEY(T1_I1);`,
+			``,
+			false,
+		},
+		"drop table with foreign key and column it references": {
+			`
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX),
+			) PRIMARY KEY(T2_I1);
+			CREATE TABLE T3 (
+			  T3_S1 STRING(MAX) NOT NULL,
+			  FOREIGN KEY (T3_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T3_S1);
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL,
+			  FOREIGN KEY (T1_S1) REFERENCES T3 (T3_S1),
+			) PRIMARY KEY(T1_S1)`,
+			`
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1)`,
+			`
+			DROP TABLE T1;
+			DROP TABLE T3;
+			ALTER TABLE T2 DROP COLUMN T2_S1;`,
+			false,
+		},
+		"create table with foreign key and column it references": {
+			`
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T2_I1)`,
+			`
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX),
+			) PRIMARY KEY(T2_I1);
+			CREATE TABLE T3 (
+			  T3_S1 STRING(MAX) NOT NULL,
+			  FOREIGN KEY (T3_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T3_S1);
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL,
+			  FOREIGN KEY (T1_S1) REFERENCES T3 (T3_S1),
+			) PRIMARY KEY(T1_S1)`,
+			`
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL
+			) PRIMARY KEY (T1_S1);
+			CREATE TABLE T3 (
+			  T3_S1 STRING(MAX) NOT NULL
+			) PRIMARY KEY (T3_S1);
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_S1) REFERENCES T3 (T3_S1);
+			ALTER TABLE T2 ADD COLUMN T2_S1 STRING(MAX);
+			ALTER TABLE T3 ADD FOREIGN KEY (T3_S1) REFERENCES T2 (T2_S1);`,
+			false,
+		},
+		"drop table with foreign key and recreate column it references": {
+			`
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX),
+			) PRIMARY KEY(T2_I1);
+			CREATE TABLE T3 (
+			  T3_S1 STRING(MAX) NOT NULL,
+			  FOREIGN KEY (T3_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T3_S1);
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL,
+			  FOREIGN KEY (T1_S1) REFERENCES T3 (T3_S1),
+			) PRIMARY KEY(T1_S1)`,
+			`
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 INT64,
+			) PRIMARY KEY(T2_I1)`,
+			`
+			DROP TABLE T1;
+			DROP TABLE T3;
+			ALTER TABLE T2 DROP COLUMN T2_S1;
+			ALTER TABLE T2 ADD COLUMN T2_S1 INT64;`,
+			false,
+		},
+		"create table with foreign key and recreate column it references": {
+			`
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 INT64,
+			) PRIMARY KEY(T2_I1)`,
+			`
+			CREATE TABLE T2 (
+			  T2_I1 INT64 NOT NULL,
+			  T2_S1 STRING(MAX),
+			) PRIMARY KEY(T2_I1);
+			CREATE TABLE T3 (
+			  T3_S1 STRING(MAX) NOT NULL,
+			  FOREIGN KEY (T3_S1) REFERENCES T2 (T2_S1),
+			) PRIMARY KEY(T3_S1);
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL,
+			  FOREIGN KEY (T1_S1) REFERENCES T3 (T3_S1),
+			) PRIMARY KEY(T1_S1)`,
+			`
+			ALTER TABLE T2 DROP COLUMN T2_S1;
+			CREATE TABLE T1 (
+			  T1_S1 STRING(MAX) NOT NULL
+			) PRIMARY KEY (T1_S1);
+			CREATE TABLE T3 (
+			  T3_S1 STRING(MAX) NOT NULL
+			) PRIMARY KEY (T3_S1);
+			ALTER TABLE T1 ADD FOREIGN KEY (T1_S1) REFERENCES T3 (T3_S1);
+			ALTER TABLE T2 ADD COLUMN T2_S1 STRING(MAX);
+			ALTER TABLE T3 ADD FOREIGN KEY (T3_S1) REFERENCES T2 (T2_S1);`,
+			false,
+		},
+	})
+}
