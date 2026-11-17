@@ -1,0 +1,1450 @@
+AddColumn
+	Add token.Pos
+	IfNotExists bool
+	Column *ColumnDef
+AddRowDeletionPolicy
+	Add token.Pos
+	RowDeletionPolicy *RowDeletionPolicy
+AddStoredColumn
+	Add token.Pos
+	Name *Ident
+AddSynonym
+	Add token.Pos
+	Name *Ident
+AddTableConstraint
+	Add token.Pos
+	TableConstraint *TableConstraint
+Alias
+	Expr Expr
+	As *AsAlias
+AlterChangeStream
+	Alter token.Pos
+	Name *Ident
+	ChangeStreamAlteration ChangeStreamAlteration
+AlterColumn
+	Alter token.Pos
+	Name *Ident
+	Alteration ColumnAlteration
+AlterColumnAlterIdentity
+	Alter token.Pos
+	Alteration IdentityAlteration
+AlterColumnDropDefault
+	Drop token.Pos
+	Default token.Pos
+AlterColumnDropOnUpdate
+	Drop token.Pos
+	Update token.Pos
+AlterColumnSetDefault
+	Set token.Pos
+	DefaultExpr *ColumnDefaultExpr
+AlterColumnSetOnUpdate
+	Set token.Pos
+	OnUpdate *OnUpdate
+AlterColumnSetOptions
+	Set token.Pos
+	Options *Options
+AlterColumnType
+	Type SchemaType
+	Null token.Pos
+	NotNull bool
+	DefaultExpr *ColumnDefaultExpr
+	GeneratedExpr *GeneratedColumnExpr
+AlterDatabase
+	Alter token.Pos
+	Name *Ident
+	Options *Options
+AlterIndex
+	Alter token.Pos
+	Name *Path
+	IndexAlteration IndexAlteration
+AlterLocalityGroup
+	Alter token.Pos
+	Name *Ident
+	Options *Options
+AlterModel
+	Alter token.Pos
+	IfExists bool
+	Name *Ident
+	Options *Options
+AlterProtoBundle
+	Alter token.Pos
+	Bundle token.Pos
+	Insert *AlterProtoBundleInsert
+	Update *AlterProtoBundleUpdate
+	Delete *AlterProtoBundleDelete
+AlterProtoBundleDelete
+	Delete token.Pos
+	Types *ProtoBundleTypes
+AlterProtoBundleInsert
+	Insert token.Pos
+	Types *ProtoBundleTypes
+AlterProtoBundleUpdate
+	Update token.Pos
+	Types *ProtoBundleTypes
+AlterQueue
+	Alter token.Pos
+	Name *Path
+	QueueAlteration QueueAlteration
+AlterSearchIndex
+	Alter token.Pos
+	Name *Path
+	IndexAlteration IndexAlteration
+AlterSequence
+	Alter token.Pos
+	Name *Path
+	Options *Options
+	RestartCounterWith *RestartCounterWith
+	SkipRange *SkipRange
+	NoSkipRange *NoSkipRange
+AlterStatistics
+	Alter token.Pos
+	Name *Ident
+	Options *Options
+AlterTable
+	Alter token.Pos
+	IfExists bool
+	Name *Path
+	TableAlteration TableAlteration
+AlterTableSetOptions
+	Set token.Pos
+	Options *Options
+AlterVectorIndex
+	Alter token.Pos
+	Name *Path
+	Alteration VectorIndexAlteration
+Analyze
+	Analyze token.Pos
+ArrayGQLSubQuery
+	Array token.Pos
+	Rbrace token.Pos
+	GraphClause *GQLGraphClause
+	Query *GQLMultiLinearQueryStatement
+ArrayLiteral
+	Array token.Pos
+	Lbrack token.Pos
+	Rbrack token.Pos
+	Type Type
+	Values []Expr
+ArraySchemaType
+	Array token.Pos
+	Gt token.Pos
+	Rparen token.Pos
+	Item SchemaType
+	NamedArgs []*NamedArg
+ArraySubQuery
+	Array token.Pos
+	Rparen token.Pos
+	Query QueryExpr
+ArrayType
+	Array token.Pos
+	Gt token.Pos
+	Item Type
+AsAlias
+	As token.Pos
+	Alias *Ident
+AsStruct
+	As token.Pos
+	Struct token.Pos
+AsTypeName
+	As token.Pos
+	TypeName *NamedType
+AsValue
+	As token.Pos
+	Value token.Pos
+AssertRowsModified
+	Assert token.Pos
+	NumRows Expr
+AtTimeZone
+	At token.Pos
+	Expr Expr
+AutoIncrement
+	AutoIncrement token.Pos
+BadDDL
+	BadNode *BadNode
+BadDML
+	Hint *Hint
+	BadNode *BadNode
+BadExpr
+	BadNode *BadNode
+BadGQLGraphPattern
+	BadNode *BadNode
+BadGQLLinearQueryStatement
+	BadNode *BadNode
+BadGQLPrimitiveQueryStatement
+	BadNode *BadNode
+BadNode
+	NodePos token.Pos
+	NodeEnd token.Pos
+	Tokens []*token.Token
+BadQueryExpr
+	Hint *Hint
+	BadNode *BadNode
+BadStatement
+	Hint *Hint
+	BadNode *BadNode
+BadType
+	BadNode *BadNode
+BetweenExpr
+	Not bool
+	Left Expr
+	RightStart Expr
+	RightEnd Expr
+BinaryExpr
+	Op BinaryOp
+	Left Expr
+	Right Expr
+BitReversedPositive
+	BitReversedPositive token.Pos
+BoolLiteral
+	ValuePos token.Pos
+	Value bool
+BracedConstructor
+	Lbrace token.Pos
+	Rbrace token.Pos
+	Fields []*BracedConstructorField
+BracedConstructorField
+	Name *Ident
+	Value BracedConstructorFieldValue
+BracedConstructorFieldValueExpr
+	Colon token.Pos
+	Expr Expr
+BracedNewConstructor
+	New token.Pos
+	Type *NamedType
+	Body *BracedConstructor
+BytesLiteral
+	ValuePos token.Pos
+	ValueEnd token.Pos
+	Value []byte
+CTE
+	Rparen token.Pos
+	Name *Ident
+	QueryExpr QueryExpr
+Call
+	Call token.Pos
+	Rparen token.Pos
+	Name *Path
+	Args []TVFArg
+CallExpr
+	Rparen token.Pos
+	Func *Path
+	Distinct bool
+	Args []Arg
+	NamedArgs []*NamedArg
+	NullHandling NullHandlingModifier
+	Having HavingModifier
+	OrderBy *OrderBy
+	Limit *Limit
+	Hint *Hint
+CaseElse
+	Else token.Pos
+	Expr Expr
+CaseExpr
+	Case token.Pos
+	EndPos token.Pos
+	Expr Expr
+	Whens []*CaseWhen
+	Else *CaseElse
+CaseWhen
+	When token.Pos
+	Cond Expr
+	Then Expr
+CastExpr
+	Cast token.Pos
+	Rparen token.Pos
+	Safe bool
+	Expr Expr
+	Type Type
+CastIntValue
+	Cast token.Pos
+	Rparen token.Pos
+	Expr IntValue
+CastNumValue
+	Cast token.Pos
+	Rparen token.Pos
+	Expr NumValue
+	Type ScalarTypeName
+ChangeStreamDropForAll
+	Drop token.Pos
+	All token.Pos
+ChangeStreamForAll
+	For token.Pos
+	All token.Pos
+ChangeStreamForTable
+	Rparen token.Pos
+	TableName *Ident
+	Columns []*Ident
+ChangeStreamForTables
+	For token.Pos
+	Tables []*ChangeStreamForTable
+ChangeStreamSetFor
+	Set token.Pos
+	For ChangeStreamFor
+ChangeStreamSetOptions
+	Set token.Pos
+	Options *Options
+Check
+	Check token.Pos
+	Rparen token.Pos
+	Expr Expr
+Cluster
+	Comma token.Pos
+	OnDeleteEnd token.Pos
+	TableName *Path
+	Enforced bool
+	OnDelete OnDeleteAction
+Collate
+	Collate token.Pos
+	Value StringValue
+ColumnDef
+	Null token.Pos
+	Key token.Pos
+	Name *Ident
+	Type SchemaType
+	NotNull bool
+	PrimaryKey bool
+	DefaultSemantics ColumnDefaultSemantics
+	PlacementKey *PlacementKey
+	Hidden token.Pos
+	Options *Options
+ColumnDefaultExpr
+	Default token.Pos
+	Rparen token.Pos
+	Expr Expr
+	OnUpdate *OnUpdate
+CompoundQuery
+	Op SetOp
+	AllOrDistinct AllOrDistinct
+	Queries []QueryExpr
+ConflictActionDoNothing
+	Do token.Pos
+	Nothing token.Pos
+ConflictActionDoUpdate
+	Do token.Pos
+	UpdateItems []UpdateItem
+	Where *Where
+ConflictTargetColumns
+	Lparen token.Pos
+	Rparen token.Pos
+	Columns []*Ident
+ConflictTargetOnConstraint
+	On token.Pos
+	Name *Ident
+CountStarExpr
+	Count token.Pos
+	Rparen token.Pos
+CreateChangeStream
+	Create token.Pos
+	Name *Ident
+	For ChangeStreamFor
+	Options *Options
+CreateDatabase
+	Create token.Pos
+	Name *Ident
+CreateFunction
+	Create token.Pos
+	As token.Pos
+	RparenAs token.Pos
+	OrReplace bool
+	Name *Path
+	Params []*FunctionParam
+	ReturnType SchemaType
+	SqlSecurity SecurityType
+	Determinism Determinism
+	Language string
+	Remote bool
+	Options *Options
+	Definition Expr
+CreateIndex
+	Create token.Pos
+	Rparen token.Pos
+	Unique bool
+	NullFiltered bool
+	IfNotExists bool
+	Name *Path
+	TableName *Path
+	Keys []*IndexKey
+	Storing *Storing
+	Where *Where
+	InterleaveIn *InterleaveIn
+	Options *Options
+CreateLocalityGroup
+	Create token.Pos
+	Name *Ident
+	Options *Options
+CreateModel
+	Create token.Pos
+	Remote token.Pos
+	OrReplace bool
+	IfNotExists bool
+	Name *Ident
+	InputOutput *CreateModelInputOutput
+	Options *Options
+CreateModelColumn
+	Name *Ident
+	DataType SchemaType
+	Options *Options
+CreateModelInputOutput
+	Input token.Pos
+	Rparen token.Pos
+	InputColumns []*CreateModelColumn
+	OutputColumns []*CreateModelColumn
+CreatePlacement
+	Create token.Pos
+	Name *Ident
+	Options *Options
+CreatePropertyGraph
+	Create token.Pos
+	OrReplace bool
+	IfNotExists bool
+	Name *Ident
+	Content *PropertyGraphContent
+	Options *Options
+CreateProtoBundle
+	Create token.Pos
+	Types *ProtoBundleTypes
+CreateQueue
+	Create token.Pos
+	PrimaryKeyRparen token.Pos
+	IfNotExists bool
+	Name *Path
+	Columns []*ColumnDef
+	PrimaryKeys []*IndexKey
+	Cluster *Cluster
+	RowDeletionPolicy *CreateRowDeletionPolicy
+	Options *Options
+CreateRole
+	Create token.Pos
+	Name *Ident
+CreateRowDeletionPolicy
+	Comma token.Pos
+	RowDeletionPolicy *RowDeletionPolicy
+CreateSchema
+	Create token.Pos
+	OrReplace bool
+	IfNotExists bool
+	Name *Ident
+CreateSearchIndex
+	Create token.Pos
+	Name *Path
+	TableName *Path
+	TokenListPart []*Ident
+	Rparen token.Pos
+	Storing *Storing
+	PartitionColumns []*Ident
+	OrderBy *OrderBy
+	Where *Where
+	Interleave *InterleaveIn
+	Options *Options
+CreateSequence
+	Create token.Pos
+	Name *Path
+	IfNotExists bool
+	Params []SequenceParam
+	Options *Options
+CreateTable
+	Create token.Pos
+	Rparen token.Pos
+	PrimaryKeyRparen token.Pos
+	IfNotExists bool
+	Name *Path
+	Columns []*ColumnDef
+	TableConstraints []*TableConstraint
+	PrimaryKeys []*IndexKey
+	Synonyms []*Synonym
+	Cluster *Cluster
+	RowDeletionPolicy *CreateRowDeletionPolicy
+	Options *Options
+CreateVectorIndex
+	Create token.Pos
+	IfNotExists bool
+	Name *Ident
+	TableName *Ident
+	ColumnName *Ident
+	Storing *Storing
+	Where *Where
+	Options *Options
+CreateView
+	Create token.Pos
+	Name *Path
+	OrReplace bool
+	SecurityType SecurityType
+	Query QueryExpr
+DateLiteral
+	Date token.Pos
+	Value *StringLiteral
+DefaultExpr
+	DefaultPos token.Pos
+	Default bool
+	Expr Expr
+Delete
+	Delete token.Pos
+	Hint *Hint
+	TableName *Path
+	TableHint *Hint
+	As *AsAlias
+	Where *Where
+	AssertRowsModified *AssertRowsModified
+	ThenReturn *ThenReturn
+DeletePrivilege
+	Delete token.Pos
+DotStar
+	Star token.Pos
+	Expr Expr
+	Except *StarModifierExcept
+	Replace *StarModifierReplace
+DropChangeStream
+	Drop token.Pos
+	Name *Ident
+DropColumn
+	Drop token.Pos
+	Name *Ident
+DropConstraint
+	Drop token.Pos
+	Name *Ident
+DropFunction
+	Drop token.Pos
+	IfExists bool
+	Name *Path
+DropIndex
+	Drop token.Pos
+	IfExists bool
+	Name *Path
+DropLocalityGroup
+	Drop token.Pos
+	Name *Ident
+DropModel
+	Drop token.Pos
+	IfExists bool
+	Name *Ident
+DropPlacement
+	Drop token.Pos
+	Name *Ident
+DropPropertyGraph
+	Drop token.Pos
+	IfExists bool
+	Name *Ident
+DropProtoBundle
+	Drop token.Pos
+	Bundle token.Pos
+DropQueue
+	Drop token.Pos
+	IfExists bool
+	Name *Path
+DropRole
+	Drop token.Pos
+	Name *Ident
+DropRowDeletionPolicy
+	Drop token.Pos
+	Policy token.Pos
+DropSchema
+	Drop token.Pos
+	IfExists bool
+	Name *Ident
+DropSearchIndex
+	Drop token.Pos
+	IfExists bool
+	Name *Path
+DropSequence
+	Drop token.Pos
+	IfExists bool
+	Name *Path
+DropStoredColumn
+	Drop token.Pos
+	Name *Ident
+DropSynonym
+	Drop token.Pos
+	Name *Ident
+DropTable
+	Drop token.Pos
+	IfExists bool
+	Name *Path
+DropVectorIndex
+	Drop token.Pos
+	IfExists bool
+	Name *Ident
+DropView
+	Drop token.Pos
+	IfExists bool
+	Name *Path
+ExecutePrivilegeOnTableFunction
+	Execute token.Pos
+	Names []*Path
+ExistsGQLSubQuery
+	Exists token.Pos
+	Rbrace token.Pos
+	Hint *Hint
+	GraphClause *GQLGraphClause
+	Query GQLExistsContent
+ExistsSubQuery
+	Exists token.Pos
+	Rparen token.Pos
+	Hint *Hint
+	Query QueryExpr
+ExprArg
+	Expr Expr
+ExprSelectItem
+	Expr Expr
+ExtractExpr
+	Extract token.Pos
+	Rparen token.Pos
+	Part *Ident
+	Expr Expr
+	AtTimeZone *AtTimeZone
+FloatLiteral
+	ValuePos token.Pos
+	ValueEnd token.Pos
+	Value string
+ForUpdate
+	For token.Pos
+	Update token.Pos
+ForeignKey
+	Foreign token.Pos
+	Rparen token.Pos
+	OnDeleteEnd token.Pos
+	Enforced token.Pos
+	Columns []*Ident
+	ReferenceTable *Path
+	ReferenceColumns []*Ident
+	OnDelete OnDeleteAction
+	Enforcement Enforcement
+From
+	From token.Pos
+	Source TableExpr
+FromQuery
+	From *From
+FunctionParam
+	Name *Ident
+	Type SchemaType
+	DefaultExpr Expr
+GQLBoundedQuantifier
+	Lbrace token.Pos
+	Rbrace token.Pos
+	Low IntValue
+	High IntValue
+	Comma token.Pos
+GQLCompoundLinearQueryStatement
+	Op SetOp
+	AllOrDistinct AllOrDistinct
+	Statements []GQLLinearQueryStatement
+GQLEdgePattern
+	StartPos token.Pos
+	EndPos token.Pos
+	Direction GQLEdgeDirection
+	Filler *GQLElementPatternFiller
+GQLElementPatternFiller
+	EmptyPos token.Pos
+	Hint *Hint
+	Variable *Ident
+	Label *GQLLabelFilter
+	Properties *GQLProperties
+	Where *Where
+	Cost Expr
+GQLFilter
+	Filter token.Pos
+	Where token.Pos
+	Expr Expr
+GQLFixedQuantifier
+	Lbrace token.Pos
+	Rbrace token.Pos
+	Count IntValue
+GQLFor
+	For token.Pos
+	Ident *Ident
+	Expr Expr
+	WithOffset *WithOffset
+GQLGraphClause
+	Graph token.Pos
+	PropertyGraphName *Path
+GQLGraphPattern
+	Paths []*GQLTopLevelPathPattern
+	Where *Where
+GQLGraphQuery
+	Hint *Hint
+	GraphClause *GQLGraphClause
+	Query *GQLMultiLinearQueryStatement
+GQLLabelBinaryExpr
+	Op GQLLabelOp
+	Left GQLLabelExpression
+	Right GQLLabelExpression
+GQLLabelFilter
+	Is token.Pos
+	Colon token.Pos
+	Expr GQLLabelExpression
+GQLLabelParenExpr
+	Lparen token.Pos
+	Rparen token.Pos
+	Expr GQLLabelExpression
+GQLLabelUnaryExpr
+	OpPos token.Pos
+	Op GQLLabelOp
+	Expr GQLLabelExpression
+GQLLet
+	Let token.Pos
+	Items []*GQLLetItem
+GQLLetItem
+	Ident *Ident
+	Expr Expr
+GQLLimit
+	LimitPos token.Pos
+	Limit IntValue
+GQLMatch
+	Optional token.Pos
+	Match token.Pos
+	Hint *Hint
+	Pattern *GQLGraphPattern
+GQLMultiLinearQueryStatement
+	Statements []GQLLinearQueryStatement
+GQLNameLabel
+	Name *Ident
+GQLNodePattern
+	Lparen token.Pos
+	Rparen token.Pos
+	Pattern *GQLElementPatternFiller
+GQLOffset
+	OffsetPos token.Pos
+	Keyword string
+	Offset IntValue
+GQLOrderBy
+	Order token.Pos
+	Items []*GQLOrderByItem
+GQLOrderByItem
+	DirEnd token.Pos
+	Expr Expr
+	Collate *Collate
+	Dir Direction
+GQLPathModeClause
+	StartPos token.Pos
+	EndPos token.Pos
+	Mode GQLPathMode
+	Suffix GQLPathModeSuffix
+GQLPathPattern
+	Terms []*GQLPathTerm
+GQLPathSearchPrefix
+	StartPos token.Pos
+	EndPos token.Pos
+	Prefix GQLSearchPrefix
+	Count IntValue
+GQLPathTerm
+	Hint *Hint
+	Primary GQLPathPrimary
+	Quantifier GQLQuantifier
+GQLProperties
+	Lbrace token.Pos
+	Rbrace token.Pos
+	Fields []*GQLPropertyField
+GQLPropertyField
+	Name *Ident
+	Value Expr
+GQLReturn
+	Return token.Pos
+	AllOrDistinct AllOrDistinct
+	Items []*GQLReturnItem
+	GroupBy *GroupBy
+	OrderBy *GQLOrderBy
+	Offset *GQLOffset
+	Limit *GQLLimit
+GQLReturnItem
+	Star token.Pos
+	Expr Expr
+	Alias *AsAlias
+GQLSimpleLinearQueryStatement
+	Statements []GQLPrimitiveQueryStatement
+GQLSubQueryInCondition
+	Lbrace token.Pos
+	Rbrace token.Pos
+	GraphClause *GQLGraphClause
+	Query *GQLMultiLinearQueryStatement
+GQLSubpathPattern
+	Lparen token.Pos
+	Rparen token.Pos
+	Hint *Hint
+	Mode *GQLPathModeClause
+	Path *GQLPathPattern
+	Where *Where
+GQLSymbolQuantifier
+	OpPos token.Pos
+	Op GQLQuantifierOp
+GQLTopLevelPathPattern
+	Hint *Hint
+	Variable *Ident
+	SearchPrefix *GQLPathSearchPrefix
+	Mode *GQLPathModeClause
+	Path *GQLPathPattern
+GQLWildcardLabel
+	Percent token.Pos
+GQLWith
+	With token.Pos
+	AllOrDistinct AllOrDistinct
+	Items []*GQLReturnItem
+	GroupBy *GroupBy
+GeneratedColumnExpr
+	As token.Pos
+	Stored token.Pos
+	Rparen token.Pos
+	Expr Expr
+Grant
+	Grant token.Pos
+	Privilege Privilege
+	Roles []*Ident
+GraphTableColumns
+	Columns token.Pos
+	Rparen token.Pos
+	Items []SelectItem
+GraphTableExpr
+	GraphTable token.Pos
+	Rparen token.Pos
+	GraphName *Path
+	Query GraphTableQuery
+	As *AsAlias
+	Sample *TableSample
+GraphTableMatch
+	Match *GQLMatch
+	Columns *GraphTableColumns
+GroupBy
+	Group token.Pos
+	Hint *Hint
+	Exprs []Expr
+Having
+	Having token.Pos
+	Expr Expr
+HavingMax
+	Having token.Pos
+	Expr Expr
+HavingMin
+	Having token.Pos
+	Expr Expr
+Hint
+	Atmark token.Pos
+	Rbrace token.Pos
+	Records []*HintRecord
+HintRecord
+	Key *Path
+	Value Expr
+Ident
+	NamePos token.Pos
+	NameEnd token.Pos
+	Name string
+IdentityColumn
+	Generated token.Pos
+	Identity token.Pos
+	Rparen token.Pos
+	Params []SequenceParam
+IfExpr
+	If token.Pos
+	Rparen token.Pos
+	Expr Expr
+	TrueResult Expr
+	ElseResult Expr
+IgnoreNulls
+	Ignore token.Pos
+	Nulls token.Pos
+InExpr
+	Not bool
+	Left Expr
+	Right InCondition
+IndexExpr
+	Rbrack token.Pos
+	Expr Expr
+	Index SubscriptSpecifier
+IndexKey
+	DirPos token.Pos
+	Lparen token.Pos
+	Rparen token.Pos
+	Name *Ident
+	Expr Expr
+	Dir Direction
+Insert
+	Insert token.Pos
+	Or token.Pos
+	InsertOrType InsertOrType
+	Hint *Hint
+	TableName *Path
+	TableHint *Hint
+	As *AsAlias
+	Columns []*Ident
+	Input InsertInput
+	OnConflict *OnConflict
+	AssertRowsModified *AssertRowsModified
+	ThenReturn *ThenReturn
+InsertPrivilege
+	Insert token.Pos
+	Rparen token.Pos
+	Columns []*Ident
+IntLiteral
+	ValuePos token.Pos
+	ValueEnd token.Pos
+	Base int
+	Value string
+InterleaveIn
+	Comma token.Pos
+	TableName *Ident
+IntervalLiteralRange
+	Interval token.Pos
+	EndingDateTimePartEnd token.Pos
+	Value *StringLiteral
+	StartingDateTimePart DateTimePart
+	EndingDateTimePart DateTimePart
+IntervalLiteralSingle
+	Interval token.Pos
+	DateTimePartEnd token.Pos
+	Value IntValue
+	DateTimePart DateTimePart
+IsBoolExpr
+	RightPos token.Pos
+	Not bool
+	Left Expr
+	Right bool
+IsDestinationExpr
+	Of token.Pos
+	Not bool
+	Left Expr
+	Right Expr
+IsDistinctFromExpr
+	Not bool
+	Left Expr
+	Right Expr
+IsLabeledExpr
+	Not bool
+	Left Expr
+	Label GQLLabelExpression
+IsNullExpr
+	Null token.Pos
+	Not bool
+	Left Expr
+IsSourceExpr
+	Of token.Pos
+	Not bool
+	Left Expr
+	Right Expr
+IsUnknownExpr
+	Unknown token.Pos
+	Not bool
+	Left Expr
+JSONLiteral
+	JSON token.Pos
+	Value *StringLiteral
+Join
+	Left TableExpr
+	Op JoinOp
+	Method JoinMethod
+	Hint *Hint
+	Right TableExpr
+	Cond JoinCondition
+LambdaArg
+	Lparen token.Pos
+	Args []*Ident
+	Expr Expr
+Limit
+	Limit token.Pos
+	Count IntValue
+	Offset *Offset
+ModelArg
+	Model token.Pos
+	Name *Path
+NamedArg
+	Name *Ident
+	Value Expr
+NamedType
+	Path []*Ident
+NewConstructor
+	New token.Pos
+	Type *NamedType
+	Args []NewConstructorArg
+	Rparen token.Pos
+NoSkipRange
+	No token.Pos
+	Range token.Pos
+NullLiteral
+	Null token.Pos
+NumericLiteral
+	Numeric token.Pos
+	Value *StringLiteral
+Offset
+	Offset token.Pos
+	Value IntValue
+On
+	On token.Pos
+	Expr Expr
+OnConflict
+	On token.Pos
+	ConflictTarget ConflictTarget
+	ConflictAction ConflictAction
+OnUpdate
+	On token.Pos
+	Rparen token.Pos
+	Expr Expr
+Options
+	Options token.Pos
+	Rparen token.Pos
+	Records []*OptionsDef
+OptionsDef
+	Name *Ident
+	Value Expr
+OrderBy
+	Order token.Pos
+	Items []*OrderByItem
+OrderByItem
+	DirPos token.Pos
+	Expr Expr
+	Collate *Collate
+	Dir Direction
+Param
+	Atmark token.Pos
+	Name string
+ParenExpr
+	Lparen token.Pos
+	Rparen token.Pos
+	Expr Expr
+ParenTableExpr
+	Lparen token.Pos
+	Rparen token.Pos
+	Source TableExpr
+	Sample *TableSample
+Path
+	Idents []*Ident
+PathTableExpr
+	Path *Path
+	Hint *Hint
+	As *AsAlias
+	WithOffset *WithOffset
+	Sample *TableSample
+PipeAs
+	Pipe token.Pos
+	Alias *Ident
+PipeLimit
+	Pipe token.Pos
+	Count IntValue
+	Offset *Offset
+PipeSelect
+	Pipe token.Pos
+	AllOrDistinct AllOrDistinct
+	As SelectAs
+	Results []SelectItem
+PipeSet
+	Pipe token.Pos
+	Items []*PipeSetItem
+PipeSetItem
+	Column *Ident
+	Equal token.Pos
+	Expr Expr
+PipeWhere
+	Pipe token.Pos
+	Expr Expr
+PlacementKey
+	Placement token.Pos
+	Key token.Pos
+PrivilegeOnAllSequencesInSchema
+	Privileges []TablePrivilege
+	Schemas []*Path
+PrivilegeOnAllTablesInSchema
+	Privileges []TablePrivilege
+	Schemas []*Path
+PrivilegeOnQueue
+	Privileges []TablePrivilege
+	Names []*Path
+PrivilegeOnSequence
+	Privileges []TablePrivilege
+	Names []*Path
+PrivilegeOnTable
+	Privileges []TablePrivilege
+	Names []*Path
+PropertyGraphColumnNameList
+	Lparen token.Pos
+	Rparen token.Pos
+	ColumnNameList []*Ident
+PropertyGraphContent
+	NodeTables *PropertyGraphNodeTables
+	EdgeTables *PropertyGraphEdgeTables
+PropertyGraphDerivedProperty
+	Expr Expr
+	Alias *Ident
+PropertyGraphDerivedPropertyList
+	Properties token.Pos
+	Rparen token.Pos
+	DerivedProperties []*PropertyGraphDerivedProperty
+PropertyGraphDestinationKey
+	Destination token.Pos
+	Keys *PropertyGraphColumnNameList
+	ElementReference *Ident
+	ReferenceColumns *PropertyGraphColumnNameList
+PropertyGraphDynamicLabel
+	Dynamic token.Pos
+	Rparen token.Pos
+	ColumnName *Ident
+PropertyGraphDynamicProperties
+	Dynamic token.Pos
+	Rparen token.Pos
+	ColumnName *Ident
+PropertyGraphEdgeElementKeys
+	Element *PropertyGraphElementKey
+	Source *PropertyGraphSourceKey
+	Destination *PropertyGraphDestinationKey
+PropertyGraphEdgeTables
+	Edge token.Pos
+	Tables *PropertyGraphElementList
+PropertyGraphElement
+	Name *Ident
+	Alias *Ident
+	Keys PropertyGraphElementKeys
+	Properties PropertyGraphLabelsOrProperties
+	DynamicLabel *PropertyGraphDynamicLabel
+	DynamicProperties *PropertyGraphDynamicProperties
+PropertyGraphElementKey
+	Key token.Pos
+	Keys *PropertyGraphColumnNameList
+PropertyGraphElementLabelDefaultLabel
+	Default token.Pos
+	Label token.Pos
+PropertyGraphElementLabelLabelName
+	Label token.Pos
+	Name *Ident
+PropertyGraphElementList
+	Lparen token.Pos
+	Rparen token.Pos
+	Elements []*PropertyGraphElement
+PropertyGraphLabelAndProperties
+	Label PropertyGraphElementLabel
+	Properties PropertyGraphElementProperties
+PropertyGraphLabelAndPropertiesList
+	LabelAndProperties []*PropertyGraphLabelAndProperties
+PropertyGraphNoProperties
+	No token.Pos
+	Properties token.Pos
+PropertyGraphNodeElementKey
+	Key *PropertyGraphElementKey
+PropertyGraphNodeTables
+	Node token.Pos
+	Tables *PropertyGraphElementList
+PropertyGraphPropertiesAre
+	Properties token.Pos
+	Columns token.Pos
+	ExceptColumns *PropertyGraphColumnNameList
+PropertyGraphSingleProperties
+	Properties PropertyGraphElementProperties
+PropertyGraphSourceKey
+	Source token.Pos
+	Keys *PropertyGraphColumnNameList
+	ElementReference *Ident
+	ReferenceColumns *PropertyGraphColumnNameList
+ProtoBundleTypes
+	Lparen token.Pos
+	Rparen token.Pos
+	Types []*NamedType
+Query
+	With *With
+	Query QueryExpr
+	OrderBy *OrderBy
+	Limit *Limit
+	ForUpdate *ForUpdate
+	PipeOperators []PipeOperator
+QueryStatement
+	Hint *Hint
+	Query QueryExpr
+QueueSetOptions
+	Set token.Pos
+	Options *Options
+RenameTable
+	Rename token.Pos
+	Tos []*RenameTableTo
+RenameTableTo
+	Old *Ident
+	New *Ident
+RenameTo
+	Rename token.Pos
+	Name *Ident
+	AddSynonym *AddSynonym
+ReplaceFieldsArg
+	Expr Expr
+	Field *Path
+ReplaceFieldsExpr
+	ReplaceFields token.Pos
+	Rparen token.Pos
+	Expr Expr
+	Fields []*ReplaceFieldsArg
+ReplaceRowDeletionPolicy
+	Replace token.Pos
+	RowDeletionPolicy *RowDeletionPolicy
+RespectNulls
+	Respect token.Pos
+	Nulls token.Pos
+RestartCounterWith
+	Restart token.Pos
+	Counter *IntLiteral
+Revoke
+	Revoke token.Pos
+	Privilege Privilege
+	Roles []*Ident
+RolePrivilege
+	Role token.Pos
+	Names []*Ident
+RowDeletionPolicy
+	Row token.Pos
+	Rparen token.Pos
+	ColumnName *Ident
+	NumDays *IntLiteral
+ScalarSchemaType
+	NamePos token.Pos
+	Name ScalarTypeName
+ScalarSubQuery
+	Lparen token.Pos
+	Rparen token.Pos
+	Query QueryExpr
+Select
+	Select token.Pos
+	AllOrDistinct AllOrDistinct
+	As SelectAs
+	Results []SelectItem
+	From *From
+	Where *Where
+	GroupBy *GroupBy
+	Having *Having
+SelectPrivilege
+	Select token.Pos
+	Rparen token.Pos
+	Columns []*Ident
+SelectPrivilegeOnAllChangeStreamsInSchema
+	Select token.Pos
+	Schemas []*Path
+SelectPrivilegeOnAllViewsInSchema
+	Select token.Pos
+	Schemas []*Path
+SelectPrivilegeOnChangeStream
+	Select token.Pos
+	Names []*Path
+SelectPrivilegeOnView
+	Select token.Pos
+	Names []*Path
+SelectorExpr
+	Expr Expr
+	Ident *Ident
+SequenceArg
+	Sequence token.Pos
+	Expr Expr
+SetInterleaveIn
+	Set token.Pos
+	OnDeleteEnd token.Pos
+	TableName *Path
+	Enforced bool
+	OnDelete OnDeleteAction
+SetNoSkipRange
+	Set token.Pos
+	NoSkipRange *NoSkipRange
+SetOnDelete
+	Set token.Pos
+	OnDeleteEnd token.Pos
+	OnDelete OnDeleteAction
+SetSkipRange
+	Set token.Pos
+	SkipRange *SkipRange
+SimpleType
+	NamePos token.Pos
+	Name ScalarTypeName
+SizedSchemaType
+	NamePos token.Pos
+	Rparen token.Pos
+	Name ScalarTypeName
+	Max bool
+	Size IntValue
+SkipRange
+	Skip token.Pos
+	Min *IntLiteral
+	Max *IntLiteral
+Star
+	Star token.Pos
+	Except *StarModifierExcept
+	Replace *StarModifierReplace
+StarModifierExcept
+	Except token.Pos
+	Rparen token.Pos
+	Columns []*Ident
+StarModifierReplace
+	Replace token.Pos
+	Rparen token.Pos
+	Columns []*StarModifierReplaceItem
+StarModifierReplaceItem
+	Expr Expr
+	Name *Ident
+StartCounterWith
+	Start token.Pos
+	Counter *IntLiteral
+Storing
+	Storing token.Pos
+	Rparen token.Pos
+	Columns []*Ident
+StringLiteral
+	ValuePos token.Pos
+	ValueEnd token.Pos
+	Value string
+StructField
+	Ident *Ident
+	Type Type
+StructType
+	Struct token.Pos
+	Gt token.Pos
+	Fields []*StructField
+SubQuery
+	Lparen token.Pos
+	Rparen token.Pos
+	Query QueryExpr
+SubQueryInCondition
+	Lparen token.Pos
+	Rparen token.Pos
+	Query QueryExpr
+SubQueryInput
+	Query QueryExpr
+SubQueryTableExpr
+	Lparen token.Pos
+	Rparen token.Pos
+	Query QueryExpr
+	As *AsAlias
+	Sample *TableSample
+SubscriptSpecifierKeyword
+	KeywordPos token.Pos
+	Rparen token.Pos
+	Keyword PositionKeyword
+	Expr Expr
+Synonym
+	Synonym token.Pos
+	Rparen token.Pos
+	Name *Ident
+TVFCallExpr
+	Rparen token.Pos
+	Name *Path
+	Args []TVFArg
+	NamedArgs []*NamedArg
+	Hint *Hint
+	Sample *TableSample
+TableArg
+	Table token.Pos
+	Name *Path
+TableConstraint
+	ConstraintPos token.Pos
+	Name *Ident
+	Constraint Constraint
+TableName
+	Table *Ident
+	Hint *Hint
+	As *AsAlias
+	Sample *TableSample
+TablePrimaryKey
+	Primary token.Pos
+	Rparen token.Pos
+	Columns []*IndexKey
+TableSample
+	TableSample token.Pos
+	Method TableSampleMethod
+	Size *TableSampleSize
+TableSampleSize
+	Lparen token.Pos
+	Rparen token.Pos
+	Value NumValue
+	Unit TableSampleUnit
+ThenReturn
+	Then token.Pos
+	WithAction *WithAction
+	Items []SelectItem
+TimestampLiteral
+	Timestamp token.Pos
+	Value *StringLiteral
+TupleStructLiteral
+	Lparen token.Pos
+	Rparen token.Pos
+	Values []Expr
+TypedStructLiteral
+	Struct token.Pos
+	Rparen token.Pos
+	Fields []*StructField
+	Values []Expr
+TypelessStructLiteral
+	Struct token.Pos
+	Rparen token.Pos
+	Values []TypelessStructLiteralArg
+UnaryExpr
+	OpPos token.Pos
+	Op UnaryOp
+	Expr Expr
+Unnest
+	Unnest token.Pos
+	Rparen token.Pos
+	Expr Expr
+	Hint *Hint
+	As *AsAlias
+	WithOffset *WithOffset
+	Sample *TableSample
+UnnestInCondition
+	Unnest token.Pos
+	Rparen token.Pos
+	Expr Expr
+Update
+	Update token.Pos
+	Hint *Hint
+	TableName *Path
+	TableHint *Hint
+	As *AsAlias
+	Updates []UpdateItem
+	Where *Where
+	ThenReturn *ThenReturn
+UpdateItemDML
+	Lparen token.Pos
+	Rparen token.Pos
+	DML DML
+UpdateItemSetValue
+	Path []*Ident
+	DefaultExpr *DefaultExpr
+UpdatePrivilege
+	Update token.Pos
+	Rparen token.Pos
+	Columns []*Ident
+UsagePrivilegeOnSchema
+	Usage token.Pos
+	Default token.Pos
+	Schemas []*Path
+Using
+	Using token.Pos
+	Rparen token.Pos
+	Idents []*Ident
+ValueGQLSubQuery
+	Value token.Pos
+	Rbrace token.Pos
+	Hint *Hint
+	GraphClause *GQLGraphClause
+	Query *GQLMultiLinearQueryStatement
+ValuesInCondition
+	Lparen token.Pos
+	Rparen token.Pos
+	Exprs []Expr
+ValuesInput
+	Values token.Pos
+	Rows []*ValuesRow
+ValuesRow
+	Lparen token.Pos
+	Rparen token.Pos
+	Exprs []*DefaultExpr
+VectorIndexRebuild
+	Rebuild token.Pos
+VectorIndexSetOptions
+	Set token.Pos
+	Options *Options
+Where
+	Where token.Pos
+	Expr Expr
+With
+	With token.Pos
+	CTEs []*CTE
+WithAction
+	With token.Pos
+	Action token.Pos
+	Alias *AsAlias
+WithExpr
+	With token.Pos
+	Rparen token.Pos
+	Vars []*WithExprVar
+	Expr Expr
+WithExprVar
+	Name *Ident
+	Expr Expr
+WithOffset
+	With token.Pos
+	Offset token.Pos
+	As *AsAlias

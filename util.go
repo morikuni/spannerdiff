@@ -3,6 +3,7 @@ package spannerdiff
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 
 	"github.com/cloudspannerecosystem/memefish/ast"
@@ -63,30 +64,29 @@ func equalNode(a, b ast.Node) bool {
 
 var posType = reflect.TypeOf(token.Pos(0))
 
-// isPresencePos reports whether the path is a position that memefish uses to record whether a keyword or parentheses are present.
+// presencePositions are the positions that memefish uses to record whether a keyword or parentheses are present.
 // Such a position is valid only when they are written, so it is compared by its validity instead of being ignored.
+// TestPresencePositions checks that this list covers the positions that memefish uses in this way.
+var presencePositions = map[reflect.Type][]string{
+	reflect.TypeOf(ast.ColumnDef{}):           {"Hidden"},
+	reflect.TypeOf(ast.GeneratedColumnExpr{}): {"Stored"},
+	// FOR T() tracks only the primary key columns, and FOR T tracks all columns.
+	reflect.TypeOf(ast.ChangeStreamForTable{}): {"Rparen"},
+	reflect.TypeOf(ast.GQLMatch{}):             {"Optional"},
+	reflect.TypeOf(ast.GQLReturnItem{}):        {"Star"},
+}
+
 func isPresencePos(p cmp.Path) bool {
 	sf, ok := p.Last().(cmp.StructField)
 	if !ok || sf.Type() != posType || len(p) < 2 {
 		return false
 	}
-	switch p.Index(-2).Type() {
-	case reflect.TypeOf(ast.ColumnDef{}):
-		return sf.Name() == "Hidden"
-	case reflect.TypeOf(ast.GeneratedColumnExpr{}):
-		return sf.Name() == "Stored"
-	case reflect.TypeOf(ast.ChangeStreamForTable{}):
-		// FOR T() tracks only the primary key columns, and FOR T tracks all columns.
-		return sf.Name() == "Rparen"
-	default:
-		return false
-	}
+	return slices.Contains(presencePositions[p.Index(-2).Type()], sf.Name())
 }
 
 func equalOptions() []cmp.Option {
 	return []cmp.Option{
-		// Positions do not affect the schema, except the positions that record whether HIDDEN or STORED,
-		// or the parentheses of FOR T(), are written.
+		// Positions do not affect the schema, except the positions that record whether a keyword or parentheses are written.
 		cmp.FilterPath(func(p cmp.Path) bool {
 			return p.Last().Type() == posType && !isPresencePos(p)
 		}, cmp.Ignore()),
