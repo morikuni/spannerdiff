@@ -190,7 +190,7 @@ type migration struct {
 	targetDefs *definitions
 	states     map[identifier]migrationState
 	dependents map[identifier][]dependent
-	errs       []error
+	errs       []migrationError
 }
 
 // dependent is a definition that depends on another definition.
@@ -282,8 +282,27 @@ func (m *migration) recreateWithDependency(me migrationState) {
 	}
 }
 
-func (m *migration) addError(err error) {
-	m.errs = append(m.errs, err)
+type migrationError struct {
+	id  identifier
+	err error
+}
+
+// addError reports that the definition can't be migrated.
+func (m *migration) addError(id identifier, err error) {
+	m.errs = append(m.errs, migrationError{id, err})
+}
+
+// err returns the reported errors. It must be called after all states are determined,
+// because the error of a definition doesn't matter if the definition turns out to be migrated with its owner.
+func (m *migration) err() error {
+	slices.SortStableFunc(m.errs, func(a, b migrationError) int { return strings.Compare(a.id.ID(), b.id.ID()) })
+	var errs []error
+	for _, e := range m.errs {
+		if m.kind(e.id) != migrationKindNone {
+			errs = append(errs, e.err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // dropsAnyOf reports whether any of the definitions exists in base but not in target.
@@ -311,8 +330,8 @@ func diffDefinitions(base, target *definitions) ([]ast.DDL, error) {
 	m.alters(base, target)
 	m.adds(base, target)
 	m.validate()
-	if len(m.errs) > 0 {
-		return nil, errors.Join(m.errs...)
+	if err := m.err(); err != nil {
+		return nil, err
 	}
 
 	var operations []operation
@@ -338,16 +357,16 @@ func (m *migration) validate() {
 		switch state.kind {
 		case migrationKindDrop, migrationKindDropAndAdd:
 			if c, ok := state.base.mustGet().(*constraint); ok && c.node.Name == nil {
-				m.addError(fmt.Errorf("unnamed constraint can't be dropped, name the constraint in the base schema: %s", c.node.SQL()))
+				m.addError(id, fmt.Errorf("unnamed constraint can't be dropped, name the constraint in the base schema: %s", c.node.SQL()))
 			}
 		}
 		switch state.kind {
 		case migrationKindAdd, migrationKindDropAndAdd:
 			if c, ok := state.target.mustGet().(*column); ok && c.node.NotNull && c.node.DefaultSemantics == nil {
 				if _, ok := zeroValueOf(c.node.Type).get(); !ok {
-					m.addError(fmt.Errorf("NOT NULL column without a default value can't be added to an existing table because the zero value of its type is unknown, add it with a default value or as a nullable column first: %s", c.id()))
+					m.addError(id, fmt.Errorf("NOT NULL column without a default value can't be added to an existing table because the zero value of its type is unknown, add it with a default value or as a nullable column first: %s", c.id()))
 				} else if !c.zeroDefault {
-					m.addError(fmt.Errorf("NOT NULL column without a default value can't be added to an existing table, add it with a default value or as a nullable column first, or use --zero-default-for-not-null-columns if the zero value is valid for existing rows: %s", c.id()))
+					m.addError(id, fmt.Errorf("NOT NULL column without a default value can't be added to an existing table, add it with a default value or as a nullable column first, or use --zero-default-for-not-null-columns if the zero value is valid for existing rows: %s", c.id()))
 				}
 			}
 		}
