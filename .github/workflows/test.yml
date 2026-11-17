@@ -13,6 +13,11 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+    services:
+      spanner-emulator:
+        image: gcr.io/cloud-spanner-emulator/emulator:1.5.58
+        ports:
+          - 9020:9020
     steps:
     - uses: actions/checkout@v4
 
@@ -34,3 +39,5 @@ jobs:
         fail_level: error
 
     - run: make test
+      env:
+        SPANNER_EMULATOR_REST_HOST: localhost:9020

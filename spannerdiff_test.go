@@ -31,6 +31,12 @@ func runDiffTests(t *testing.T, option DiffOption, tests map[string]diffTest) {
 				t.Fatalf("want no error, got %v", err)
 			}
 			equalDDLs(t, tt.wantDDLs, buf.String())
+
+			if e := emulatorForTest(t); e != nil {
+				t.Run("emulator", func(t *testing.T) {
+					verifyOnEmulator(t, e, tt.base, buf.String(), tt.target, option)
+				})
+			}
 		})
 	}
 }
