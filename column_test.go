@@ -203,6 +203,129 @@ func TestDiffColumn(t *testing.T) {
 			ALTER TABLE T1 ALTER COLUMN T1_T1 DROP DEFAULT;`,
 			false,
 		},
+		"set default value and on update of commit timestamp column": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp = true),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP NOT NULL DEFAULT (PENDING_COMMIT_TIMESTAMP()) ON UPDATE (PENDING_COMMIT_TIMESTAMP()) OPTIONS (allow_commit_timestamp = true),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 ALTER COLUMN T1_T1 SET DEFAULT (PENDING_COMMIT_TIMESTAMP()) ON UPDATE (PENDING_COMMIT_TIMESTAMP());`,
+			false,
+		},
+		"add on update to column with pending commit timestamp default value": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP NOT NULL DEFAULT (PENDING_COMMIT_TIMESTAMP()) OPTIONS (allow_commit_timestamp = true),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP NOT NULL DEFAULT (PENDING_COMMIT_TIMESTAMP()) ON UPDATE (PENDING_COMMIT_TIMESTAMP()) OPTIONS (allow_commit_timestamp = true),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 ALTER COLUMN T1_T1 SET DEFAULT (PENDING_COMMIT_TIMESTAMP()) ON UPDATE (PENDING_COMMIT_TIMESTAMP());`,
+			false,
+		},
+		"drop on update and keep default value": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP NOT NULL DEFAULT (PENDING_COMMIT_TIMESTAMP()) ON UPDATE (PENDING_COMMIT_TIMESTAMP()) OPTIONS (allow_commit_timestamp = true),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP NOT NULL DEFAULT (PENDING_COMMIT_TIMESTAMP()) OPTIONS (allow_commit_timestamp = true),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 ALTER COLUMN T1_T1 SET DEFAULT (PENDING_COMMIT_TIMESTAMP());`,
+			false,
+		},
+		"drop default value and on update": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP NOT NULL DEFAULT (PENDING_COMMIT_TIMESTAMP()) ON UPDATE (PENDING_COMMIT_TIMESTAMP()) OPTIONS (allow_commit_timestamp = true),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp = true),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 ALTER COLUMN T1_T1 DROP DEFAULT;`,
+			false,
+		},
+		"allow commit timestamp and set default value and on update": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP()),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP NOT NULL DEFAULT (PENDING_COMMIT_TIMESTAMP()) ON UPDATE (PENDING_COMMIT_TIMESTAMP()) OPTIONS (allow_commit_timestamp = true),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 ALTER COLUMN T1_T1 DROP DEFAULT;
+			ALTER TABLE T1 ALTER COLUMN T1_T1 SET OPTIONS (allow_commit_timestamp = true);
+			ALTER TABLE T1 ALTER COLUMN T1_T1 SET DEFAULT (PENDING_COMMIT_TIMESTAMP()) ON UPDATE (PENDING_COMMIT_TIMESTAMP());`,
+			false,
+		},
+		"disallow commit timestamp on column with on update": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP NOT NULL DEFAULT (PENDING_COMMIT_TIMESTAMP()) ON UPDATE (PENDING_COMMIT_TIMESTAMP()) OPTIONS (allow_commit_timestamp = true),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP()),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 ALTER COLUMN T1_T1 DROP DEFAULT;
+			ALTER TABLE T1 ALTER COLUMN T1_T1 SET OPTIONS (allow_commit_timestamp = null);
+			ALTER TABLE T1 ALTER COLUMN T1_T1 SET DEFAULT (CURRENT_TIMESTAMP());`,
+			false,
+		},
+		"add not null with default value and on update": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP OPTIONS (allow_commit_timestamp = true),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP NOT NULL DEFAULT (PENDING_COMMIT_TIMESTAMP()) ON UPDATE (PENDING_COMMIT_TIMESTAMP()) OPTIONS (allow_commit_timestamp = true),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 ALTER COLUMN T1_T1 TIMESTAMP NOT NULL DEFAULT (PENDING_COMMIT_TIMESTAMP()) ON UPDATE (PENDING_COMMIT_TIMESTAMP());`,
+			false,
+		},
+		"add column with on update": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP NOT NULL DEFAULT (PENDING_COMMIT_TIMESTAMP()) ON UPDATE (PENDING_COMMIT_TIMESTAMP()) OPTIONS (allow_commit_timestamp = true),
+			) PRIMARY KEY(T1_I1);`,
+			`
+			ALTER TABLE T1 ADD COLUMN T1_T1 TIMESTAMP NOT NULL DEFAULT (PENDING_COMMIT_TIMESTAMP()) ON UPDATE (PENDING_COMMIT_TIMESTAMP()) OPTIONS (allow_commit_timestamp = true);`,
+			false,
+		},
 		"change default value and add not null": {
 			`
 			CREATE TABLE T1 (
