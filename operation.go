@@ -26,7 +26,7 @@ var _ = []dropDependencyOwner{
 }
 
 func newOperation(def definition, kind operationKind, ddl ast.DDL) operation {
-	dependsOn := def.dependsOn()
+	dependsOn := dependencyIDs(def.dependsOn())
 	if d, ok := def.(dropDependencyOwner); ok && kind == operationKindDrop {
 		dependsOn = d.dropDependsOn()
 	}

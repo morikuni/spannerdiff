@@ -16,8 +16,71 @@ type definition interface {
 	add() []ast.DDL
 	drop() optional[ast.DDL]
 	alter(target definition, m *migration)
-	dependsOn() []identifier
+	dependsOn() []dependency
+}
+
+// dependencyKind is how a change of a dependency affects the definition that depends on it.
+// The kinds are ordered by strength: when a definition depends on the same definition in several ways, the strongest kind is used.
+type dependencyKind int
+
+const (
+	// dependencyKindOrder only orders the operations: the definition is added after its dependency and dropped before it.
+	dependencyKindOrder dependencyKind = iota
+	// dependencyKindRecreate also recreates the definition when its dependency is recreated,
+	// because the dependency can't be dropped while the definition references it.
+	dependencyKindRecreate
+	// dependencyKindOwner is a dependency whose CREATE and DROP statements also add and drop the definition,
+	// so the definition is not migrated by itself when its owner is added, dropped or recreated.
+	dependencyKindOwner
+	// dependencyKindCustom notifies the definition of every change of its dependency by dependencyChangeHandler.
+	dependencyKindCustom
+)
+
+type dependency struct {
+	id   identifier
+	kind dependencyKind
+}
+
+func newDependencies(kind dependencyKind, ids []identifier) []dependency {
+	deps := make([]dependency, 0, len(ids))
+	for _, id := range ids {
+		deps = append(deps, dependency{id, kind})
+	}
+	return deps
+}
+
+func dependencyIDs(deps []dependency) []identifier {
+	ids := make([]identifier, 0, len(deps))
+	for _, dep := range deps {
+		ids = append(ids, dep.id)
+	}
+	return ids
+}
+
+// mergeDependencies merges the dependencies on the same definition into one with the strongest kind.
+func mergeDependencies(deps []dependency) []dependency {
+	indexes := make(map[identifier]int, len(deps))
+	result := make([]dependency, 0, len(deps))
+	for _, dep := range deps {
+		if i, ok := indexes[dep.id]; ok {
+			result[i].kind = max(result[i].kind, dep.kind)
+			continue
+		}
+		indexes[dep.id] = len(result)
+		result = append(result, dep)
+	}
+	return result
+}
+
+// dependencyChangeHandler is a definition that has dependencies of dependencyKindCustom.
+type dependencyChangeHandler interface {
 	onDependencyChange(me, dependency migrationState, m *migration)
+}
+
+var _ = []dependencyChangeHandler{
+	&column{},
+	&constraint{},
+	&changeStream{},
 }
 
 var _ = []definition{
@@ -266,11 +329,9 @@ func (s *schema) alter(tgt definition, m *migration) {
 	m.updateStateIfUndefined(newDropAndAddState(s, tgt))
 }
 
-func (s *schema) dependsOn() []identifier {
+func (s *schema) dependsOn() []dependency {
 	return nil
 }
-
-func (s *schema) onDependencyChange(me, dependency migrationState, m *migration) {}
 
 type table struct {
 	node *ast.CreateTable
@@ -411,26 +472,27 @@ func alterCluster(base, target *ast.Cluster) (tableOrQueueAlteration, bool) {
 	}
 }
 
-func (t *table) dependsOn() []identifier {
-	var ids []identifier
+func (t *table) dependsOn() []dependency {
+	var deps []dependency
 	if schemaID, ok := t.schemaID().get(); ok {
-		ids = append(ids, schemaID)
+		deps = append(deps, dependency{schemaID, dependencyKindRecreate})
 	}
 	if t.node.Cluster != nil {
 		parentID := newTableIDFromPath(t.node.Cluster.TableName)
-		ids = append(ids, parentID)
+		deps = append(deps, dependency{parentID, dependencyKindRecreate})
 		// The key columns of an interleaved table must match those of its parent table,
 		// so the table is created after the key columns of the parent table are altered.
+		// Recreating a key column recreates the parent table, which is handled as a dependency on the table.
 		// Key columns that aren't in the parent table have no migration state and are ignored.
 		for _, key := range t.primaryKeys() {
-			ids = append(ids, newColumnID(parentID, key.Name))
+			deps = append(deps, dependency{newColumnID(parentID, key.Name), dependencyKindOrder})
 		}
 	}
 	// CREATE TABLE contains default values, so sequences used by them must exist before the table is created.
 	for _, col := range t.node.Columns {
-		ids = append(ids, sequencesInColumn(col)...)
+		deps = append(deps, newDependencies(dependencyKindOrder, sequencesInColumn(col))...)
 	}
-	return ids
+	return deps
 }
 
 // dropDependsOn returns the dependencies of DROP TABLE.
@@ -451,33 +513,7 @@ func (t *table) dropDependsOn() []identifier {
 	}
 	// The order of dependencies affects the order of operations, so it must not depend on the order of the statements.
 	slices.SortFunc(refs, func(a, b identifier) int { return strings.Compare(a.ID(), b.ID()) })
-	return append(t.dependsOn(), refs...)
-}
-
-func (t *table) onDependencyChange(me, dependency migrationState, m *migration) {
-	if me.kind == migrationKindDrop || !me.base.valid {
-		return
-	}
-	switch dep := dependency.definition().(type) {
-	case *schema:
-		switch dependency.kind {
-		case migrationKindDropAndAdd:
-			m.updateState(me.updateKind(migrationKindDropAndAdd))
-		}
-	case *sequence:
-		// The sequence is only used for ordering operations.
-	case *column:
-		// The key columns of the parent table are only used for ordering operations.
-		// Recreating a key column recreates the parent table, which is handled as a dependency on the table.
-	case *table:
-		// The table depends only on its parent table, because foreign keys referencing other tables are constraint definitions.
-		switch dependency.kind {
-		case migrationKindDropAndAdd:
-			m.updateState(me.updateKind(migrationKindDropAndAdd))
-		}
-	default:
-		panic(fmt.Sprintf("unexpected dependency type on table: %T", dep))
-	}
+	return append(dependencyIDs(t.dependsOn()), refs...)
 }
 
 // primaryKeys returns the primary key regardless of whether it's written after the column definitions,
@@ -622,11 +658,6 @@ func (c *column) alter(tgt definition, m *migration) {
 	// - Set, change or drop the default value of a column.
 	// --- not documented ---
 	// - Change the element type of an ARRAY column between STRING and BYTES, or between PROTO and BYTES, as the emulator allows.
-
-	if m.kind(base.id()) == migrationKindNone {
-		// The table is added or created, so column is also added or created.
-		return
-	}
 
 	if base.node.Hidden.Invalid() != target.node.Hidden.Invalid() {
 		// Spanner can't change HIDDEN of an existing column. A generated column is recreated because its values are
@@ -919,7 +950,7 @@ func (c *column) canAlterGeneratedExpr(target *column, m *migration) bool {
 	for _, def := range m.baseDefs.all {
 		switch def.(type) {
 		case *index, *searchIndex, *vectorIndex:
-			if slices.Contains(def.dependsOn(), c.id()) {
+			if slices.Contains(dependencyIDs(def.dependsOn()), c.id()) {
 				return false
 			}
 		}
@@ -960,9 +991,11 @@ func allowsCommitTimestamp(col *ast.ColumnDef) bool {
 	return false
 }
 
-func (c *column) dependsOn() []identifier {
-	ids := append([]identifier{c.table.id()}, sequencesInColumn(c.node)...)
-	return append(ids, columnsInGeneratedColumn(c)...)
+func (c *column) dependsOn() []dependency {
+	deps := []dependency{{c.table.id(), dependencyKindOwner}}
+	// The sequences must exist before the column is added.
+	deps = append(deps, newDependencies(dependencyKindOrder, sequencesInColumn(c.node))...)
+	return append(deps, newDependencies(dependencyKindCustom, columnsInGeneratedColumn(c))...)
 }
 
 // columnsInGeneratedColumn returns the columns of the same table that the expression of a generated column references.
@@ -1005,39 +1038,28 @@ func sequencesInColumn(col *ast.ColumnDef) []identifier {
 	return ids
 }
 
+// onDependencyChange handles a change of a column that the expression of the generated column references.
+// Spanner can't drop a column or change its type while a generated column references it,
+// so the generated column is dropped before the change and added again after it.
 func (c *column) onDependencyChange(me, dependency migrationState, m *migration) {
-	switch dep := dependency.definition().(type) {
-	case *table:
-		switch dependency.kind {
-		case migrationKindAdd, migrationKindDropAndAdd, migrationKindDrop:
-			// If the table is being added or dropped, the column is also being added or dropped.
-			m.updateState(me.updateKind(migrationKindNone))
-		}
-	case *sequence:
-		// The sequence is only used for ordering operations.
-	case *column:
-		// Spanner can't drop a column or change its type while a generated column references it,
-		// so the generated column is dropped before the change and added again after it.
-		if !me.base.valid || !me.target.valid || me.kind == migrationKindNone || me.kind == migrationKindDropAndAdd {
-			return
-		}
-		switch dependency.kind {
-		case migrationKindDropAndAdd:
-		case migrationKindAlter:
-			if equalTypesIgnoringLength(dep.node.Type, dependency.base.mustGet().(*column).node.Type) {
-				return
-			}
-		default:
-			return
-		}
-		if c.isPrimaryKey() {
-			c.recreate(me.target.mustGet().(*column), m)
-			return
-		}
-		m.updateState(me.updateKind(migrationKindDropAndAdd))
-	default:
-		panic(fmt.Sprintf("unexpected dependency type on column: %T", dep))
+	if !me.base.valid || !me.target.valid || me.kind == migrationKindNone || me.kind == migrationKindDropAndAdd {
+		return
 	}
+	switch dependency.kind {
+	case migrationKindDropAndAdd:
+	case migrationKindAlter:
+		base, target := dependency.base.mustGet().(*column), dependency.definition().(*column)
+		if equalTypesIgnoringLength(base.node.Type, target.node.Type) {
+			return
+		}
+	default:
+		return
+	}
+	if c.isPrimaryKey() {
+		c.recreate(me.target.mustGet().(*column), m)
+		return
+	}
+	m.updateState(me.updateKind(migrationKindDropAndAdd))
 }
 
 type constraint struct {
@@ -1080,88 +1102,84 @@ func (c *constraint) drop() optional[ast.DDL] {
 }
 
 func (c *constraint) alter(tgt definition, m *migration) {
-	if m.kind(c.id()) == migrationKindNone {
-		// The table is added or recreated, so the constraint is also added or recreated.
-		return
-	}
 	m.updateStateIfUndefined(newDropAndAddState(c, tgt))
 }
 
-func (c *constraint) dependsOn() []identifier {
+func (c *constraint) dependsOn() []dependency {
 	tableID := c.table.tableID()
-	ids := []identifier{tableID}
 	switch con := c.node.Constraint.(type) {
 	case *ast.ForeignKey:
-		for _, col := range con.Columns {
-			ids = append(ids, newColumnID(tableID, col))
-		}
 		refTableID := newTableIDFromPath(con.ReferenceTable)
+		// A foreign key referencing another table isn't in CREATE TABLE, so it's not simply owned by its table.
+		tableKind := dependencyKindOwner
 		if refTableID != tableID {
-			ids = append(ids, refTableID)
+			tableKind = dependencyKindCustom
+		}
+		deps := []dependency{{tableID, tableKind}}
+		// Altering a column may also require recreating the foreign key, unlike other dependencies.
+		for _, col := range con.Columns {
+			deps = append(deps, dependency{newColumnID(tableID, col), dependencyKindCustom})
+		}
+		if refTableID != tableID {
+			deps = append(deps, dependency{refTableID, dependencyKindRecreate})
 		}
 		for _, col := range con.ReferenceColumns {
-			ids = append(ids, newColumnID(refTableID, col))
+			deps = append(deps, dependency{newColumnID(refTableID, col), dependencyKindCustom})
 		}
+		return deps
 	case *ast.Check:
+		deps := []dependency{{tableID, dependencyKindOwner}}
 		// Identifiers in the expression may not be columns, but it's harmless to depend on non-existent columns.
 		ast.Inspect(con.Expr, func(n ast.Node) bool {
 			if ident, ok := n.(*ast.Ident); ok {
-				ids = append(ids, newColumnID(tableID, ident))
+				deps = append(deps, dependency{newColumnID(tableID, ident), dependencyKindRecreate})
 			}
 			return true
 		})
+		return deps
+	default:
+		return []dependency{{tableID, dependencyKindOwner}}
 	}
-	return ids
 }
 
+// onDependencyChange handles a change of the table of a foreign key referencing another table,
+// and a change of the columns of a foreign key.
 func (c *constraint) onDependencyChange(me, dependency migrationState, m *migration) {
 	if me.kind == migrationKindNone {
 		return
 	}
 	switch dep := dependency.definition().(type) {
 	case *table:
-		switch {
-		case dep.tableID() == c.table.tableID():
-			switch dependency.kind {
-			case migrationKindAdd, migrationKindDropAndAdd, migrationKindDrop:
-				if !referencesOtherTable(c.table.tableID(), c.node) {
-					// CREATE TABLE and DROP TABLE also add and drop constraints.
-					m.updateState(me.updateKind(migrationKindNone))
-					return
-				}
-				// A foreign key referencing another table isn't in CREATE TABLE, so it's added after the table is created.
-				// A named one is dropped before DROP TABLE, because the referenced table may also be dropped.
-				// An unnamed one can't be dropped by name, so it's dropped by DROP TABLE (see table.dropDependsOn).
-				dropBase := me.base.valid && me.base.mustGet().(*constraint).node.Name != nil
-				addTarget := me.target.valid
-				switch {
-				case dropBase && addTarget:
-					m.updateState(me.updateKind(migrationKindDropAndAdd))
-				case dropBase:
-					m.updateState(me.updateKind(migrationKindDrop))
-				case addTarget:
-					m.updateState(me.updateKind(migrationKindAdd))
-				default:
-					m.updateState(me.updateKind(migrationKindNone))
-				}
+		switch dependency.kind {
+		case migrationKindAdd, migrationKindDropAndAdd, migrationKindDrop:
+			// A foreign key referencing another table isn't in CREATE TABLE, so it's added after the table is created.
+			// A named one is dropped before DROP TABLE, because the referenced table may also be dropped.
+			// An unnamed one can't be dropped by name, so it's dropped by DROP TABLE (see table.dropDependsOn).
+			dropBase := me.base.valid && me.base.mustGet().(*constraint).node.Name != nil
+			addTarget := me.target.valid
+			switch {
+			case dropBase && addTarget:
+				m.updateState(me.updateKind(migrationKindDropAndAdd))
+			case dropBase:
+				m.updateState(me.updateKind(migrationKindDrop))
+			case addTarget:
+				m.updateState(me.updateKind(migrationKindAdd))
+			default:
+				m.updateState(me.updateKind(migrationKindNone))
 			}
-		case me.base.valid && me.kind != migrationKindDrop && me.kind != migrationKindAdd && dependency.kind == migrationKindDropAndAdd:
-			// The referenced table can't be dropped while a foreign key references it.
-			// A constraint not in base, or added after its table is recreated, doesn't need to be dropped.
-			m.updateState(me.updateKind(migrationKindDropAndAdd))
 		}
 	case *column:
-		if !me.base.valid || me.kind == migrationKindDrop || me.kind == migrationKindAdd {
-			return
-		}
 		switch dependency.kind {
 		case migrationKindDropAndAdd:
-			m.updateState(me.updateKind(migrationKindDropAndAdd))
+			m.recreateWithDependency(me)
 		case migrationKindAlter:
 			// Spanner can't change NOT NULL or the type of a column used by a foreign key,
 			// so the foreign key is dropped before the column is altered and added again after it.
+			if !me.base.valid {
+				return
+			}
 			if _, ok := me.base.mustGet().(*constraint).node.Constraint.(*ast.ForeignKey); ok && changesNullabilityOrType(dependency) {
-				m.updateState(me.updateKind(migrationKindDropAndAdd))
+				m.recreateWithDependency(me)
 			}
 		}
 	default:
@@ -1210,11 +1228,6 @@ func (r *rowDeletionPolicy) alter(tgt definition, m *migration) {
 	base := r
 	target := tgt.(*rowDeletionPolicy)
 
-	if m.kind(base.id()) == migrationKindNone {
-		// The table or the queue is added or recreated, so the policy is also added or recreated.
-		return
-	}
-
 	if !equalNode(base.node.ColumnName, target.node.ColumnName) {
 		// The policy must be dropped before the column of the base policy is dropped.
 		m.updateStateIfUndefined(newDropAndAddState(base, target))
@@ -1225,34 +1238,13 @@ func (r *rowDeletionPolicy) alter(tgt definition, m *migration) {
 	))
 }
 
-func (r *rowDeletionPolicy) dependsOn() []identifier {
-	ids := []identifier{r.owner.id()}
+func (r *rowDeletionPolicy) dependsOn() []dependency {
+	deps := []dependency{{r.owner.id(), dependencyKindOwner}}
 	// Columns of a queue are not separate definitions because changing them recreates the queue.
 	if t, ok := r.owner.(*table); ok {
-		ids = append(ids, newColumnID(t.tableID(), r.node.ColumnName))
+		deps = append(deps, dependency{newColumnID(t.tableID(), r.node.ColumnName), dependencyKindRecreate})
 	}
-	return ids
-}
-
-func (r *rowDeletionPolicy) onDependencyChange(me, dependency migrationState, m *migration) {
-	if me.kind == migrationKindNone {
-		return
-	}
-	switch dep := dependency.definition().(type) {
-	case *table, *queue:
-		switch dependency.kind {
-		case migrationKindAdd, migrationKindDropAndAdd, migrationKindDrop:
-			// CREATE and DROP of the table or the queue also add and drop the policy.
-			m.updateState(me.updateKind(migrationKindNone))
-		}
-	case *column:
-		// A policy not in base doesn't need to be dropped.
-		if me.base.valid && me.kind != migrationKindDrop && dependency.kind == migrationKindDropAndAdd {
-			m.updateState(me.updateKind(migrationKindDropAndAdd))
-		}
-	default:
-		panic(fmt.Sprintf("unexpected dependency type on row deletion policy: %T", dep))
-	}
+	return deps
 }
 
 // resolveUnnamedConstraints matches unnamed constraints in target with constraints in base that have
@@ -1342,11 +1334,6 @@ func (i *index) alter(tgt definition, m *migration) {
 	// --- not documented ---
 	// Add or remove a stored column from an existing index.
 
-	if m.kind(base.id()) == migrationKindNone {
-		// The table or column is added or created, so index is also added or created.
-		return
-	}
-
 	baseCopy := *base.node
 	targetCopy := *target.node
 	baseCopy.Storing = nil
@@ -1368,7 +1355,7 @@ func (i *index) alter(tgt definition, m *migration) {
 	m.updateStateIfUndefined(newDropAndAddState(base, target))
 }
 
-func (i *index) dependsOn() []identifier {
+func (i *index) dependsOn() []dependency {
 	var ids []identifier
 	for _, key := range i.node.Keys {
 		// A key is a column name or an expression.
@@ -1392,22 +1379,7 @@ func (i *index) dependsOn() []identifier {
 	if i.node.InterleaveIn != nil {
 		ids = append(ids, newTableIDFromIdent(i.node.InterleaveIn.TableName))
 	}
-	return ids
-}
-
-func (i *index) onDependencyChange(me, dependency migrationState, m *migration) {
-	if me.kind == migrationKindDrop || !me.base.valid {
-		return
-	}
-	switch dep := dependency.definition().(type) {
-	case *column, *table, *schema:
-		switch dependency.kind {
-		case migrationKindDropAndAdd:
-			m.updateState(me.updateKind(migrationKindDropAndAdd))
-		}
-	default:
-		panic(fmt.Sprintf("unexpected dependency type on index: %T", dep))
-	}
+	return newDependencies(dependencyKindRecreate, ids)
 }
 
 func diffStoring(tableID tableID, base, target *ast.Storing) (added, dropped []*ast.Ident) {
@@ -1475,11 +1447,6 @@ func (si *searchIndex) alter(tgt definition, m *migration) {
 	// --- not documented ---
 	// Add or remove a stored column from an existing search index.
 
-	if m.kind(base.id()) == migrationKindNone {
-		// The table or column is added or created, so search index is also added or created.
-		return
-	}
-
 	baseCopy := *base.node
 	targetCopy := *target.node
 	baseCopy.Storing = nil
@@ -1501,7 +1468,7 @@ func (si *searchIndex) alter(tgt definition, m *migration) {
 	m.updateStateIfUndefined(newDropAndAddState(base, target))
 }
 
-func (si *searchIndex) dependsOn() []identifier {
+func (si *searchIndex) dependsOn() []dependency {
 	var ids []identifier
 	columns := slices.Clone(si.node.TokenListPart)
 	if si.node.Storing != nil {
@@ -1523,22 +1490,7 @@ func (si *searchIndex) dependsOn() []identifier {
 	if si.node.Interleave != nil {
 		ids = append(ids, newTableIDFromIdent(si.node.Interleave.TableName))
 	}
-	return ids
-}
-
-func (si *searchIndex) onDependencyChange(me, dependency migrationState, m *migration) {
-	if me.kind == migrationKindDrop || !me.base.valid {
-		return
-	}
-	switch dep := dependency.definition().(type) {
-	case *column, *table:
-		switch dependency.kind {
-		case migrationKindDropAndAdd:
-			m.updateState(me.updateKind(migrationKindDropAndAdd))
-		}
-	default:
-		panic(fmt.Sprintf("unexpected dependency type on search index: %T", dep))
-	}
+	return newDependencies(dependencyKindRecreate, ids)
 }
 
 type vectorIndex struct {
@@ -1618,7 +1570,7 @@ func onlyOptions(options *ast.Options, names ...string) bool {
 	return true
 }
 
-func (vi *vectorIndex) dependsOn() []identifier {
+func (vi *vectorIndex) dependsOn() []dependency {
 	var ids []identifier
 	ids = append(ids, newColumnID(vi.tableID(), vi.node.ColumnName))
 	if vi.node.Storing != nil {
@@ -1627,22 +1579,7 @@ func (vi *vectorIndex) dependsOn() []identifier {
 		}
 	}
 	ids = append(ids, vi.tableID())
-	return ids
-}
-
-func (vi *vectorIndex) onDependencyChange(me, dependency migrationState, m *migration) {
-	if me.kind == migrationKindDrop || !me.base.valid {
-		return
-	}
-	switch dep := dependency.definition().(type) {
-	case *column, *table:
-		switch dependency.kind {
-		case migrationKindDropAndAdd:
-			m.updateState(me.updateKind(migrationKindDropAndAdd))
-		}
-	default:
-		panic(fmt.Sprintf("unexpected dependency type on vector index: %T", dep))
-	}
+	return newDependencies(dependencyKindRecreate, ids)
 }
 
 type propertyGraph struct {
@@ -1675,7 +1612,7 @@ func (pg *propertyGraph) alter(tgt definition, m *migration) {
 	base := pg
 	target := tgt.(*propertyGraph)
 
-	if m.dropsAnyOf(base.dependsOn()) {
+	if m.dropsAnyOf(dependencyIDs(base.dependsOn())) {
 		// The property graph must stop referencing the dropped objects before they are dropped.
 		m.updateStateIfUndefined(newDropAndAddState(base, target))
 		return
@@ -1686,7 +1623,7 @@ func (pg *propertyGraph) alter(tgt definition, m *migration) {
 	m.updateStateIfUndefined(newAlterState(base, target, &targetCopy))
 }
 
-func (pg *propertyGraph) dependsOn() []identifier {
+func (pg *propertyGraph) dependsOn() []dependency {
 	var ids []identifier
 	elements := pg.node.Content.NodeTables.Tables.Elements
 	if pg.node.Content.EdgeTables != nil {
@@ -1715,7 +1652,7 @@ func (pg *propertyGraph) dependsOn() []identifier {
 			panic(fmt.Sprintf("unexpected property graph type: %T", keys))
 		}
 	}
-	return ids
+	return newDependencies(dependencyKindRecreate, ids)
 }
 
 func edgeKeyDependencies(tableID tableID, keys *ast.PropertyGraphColumnNameList, ref *ast.Ident, refColumns *ast.PropertyGraphColumnNameList) []identifier {
@@ -1731,21 +1668,6 @@ func edgeKeyDependencies(tableID tableID, keys *ast.PropertyGraphColumnNameList,
 		}
 	}
 	return ids
-}
-
-func (pg *propertyGraph) onDependencyChange(me, dependency migrationState, m *migration) {
-	if me.kind == migrationKindDrop || !me.base.valid {
-		return
-	}
-	switch dep := dependency.definition().(type) {
-	case *column, *table:
-		switch dependency.kind {
-		case migrationKindDropAndAdd:
-			m.updateState(me.updateKind(migrationKindDropAndAdd))
-		}
-	default:
-		panic(fmt.Sprintf("unexpected dependency type on property graph: %T", dep))
-	}
 }
 
 type view struct {
@@ -1778,7 +1700,7 @@ func (v *view) alter(tgt definition, m *migration) {
 	base := v
 	target := tgt.(*view)
 
-	if m.dropsAnyOf(base.dependsOn()) {
+	if m.dropsAnyOf(dependencyIDs(base.dependsOn())) {
 		// The view must stop referencing the dropped objects before they are dropped.
 		m.updateStateIfUndefined(newDropAndAddState(base, target))
 		return
@@ -1789,7 +1711,7 @@ func (v *view) alter(tgt definition, m *migration) {
 	m.updateStateIfUndefined(newAlterState(base, target, &targetCopy))
 }
 
-func (v *view) dependsOn() []identifier {
+func (v *view) dependsOn() []dependency {
 	var ids []identifier
 	var tableIDs []tableID
 	paths, idents := tablesOrViewsInQueryExpr(v.node.Query)
@@ -1818,22 +1740,7 @@ func (v *view) dependsOn() []identifier {
 		}
 		return true
 	})
-	return ids
-}
-
-func (v *view) onDependencyChange(me, dependency migrationState, m *migration) {
-	if me.kind == migrationKindDrop || !me.base.valid {
-		return
-	}
-	switch dep := dependency.definition().(type) {
-	case *column, *table, *view:
-		switch dependency.kind {
-		case migrationKindDropAndAdd:
-			m.updateState(me.updateKind(migrationKindDropAndAdd))
-		}
-	default:
-		panic(fmt.Sprintf("unexpected dependency type on view: %T", dep))
-	}
+	return newDependencies(dependencyKindRecreate, ids)
 }
 
 type changeStream struct {
@@ -1932,7 +1839,7 @@ func (cs *changeStream) alterFor(target *changeStream, m *migration) []operation
 	return ops
 }
 
-func (cs *changeStream) dependsOn() []identifier {
+func (cs *changeStream) dependsOn() []dependency {
 	if cs.node.For == nil {
 		return nil
 	}
@@ -1947,7 +1854,7 @@ func (cs *changeStream) dependsOn() []identifier {
 				ids = append(ids, newColumnID(newTableIDFromIdent(table.TableName), col))
 			}
 		}
-		return ids
+		return newDependencies(dependencyKindCustom, ids)
 	default:
 		panic(fmt.Sprintf("unexpected change stream for type: %T", cs.node.For))
 	}
@@ -2034,14 +1941,12 @@ func (s *sequence) alter(tgt definition, m *migration) {
 	m.updateStateIfUndefined(newDropAndAddState(base, target))
 }
 
-func (s *sequence) dependsOn() []identifier {
+func (s *sequence) dependsOn() []dependency {
 	if schemaID, ok := s.schemaID().get(); ok {
-		return []identifier{schemaID}
+		return []dependency{{schemaID, dependencyKindRecreate}}
 	}
 	return nil
 }
-
-func (s *sequence) onDependencyChange(me, dependency migrationState, m *migration) {}
 
 type model struct {
 	node *ast.CreateModel
@@ -2087,11 +1992,9 @@ func (m *model) alter(tgt definition, migration *migration) {
 	migration.updateStateIfUndefined(newAlterState(base, target, &targetCopy))
 }
 
-func (m *model) dependsOn() []identifier {
+func (m *model) dependsOn() []dependency {
 	return nil
 }
-
-func (m *model) onDependencyChange(me, dependency migrationState, migration *migration) {}
 
 type protoBundle struct {
 	node *ast.CreateProtoBundle
@@ -2152,11 +2055,9 @@ func (pb *protoBundle) alter(tgt definition, migration *migration) {
 	migration.updateStateIfUndefined(newAlterState(base, target, ddl))
 }
 
-func (pb *protoBundle) dependsOn() []identifier {
+func (pb *protoBundle) dependsOn() []dependency {
 	return nil
 }
-
-func (pb *protoBundle) onDependencyChange(me, dependency migrationState, migration *migration) {}
 
 type queue struct {
 	node *ast.CreateQueue
@@ -2258,26 +2159,11 @@ func (q *queue) alterRowDeletionPolicy(alteration tableOrQueueAlteration) ast.DD
 	return &ast.AlterQueue{Name: q.node.Name, QueueAlteration: alteration}
 }
 
-func (q *queue) dependsOn() []identifier {
+func (q *queue) dependsOn() []dependency {
 	if q.node.Cluster == nil {
 		return nil
 	}
-	return []identifier{newTableIDFromPath(q.node.Cluster.TableName)}
-}
-
-func (q *queue) onDependencyChange(me, dependency migrationState, m *migration) {
-	if me.kind == migrationKindDrop || !me.base.valid {
-		return
-	}
-	switch dep := dependency.definition().(type) {
-	case *table:
-		switch dependency.kind {
-		case migrationKindDropAndAdd:
-			m.updateState(me.updateKind(migrationKindDropAndAdd))
-		}
-	default:
-		panic(fmt.Sprintf("unexpected dependency type on queue: %T", dep))
-	}
+	return []dependency{{newTableIDFromPath(q.node.Cluster.TableName), dependencyKindRecreate}}
 }
 
 type role struct {
@@ -2313,11 +2199,9 @@ func (r *role) alter(tgt definition, m *migration) {
 	m.updateStateIfUndefined(newDropAndAddState(base, target))
 }
 
-func (r *role) dependsOn() []identifier {
+func (r *role) dependsOn() []dependency {
 	return nil
 }
-
-func (r *role) onDependencyChange(me, dependency migrationState, m *migration) {}
 
 type grant struct {
 	node    *ast.Grant
@@ -2754,7 +2638,7 @@ func (g *grant) alter(tgt definition, m *migration) {
 	}
 }
 
-func (g *grant) dependsOn() []identifier {
+func (g *grant) dependsOn() []dependency {
 	var ids []identifier
 	for _, role := range g.node.Roles {
 		ids = append(ids, newRoleID(role))
@@ -2807,22 +2691,7 @@ func (g *grant) dependsOn() []identifier {
 			ids = append(ids, schemaIDOfGrant(schemaName))
 		}
 	}
-	return ids
-}
-
-func (g *grant) onDependencyChange(me, dependency migrationState, m *migration) {
-	if me.kind == migrationKindDrop || !me.base.valid {
-		return
-	}
-	switch dep := dependency.definition().(type) {
-	case *role, *table, *column, *view, *changeStream, *sequence, *schema:
-		switch dependency.kind {
-		case migrationKindDropAndAdd:
-			m.updateState(me.updateKind(migrationKindDropAndAdd))
-		}
-	default:
-		panic(fmt.Sprintf("unexpected dependency type on grant: %T", dep))
-	}
+	return newDependencies(dependencyKindRecreate, ids)
 }
 
 type database struct {
@@ -2862,8 +2731,6 @@ func (d *database) alter(tgt definition, m *migration) {
 	m.updateStateIfUndefined(newAlterState(base, target, &ast.AlterDatabase{Name: base.node.Name, Options: options}))
 }
 
-func (d *database) dependsOn() []identifier {
+func (d *database) dependsOn() []dependency {
 	return nil
 }
-
-func (d *database) onDependencyChange(me, dependency migrationState, m *migration) {}
