@@ -189,8 +189,14 @@ type migration struct {
 	baseDefs   *definitions
 	targetDefs *definitions
 	states     map[identifier]migrationState
-	dependOn   map[identifier][]definition
+	dependents map[identifier][]dependent
 	errs       []error
+}
+
+// dependent is a definition that depends on another definition.
+type dependent struct {
+	def  definition
+	kind dependencyKind
 }
 
 func newMigration(base, target *definitions) *migration {
@@ -198,7 +204,7 @@ func newMigration(base, target *definitions) *migration {
 		base,
 		target,
 		make(map[identifier]migrationState),
-		make(map[identifier][]definition),
+		make(map[identifier][]dependent),
 		nil,
 	}
 
@@ -227,8 +233,8 @@ func (m *migration) initializeState(id identifier) {
 	}
 
 	m.states[def.id()] = newInitialState(baseOpt, targetOpt)
-	for _, id := range unique(def.dependsOn()) {
-		m.dependOn[id] = append(m.dependOn[id], def)
+	for _, dep := range mergeDependencies(def.dependsOn()) {
+		m.dependents[dep.id] = append(m.dependents[dep.id], dependent{def, dep.kind})
 	}
 }
 
@@ -241,8 +247,38 @@ func (m *migration) updateStateIfUndefined(s migrationState) {
 
 func (m *migration) updateState(s migrationState) {
 	m.states[s.id] = s
-	for _, receiver := range m.dependOn[s.id] {
-		receiver.onDependencyChange(m.states[receiver.id()], s, m)
+	for _, d := range m.dependents[s.id] {
+		me := m.states[d.def.id()]
+		switch d.kind {
+		case dependencyKindOrder:
+		case dependencyKindRecreate:
+			if s.kind == migrationKindDropAndAdd {
+				m.recreateWithDependency(me)
+			}
+		case dependencyKindOwner:
+			switch s.kind {
+			case migrationKindAdd, migrationKindDropAndAdd, migrationKindDrop:
+				if me.kind != migrationKindNone {
+					m.updateState(me.updateKind(migrationKindNone))
+				}
+			}
+		case dependencyKindCustom:
+			d.def.(dependencyChangeHandler).onDependencyChange(me, s, m)
+		default:
+			panic(fmt.Sprintf("unexpected dependency kind: %d: %s", d.kind, me.id))
+		}
+	}
+}
+
+// recreateWithDependency recreates the definition because its dependency is recreated.
+// A definition that isn't in base, or is dropped or added by another reason, doesn't need to be dropped before the dependency.
+func (m *migration) recreateWithDependency(me migrationState) {
+	if !me.base.valid {
+		return
+	}
+	switch me.kind {
+	case migrationKindUndefined, migrationKindAlter, migrationKindDropAndAdd:
+		m.updateState(me.updateKind(migrationKindDropAndAdd))
 	}
 }
 
@@ -341,6 +377,10 @@ func (m *migration) alters(base, target *definitions) {
 			continue
 		}
 		if equalNode(b.astNode(), t.astNode()) {
+			continue
+		}
+		if m.kind(id) == migrationKindNone {
+			// The owner is added, dropped or recreated, so the definition is migrated with its owner.
 			continue
 		}
 		b.alter(t, m)
