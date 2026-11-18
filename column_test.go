@@ -89,6 +89,20 @@ func TestDiffColumn(t *testing.T) {
 			ALTER TABLE T1 ALTER COLUMN T1_T1 SET OPTIONS (allow_commit_timestamp = null);`,
 			false,
 		},
+		"null column option without base options": {
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP,
+			) PRIMARY KEY(T1_I1);`,
+			`
+			CREATE TABLE T1 (
+			  T1_I1 INT64 NOT NULL,
+			  T1_T1 TIMESTAMP OPTIONS (allow_commit_timestamp = null),
+			) PRIMARY KEY(T1_I1);`,
+			``,
+			false,
+		},
 		"allow commit timestamp on column with default value": {
 			`
 			CREATE TABLE T1 (

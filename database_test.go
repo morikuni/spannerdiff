@@ -45,6 +45,14 @@ func TestDiffDatabase(t *testing.T) {
 			ALTER DATABASE D1 SET OPTIONS (version_retention_period = '7d');`,
 			false,
 		},
+		"null option not in base": {
+			`
+			ALTER DATABASE D1 SET OPTIONS (optimizer_version = 1);`,
+			`
+			ALTER DATABASE D1 SET OPTIONS (optimizer_version = 1, version_retention_period = null);`,
+			``,
+			false,
+		},
 		"alter database with different name": {
 			`
 			ALTER DATABASE D1 SET OPTIONS (version_retention_period = '1d');`,
