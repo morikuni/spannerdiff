@@ -190,13 +190,29 @@ func (c *column) alter(tgt definition, m *migration) {
 		}
 
 		dropDefault := &ast.AlterTable{Name: target.table.node.Name, TableAlteration: &ast.AlterColumn{Name: target.node.Name, Alteration: &ast.AlterColumnDropDefault{}}}
-		var setDefault ast.DDL
+		dropOnUpdate := &ast.AlterTable{Name: target.table.node.Name, TableAlteration: &ast.AlterColumn{Name: target.node.Name, Alteration: &ast.AlterColumnDropOnUpdate{}}}
+		var setDefault, setOnUpdate ast.DDL
 		if defaultExpr, ok := target.node.DefaultSemantics.(*ast.ColumnDefaultExpr); ok {
-			setDefault = &ast.AlterTable{Name: target.table.node.Name, TableAlteration: &ast.AlterColumn{Name: target.node.Name, Alteration: &ast.AlterColumnSetDefault{DefaultExpr: defaultExpr}}}
+			// SET DEFAULT can't have ON UPDATE, so ON UPDATE is set by SET ON UPDATE.
+			setDefault = &ast.AlterTable{Name: target.table.node.Name, TableAlteration: &ast.AlterColumn{Name: target.node.Name, Alteration: &ast.AlterColumnSetDefault{DefaultExpr: withoutOnUpdate(defaultExpr)}}}
+			if defaultExpr.OnUpdate != nil {
+				setOnUpdate = &ast.AlterTable{Name: target.table.node.Name, TableAlteration: &ast.AlterColumn{Name: target.node.Name, Alteration: &ast.AlterColumnSetOnUpdate{OnUpdate: defaultExpr.OnUpdate}}}
+			}
 		}
-		defaultChanged := !defaultSet && !equalNode(base.node.DefaultSemantics, target.node.DefaultSemantics)
+		defaultChanged := !defaultSet && !equalNode(defaultValueOf(base.node), defaultValueOf(target.node))
+
+		// Spanner rejects dropping or changing the default value of a column with ON UPDATE,
+		// and ON UPDATE requires the identical default value.
+		// So ON UPDATE of the base is dropped before any other change of the default value or ON UPDATE,
+		// and ON UPDATE of the target is set after the default value, unless the NOT NULL alteration sets both.
+		baseHasOnUpdate := hasOnUpdate(base.node)
+		dropsOnUpdate := baseHasOnUpdate && !equalNode(base.node.DefaultSemantics, target.node.DefaultSemantics)
+		setsOnUpdate := setOnUpdate != nil && !defaultSet && (!baseHasOnUpdate || dropsOnUpdate)
 
 		var ddls []ast.DDL
+		if dropsOnUpdate {
+			ddls = append(ddls, dropOnUpdate)
+		}
 		if allowsCommitTimestamp(base.node) == allowsCommitTimestamp(target.node) {
 			ddls = append(ddls, notNullDDLs...)
 			ddls = append(ddls, optionsDDLs...)
@@ -212,7 +228,7 @@ func (c *column) alter(tgt definition, m *migration) {
 			// and PENDING_COMMIT_TIMESTAMP() as the default value of a column that doesn't allow commit timestamps.
 			// So the default value of the base is dropped before allow_commit_timestamp changes,
 			// and the default value of the target is set after it, including by the NOT NULL alteration.
-			if base.node.DefaultSemantics != nil && !equalNode(base.node.DefaultSemantics, target.node.DefaultSemantics) {
+			if base.node.DefaultSemantics != nil && !equalNode(defaultValueOf(base.node), defaultValueOf(target.node)) {
 				ddls = append(ddls, dropDefault)
 			}
 			ddls = append(ddls, optionsDDLs...)
@@ -220,6 +236,9 @@ func (c *column) alter(tgt definition, m *migration) {
 			if defaultChanged && setDefault != nil {
 				ddls = append(ddls, setDefault)
 			}
+		}
+		if setsOnUpdate {
+			ddls = append(ddls, setOnUpdate)
 		}
 		m.updateStateIfUndefined(newAlterState(base, target, ddls...))
 	} else {
@@ -438,6 +457,28 @@ func isIdentityColumn(col *ast.ColumnDef) bool {
 	default:
 		return false
 	}
+}
+
+// hasOnUpdate reports whether the column has ON UPDATE.
+func hasOnUpdate(col *ast.ColumnDef) bool {
+	defaultExpr, ok := col.DefaultSemantics.(*ast.ColumnDefaultExpr)
+	return ok && defaultExpr.OnUpdate != nil
+}
+
+// defaultValueOf returns the default semantics of the column without ON UPDATE,
+// so the default value is compared separately from ON UPDATE.
+func defaultValueOf(col *ast.ColumnDef) ast.ColumnDefaultSemantics {
+	if defaultExpr, ok := col.DefaultSemantics.(*ast.ColumnDefaultExpr); ok {
+		return withoutOnUpdate(defaultExpr)
+	}
+	return col.DefaultSemantics
+}
+
+// withoutOnUpdate returns a copy of the default value expression without ON UPDATE.
+func withoutOnUpdate(defaultExpr *ast.ColumnDefaultExpr) *ast.ColumnDefaultExpr {
+	expr := *defaultExpr
+	expr.OnUpdate = nil
+	return &expr
 }
 
 // allowsCommitTimestamp reports whether the column has allow_commit_timestamp = true in its options.
