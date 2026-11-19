@@ -92,52 +92,59 @@ func (o *omni) getDDL(database string) (string, error) {
 	return out, nil
 }
 
+// omniKnownDifferences are the tests whose target schema Spanner Omni writes differently,
+// so the migrated schema read from Spanner Omni has a difference from the target schema.
+var omniKnownDifferences = map[string]string{
+	"TestDiffPropertyGraph/add_property_graph_on_recreated_table": "Spanner writes the keys, labels and properties that the definition of a property graph omits",
+}
+
 // verifyOnOmni applies the base schema and the migration to Spanner Omni,
 // and checks that the resulting schema has no difference from the target schema.
-// The target schema is also read from Spanner Omni, so that both schemas are written in the same way,
-// such as the names of unnamed constraints.
+// A database of the target schema is not created to compare, because Spanner Omni slows down
+// as the number of databases increases.
 // It is skipped if Spanner Omni doesn't accept the base schema or the target schema,
 // because Spanner Omni doesn't support all features of Spanner and some tests use incomplete schemas.
 func verifyOnOmni(t *testing.T, o *omni, base, migration, target string, option DiffOption) {
 	t.Helper()
-	create := func(name, sql string) string {
+	if reason, ok := omniKnownDifferences[strings.TrimSuffix(t.Name(), "/omni")]; ok {
+		t.Skip(reason)
+	}
+	create := func(sql string) (string, error) {
 		ddls, err := splitDDLs(sql)
 		if err != nil {
 			t.Fatal(err)
 		}
-		database, err := o.createDatabase(ddls)
-		if err != nil {
-			t.Skipf("Spanner Omni doesn't accept the %s schema: %v", name, err)
-		}
-		return database
+		return o.createDatabase(ddls)
 	}
-	targetDB := create("target", target)
-	baseDB := create("base", base)
+	database, err := create(base)
+	if err != nil {
+		t.Skipf("Spanner Omni doesn't accept the base schema: %v", err)
+	}
 
 	migrationDDLs, err := splitDDLs(migration)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(migrationDDLs) > 0 {
-		if err := o.updateDDL(baseDB, migrationDDLs); err != nil {
+		if err := o.updateDDL(database, migrationDDLs); err != nil {
+			// The migration is also rejected when Spanner Omni doesn't accept the target schema.
+			if _, targetErr := create(target); targetErr != nil {
+				t.Skipf("Spanner Omni doesn't accept the target schema: %v", targetErr)
+			}
 			t.Fatalf("Spanner Omni doesn't accept the migration: %v", err)
 		}
 	}
 
-	migrated, err := o.getDDL(baseDB)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want, err := o.getDDL(targetDB)
+	migrated, err := o.getDDL(database)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var rest bytes.Buffer
-	if err := Diff(strings.NewReader(migrated), strings.NewReader(want), &rest, option); err != nil {
-		t.Fatalf("failed to compare the migrated schema with the target schema: %v\nmigrated schema:\n%s\ntarget schema:\n%s", err, migrated, want)
+	if err := Diff(strings.NewReader(migrated), strings.NewReader(target), &rest, option); err != nil {
+		t.Fatalf("failed to compare the migrated schema with the target schema: %v\nmigrated schema:\n%s", err, migrated)
 	}
 	if rest.Len() > 0 {
-		t.Errorf("the migrated schema differs from the target schema:\n%s\nmigrated schema:\n%s\ntarget schema:\n%s", rest.String(), migrated, want)
+		t.Errorf("the migrated schema differs from the target schema:\n%s\nmigrated schema:\n%s", rest.String(), migrated)
 	}
 }
 
