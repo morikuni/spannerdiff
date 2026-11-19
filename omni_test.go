@@ -41,7 +41,8 @@ var omniRun = time.Now().Unix()
 // run runs the CLI with the DDLs as the file of --ddl-file, if any.
 func (o *omni) run(ddls []string, args ...string) (string, error) {
 	// The default timeout of the CLI is too short when many schema changes run in parallel.
-	args = append([]string{"exec", "-i", o.container, "/google/spanner/bin/spanner"}, append(args, "--timeout", "30m")...)
+	// A schema change rarely doesn't finish on Spanner Omni, so it is not waited for longer.
+	args = append([]string{"exec", "-i", o.container, "/google/spanner/bin/spanner"}, append(args, "--timeout", "5m")...)
 	cmd := exec.Command("docker", args...)
 	if len(ddls) > 0 {
 		cmd.Args = append(cmd.Args, "--ddl-file", "/dev/stdin")

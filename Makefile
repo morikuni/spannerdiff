@@ -9,7 +9,7 @@ test:
 test-omni:
 	@docker run -d --rm --name spannerdiff-omni $(OMNI_IMAGE) start-single-server > /dev/null
 	@until docker logs spannerdiff-omni 2>&1 | grep -q "Spanner is ready"; do sleep 1; done
-	@SPANNER_OMNI_CONTAINER=spannerdiff-omni go test -count 1 -parallel 64 -timeout 30m ./...; status=$$?; docker rm -f spannerdiff-omni > /dev/null; exit $$status
+	@SPANNER_OMNI_CONTAINER=spannerdiff-omni go test -count 1 -parallel 64 -timeout 15m ./...; status=$$?; docker rm -f spannerdiff-omni > /dev/null; exit $$status
 
 .PHONY: coverage
 coverage:
