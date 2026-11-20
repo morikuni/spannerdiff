@@ -207,6 +207,8 @@ func newDefinitions(ddls []ast.DDL, option DiffOption) (*definitions, error) {
 		return nil
 	}
 
+	// Property graphs are defined after all tables, because what they omit is written with the definitions of the tables.
+	var propertyGraphs []*ast.CreatePropertyGraph
 	for _, ddl := range normalizeDDLs(ddls) {
 		switch ddl := ddl.(type) {
 		case *ast.CreateSchema:
@@ -232,7 +234,7 @@ func newDefinitions(ddls []ast.DDL, option DiffOption) (*definitions, error) {
 		case *ast.CreateSearchIndex:
 			add(newSearchIndex(ddl))
 		case *ast.CreatePropertyGraph:
-			add(newPropertyGraph(ddl))
+			propertyGraphs = append(propertyGraphs, ddl)
 		case *ast.CreateView:
 			add(newView(ddl))
 		case *ast.CreateChangeStream:
@@ -283,6 +285,13 @@ func newDefinitions(ddls []ast.DDL, option DiffOption) (*definitions, error) {
 				return nil, err
 			}
 		}
+	}
+
+	for _, ddl := range propertyGraphs {
+		add(newPropertyGraph(ddl, func(id tableID) (*table, bool) {
+			t, ok := d.all[id].(*table)
+			return t, ok
+		}))
 	}
 
 	if duplicated != nil {
