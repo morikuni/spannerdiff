@@ -5,7 +5,7 @@ OMNI_IMAGE := us-docker.pkg.dev/spanner-omni/images/spanner-omni:2026.r4-lts
 test:
 	@go test -v -count 1 ./...
 
-# test-emulator also verifies the generated DDLs on the Spanner emulator. CI runs the tests in this way.
+# test-emulator also verifies the generated DDLs on the Spanner emulator, as CI does.
 .PHONY: test-emulator
 test-emulator:
 	@docker run -d --rm --name spannerdiff-emulator -p 9020:9020 $(EMULATOR_IMAGE) > /dev/null
@@ -16,7 +16,7 @@ test-emulator:
 .PHONY: test-omni
 test-omni:
 	@docker run -d --rm --name spannerdiff-omni $(OMNI_IMAGE) start-single-server > /dev/null
-	@until docker logs spannerdiff-omni 2>&1 | grep -q "Spanner is ready"; do sleep 1; done
+	@for i in $$(seq 60); do docker logs spannerdiff-omni 2>&1 | grep -q "Spanner is ready" && break; sleep 1; done
 	@SPANNER_OMNI_CONTAINER=spannerdiff-omni go test -count 1 -parallel 64 -timeout 15m ./...; status=$$?; docker rm -f spannerdiff-omni > /dev/null; exit $$status
 
 .PHONY: coverage

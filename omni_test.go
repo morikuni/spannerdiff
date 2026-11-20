@@ -2,11 +2,14 @@ package spannerdiff
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"sync/atomic"
+	"testing"
 	"time"
 )
 
@@ -22,16 +25,41 @@ type omni struct {
 	databaseSeq atomic.Int64
 }
 
-var sharedOmni = &omni{container: os.Getenv(omniContainerEnv)}
+var (
+	omniOnce   sync.Once
+	sharedOmni *omni
+)
+
+// omniForTest returns Spanner Omni. It must be called only when Spanner Omni is configured.
+func omniForTest(t *testing.T) *omni {
+	t.Helper()
+	omniOnce.Do(func() {
+		o := &omni{container: os.Getenv(omniContainerEnv)}
+		// The tests are skipped if a database can't be created, so a wrong container must not be regarded as it.
+		if _, err := o.run(nil, "databases", "list"); err != nil {
+			t.Fatalf("failed to run the CLI of Spanner Omni: %v", err)
+		}
+		sharedOmni = o
+	})
+	if sharedOmni == nil {
+		t.Fatal("Spanner Omni is not available")
+	}
+	return sharedOmni
+}
 
 // omniRun makes the names of databases different from those of the previous runs on the same container.
-var omniRun = time.Now().Unix()
+var omniRun = time.Now().UnixNano()
 
 // run runs the CLI with the DDLs as the file of --ddl-file, if any.
 func (o *omni) run(ddls []string, args ...string) (string, error) {
 	// The default timeout of the CLI is too short when many schema changes run in parallel.
-	args = append([]string{"exec", "-i", o.container, "/google/spanner/bin/spanner"}, append(args, "--timeout", "30m")...)
-	cmd := exec.Command("docker", args...)
+	// The CLI doesn't stop waiting for a schema change by its timeout, and a schema change rarely doesn't finish,
+	// so the CLI is also stopped by the context.
+	const timeout = 5 * time.Minute
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	args = append([]string{"exec", "-i", o.container, "/google/spanner/bin/spanner"}, append(args, "--timeout", timeout.String())...)
+	cmd := exec.CommandContext(ctx, "docker", args...)
 	if len(ddls) > 0 {
 		cmd.Args = append(cmd.Args, "--ddl-file", "/dev/stdin")
 		cmd.Stdin = strings.NewReader(strings.Join(ddls, ";\n") + ";\n")
@@ -40,6 +68,9 @@ func (o *omni) run(ddls []string, args ...string) (string, error) {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return "", fmt.Errorf("the CLI didn't finish in %s", timeout)
+		}
 		// The error follows the warning about the license.
 		msg := stderr.String()
 		if i := strings.Index(msg, "Error: "); i >= 0 {

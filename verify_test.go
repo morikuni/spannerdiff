@@ -30,7 +30,7 @@ func spannerForTest(t *testing.T) spannerServer {
 	t.Helper()
 	switch {
 	case os.Getenv(omniContainerEnv) != "":
-		return sharedOmni
+		return omniForTest(t)
 	case os.Getenv(emulatorHostEnv) != "":
 		return emulatorForTest(t)
 	default:
@@ -51,9 +51,6 @@ var knownDifferences = map[string]string{
 func verifyOnSpanner(t *testing.T, spanner spannerServer, base, migration, target string, option DiffOption) {
 	t.Helper()
 	name := strings.TrimSuffix(t.Name(), "/spanner")
-	if reason, ok := knownDifferences[name]; ok {
-		t.Skip(reason)
-	}
 	if reason, ok := spanner.knownFailures()[name]; ok {
 		t.Skip(reason)
 	}
@@ -92,6 +89,9 @@ func verifyOnSpanner(t *testing.T, spanner spannerServer, base, migration, targe
 		}
 	}
 
+	if reason, ok := knownDifferences[name]; ok {
+		t.Skip(reason)
+	}
 	migrated, err := spanner.getDDL(database)
 	if err != nil {
 		t.Fatal(err)
