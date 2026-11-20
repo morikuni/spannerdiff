@@ -16,8 +16,8 @@ type propertyGraph struct {
 	normalized *ast.CreatePropertyGraph
 }
 
-func newPropertyGraph(cpg *ast.CreatePropertyGraph) *propertyGraph {
-	return &propertyGraph{cpg, cpg}
+func newPropertyGraph(cpg *ast.CreatePropertyGraph, tableOf func(tableID) (*table, bool)) *propertyGraph {
+	return &propertyGraph{cpg, normalizePropertyGraph(cpg, tableOf)}
 }
 
 func (pg *propertyGraph) id() identifier {
@@ -120,15 +120,15 @@ func propertyColumns(tableID tableID, properties ast.PropertyGraphLabelsOrProper
 	return ids
 }
 
-// normalize writes the keys, labels and properties that the definition omits, in the way Spanner stores them:
+// normalizePropertyGraph writes the keys, labels and properties that the definition omits, in the way Spanner stores them:
 //   - The key of an element is the primary key of its table.
 //   - The columns that an edge references are the key of the referenced node.
 //   - The label of an element is its alias or its table name.
 //   - The properties of a label are all columns of the table, and they are sorted by their names.
 //
 // An element is not changed if its table is not defined.
-func (pg *propertyGraph) normalize(tableOf func(tableID) (*table, bool)) {
-	content := *pg.node.Content
+func normalizePropertyGraph(cpg *ast.CreatePropertyGraph, tableOf func(tableID) (*table, bool)) *ast.CreatePropertyGraph {
+	content := *cpg.Content
 	nodeTables := *content.NodeTables
 	nodeTables.Tables = normalizePropertyGraphElements(nodeTables.Tables, tableOf, nil)
 	content.NodeTables = &nodeTables
@@ -137,9 +137,9 @@ func (pg *propertyGraph) normalize(tableOf func(tableID) (*table, bool)) {
 		edgeTables.Tables = normalizePropertyGraphElements(edgeTables.Tables, tableOf, nodeTables.Tables.Elements)
 		content.EdgeTables = &edgeTables
 	}
-	normalized := *pg.node
+	normalized := *cpg
 	normalized.Content = &content
-	pg.normalized = &normalized
+	return &normalized
 }
 
 // normalizePropertyGraphElements normalizes node tables, or edge tables if nodes are given.
