@@ -13,8 +13,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/cloudspannerecosystem/memefish"
 )
 
 // emulatorHostEnv is the environment variable of the REST endpoint of the Spanner emulator, such as localhost:9020.
@@ -33,13 +31,10 @@ var (
 	sharedEmulator *emulator
 )
 
-// emulatorForTest returns the emulator, or nil if the emulator is not configured.
+// emulatorForTest returns the emulator. It must be called only when the emulator is configured.
 func emulatorForTest(t *testing.T) *emulator {
 	t.Helper()
 	host := os.Getenv(emulatorHostEnv)
-	if host == "" {
-		return nil
-	}
 	emulatorOnce.Do(func() {
 		const project, instance = "spannerdiff", "test"
 		projectURL := fmt.Sprintf("http://%s/v1/projects/%s", host, project)
@@ -152,75 +147,12 @@ func (e *emulator) getDDL(databaseURL string) (string, error) {
 	return sb.String(), nil
 }
 
-// emulatorUnsupported are the tests whose migration the emulator doesn't accept though Spanner is expected to accept it.
-var emulatorUnsupported = map[string]string{
-	"TestDiffColumn/alter_non-stored_generated_column": "the emulator can't change the expression of a generated column",
-}
-
-// verifyOnEmulator applies the base schema and the migration to the emulator,
-// and checks that the resulting schema has no difference from the target schema.
-// The target schema is also read from the emulator, so that both schemas are written in the same way.
-// It is skipped if the emulator doesn't accept the base schema or the target schema,
-// because the emulator doesn't support all features of Spanner and some tests use incomplete schemas.
-func verifyOnEmulator(t *testing.T, e *emulator, base, migration, target string, option DiffOption) {
-	t.Helper()
-	if reason, ok := emulatorUnsupported[strings.TrimSuffix(t.Name(), "/emulator")]; ok {
-		t.Skip(reason)
-	}
-	create := func(name, sql string) string {
-		ddls, err := splitDDLs(sql)
-		if err != nil {
-			t.Fatal(err)
-		}
-		databaseURL, err := e.createDatabase(ddls)
-		if err != nil {
-			t.Skipf("the emulator doesn't accept the %s schema: %v", name, err)
-		}
-		t.Cleanup(func() {
-			if err := e.dropDatabase(databaseURL); err != nil {
-				t.Errorf("failed to drop the database: %v", err)
-			}
-		})
-		return databaseURL
-	}
-	targetURL := create("target", target)
-	baseURL := create("base", base)
-
-	migrationDDLs, err := splitDDLs(migration)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(migrationDDLs) > 0 {
-		if err := e.updateDDL(baseURL, migrationDDLs); err != nil {
-			t.Fatalf("the emulator doesn't accept the migration: %v", err)
-		}
-	}
-
-	migrated, err := e.getDDL(baseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want, err := e.getDDL(targetURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var rest bytes.Buffer
-	if err := Diff(strings.NewReader(migrated), strings.NewReader(want), &rest, option); err != nil {
-		t.Fatalf("failed to compare the migrated schema with the target schema: %v\nmigrated schema:\n%s\ntarget schema:\n%s", err, migrated, want)
-	}
-	if rest.Len() > 0 {
-		t.Errorf("the migrated schema differs from the target schema:\n%s\nmigrated schema:\n%s\ntarget schema:\n%s", rest.String(), migrated, want)
+func (e *emulator) knownFailures() map[string]string {
+	return map[string]string{
+		"TestDiffColumn/alter_non-stored_generated_column": "the emulator can't change the expression of a generated column, though Spanner can",
 	}
 }
 
-func splitDDLs(sql string) ([]string, error) {
-	ddls, err := memefish.ParseDDLs("", sql)
-	if err != nil {
-		return nil, err
-	}
-	stmts := make([]string, 0, len(ddls))
-	for _, ddl := range ddls {
-		stmts = append(stmts, ddl.SQL())
-	}
-	return stmts, nil
+func (e *emulator) omitsRoles() bool {
+	return true
 }
