@@ -18,14 +18,14 @@ type diffTest struct {
 
 func runDiffTests(t *testing.T, option DiffOption, tests map[string]diffTest) {
 	t.Helper()
-	// A schema change takes tens of seconds on Spanner Omni, so the tests wait for them in parallel.
-	o := omniForTest()
-	if o != nil {
+	// The tests run in parallel, because a schema change takes tens of seconds on Spanner Omni.
+	spanner := spannerForTest(t)
+	if spanner != nil {
 		t.Parallel()
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			if o != nil {
+			if spanner != nil {
 				t.Parallel()
 			}
 			var buf bytes.Buffer
@@ -40,9 +40,9 @@ func runDiffTests(t *testing.T, option DiffOption, tests map[string]diffTest) {
 			}
 			equalDDLs(t, tt.wantDDLs, buf.String())
 
-			if o != nil {
-				t.Run("omni", func(t *testing.T) {
-					verifyOnOmni(t, o, tt.base, buf.String(), tt.target, option)
+			if spanner != nil {
+				t.Run("spanner", func(t *testing.T) {
+					verifyOnSpanner(t, spanner, tt.base, buf.String(), tt.target, option)
 				})
 			}
 		})

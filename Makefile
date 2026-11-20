@@ -1,10 +1,18 @@
+EMULATOR_IMAGE := gcr.io/cloud-spanner-emulator/emulator:1.5.58
 OMNI_IMAGE := us-docker.pkg.dev/spanner-omni/images/spanner-omni:2026.r4-lts
 
 .PHONY: test
 test:
 	@go test -v -count 1 ./...
 
-# test-omni also verifies the generated DDLs on Spanner Omni. It takes several minutes.
+# test-emulator also verifies the generated DDLs on the Spanner emulator. CI runs the tests in this way.
+.PHONY: test-emulator
+test-emulator:
+	@docker run -d --rm --name spannerdiff-emulator -p 9020:9020 $(EMULATOR_IMAGE) > /dev/null
+	@SPANNER_EMULATOR_REST_HOST=localhost:9020 go test -count 1 ./...; status=$$?; docker rm -f spannerdiff-emulator > /dev/null; exit $$status
+
+# test-omni also verifies the generated DDLs on Spanner Omni, which is Spanner itself. It takes several minutes.
+# CI doesn't run it, because schema changes that add stored generated columns often don't finish on GitHub Actions.
 .PHONY: test-omni
 test-omni:
 	@docker run -d --rm --name spannerdiff-omni $(OMNI_IMAGE) start-single-server > /dev/null
