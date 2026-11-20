@@ -149,7 +149,8 @@ func (e *emulator) getDDL(databaseURL string) (string, error) {
 
 func (e *emulator) knownFailures() map[string]string {
 	return map[string]string{
-		"TestDiffColumn/alter_non-stored_generated_column": "the emulator can't change the expression of a generated column, though Spanner can",
+		"TestDiffColumn/alter_non-stored_generated_column":                                                                "the emulator can't change the expression of a generated column, though Spanner can",
+		"TestDiffPropertyGraph/no_change_of_property_graphs_that_Spanner_writes_with_omitted_keys,_labels_and_properties": "the emulator returns property graphs without NO PROPERTIES and the expressions of properties",
 	}
 }
 

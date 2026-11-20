@@ -38,12 +38,6 @@ func spannerForTest(t *testing.T) spannerServer {
 	}
 }
 
-// knownDifferences are the tests whose target schema Spanner writes differently,
-// so the migrated schema read from Spanner has a difference from the target schema.
-var knownDifferences = map[string]string{
-	"TestDiffPropertyGraph/add_property_graph_on_recreated_table": "Spanner writes the keys, labels and properties that the definition of a property graph omits",
-}
-
 // verifyOnSpanner applies the base schema and the migration to Spanner,
 // and checks that the resulting schema has no difference from the target schema.
 // It is skipped if Spanner doesn't accept the base schema or the target schema,
@@ -89,9 +83,6 @@ func verifyOnSpanner(t *testing.T, spanner spannerServer, base, migration, targe
 		}
 	}
 
-	if reason, ok := knownDifferences[name]; ok {
-		t.Skip(reason)
-	}
 	migrated, err := spanner.getDDL(database)
 	if err != nil {
 		t.Fatal(err)

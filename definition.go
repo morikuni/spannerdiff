@@ -294,5 +294,14 @@ func newDefinitions(ddls []ast.DDL, option DiffOption) (*definitions, error) {
 		return nil, fmt.Errorf("duplicated definition found: %s", strings.Join(ids, ", "))
 	}
 
+	for _, def := range d.all {
+		if pg, ok := def.(*propertyGraph); ok {
+			pg.normalize(func(id tableID) (*table, bool) {
+				t, ok := d.all[id].(*table)
+				return t, ok
+			})
+		}
+	}
+
 	return d, nil
 }
